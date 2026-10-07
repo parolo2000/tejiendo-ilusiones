@@ -809,6 +809,69 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  console.log("Imprimir y tu semana");
+  await prueba("imprimir un patrón saca una hoja limpia con casillas y apuntes", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    await page.evaluate(() => { ponerApunte("m-1", 1, "ojo con la primera"); window.print = () => dispatchEvent(new Event("beforeprint")); go({ name: "patron", id: "m-1" }); });
+    await page.getByRole("button", { name: "Imprimir" }).tap();
+    const hoja = page.locator("#imprimir");
+    assert.equal(await hoja.locator("h1").textContent(), "Manta para la nieta");
+    assert.equal(await hoja.locator("li").count(), 5);
+    assert.match(await hoja.locator("li").nth(1).textContent(), /Mi apunte: ojo con la primera/);
+    await page.emulateMedia({ media: "print" });
+    assert.equal(await page.locator("nav.tabs").isVisible(), false, "al imprimir solo sale la hoja");
+    assert.equal(await hoja.isVisible(), true);
+    await page.screenshot({ path: path.join(CAPTURAS, "imprimir.png"), fullPage: true });
+    await page.emulateMedia({ media: "screen" });
+    await page.waitForTimeout(1400);
+    assert.equal(await page.locator("#toast").isVisible(), false, "si se pudo imprimir, no avisa");
+    // Donde el navegador no deja imprimir, avisa en vez de no hacer nada
+    await page.evaluate(() => { window.print = () => {}; });
+    await page.getByRole("button", { name: "Imprimir" }).tap();
+    await page.waitForTimeout(1400);
+    assert.match(await page.locator("#toast").textContent(), /no se puede imprimir/);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("tu semana: cuenta el tiempo de cada día y lo enseña en Inicio", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    assert.equal(await page.locator(".semana").count(), 0, "sin tiempo no sale");
+    await page.evaluate(() => { for (let i = 0; i < 1800; i++) unSegundo(prog("m-1")); state.diario[diaClave(Date.now() - 2 * 864e5)] = 3600; state.diario["2020-01-01"] = 99; save(); });
+    assert.equal((await estado(page)).diario[await page.evaluate(() => diaClave(Date.now()))], 1800);
+    await page.waitForTimeout(400);
+    await page.reload();
+    assert.equal(await page.evaluate(() => state.diario["2020-01-01"]), undefined, "lo de hace más de un año se borra");
+    await page.evaluate(() => go({ name: "inicio" }));
+    assert.match(await page.locator(".semana").textContent(), /1 h 30 min tejiendo · 2 días/);
+    assert.equal(await page.locator(".barra").count(), 7);
+    await page.locator(".semana").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(CAPTURAS, "tu-semana.png") });
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("recuperar una copia equivocada se puede deshacer, fotos incluidas", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    await page.evaluate(() => fotoSet("m-1", "data:image/png;base64,MIA"));
+    const copia = { app: "rincon-ganchillo", version: 1, state: { patrones: [{ id: "m-9", titulo: "Otra cosa", pasos: ["Haz 5 cad."], color: "x;background:url(//mal)" }] },
+      fotos: { "m-1": "data:image/png;base64,AJENA", "m-9": "javascript:alert(1)" } };
+    await page.evaluate(() => go({ name: "copia" }));
+    const [fc] = await Promise.all([page.waitForEvent("filechooser"), page.getByRole("button", { name: "Recuperar una copia" }).tap()]);
+    await fc.setFiles({ name: "copia.txt", mimeType: "text/plain", buffer: Buffer.from(JSON.stringify(copia)) });
+    await page.getByRole("button", { name: "Recuperar esta copia" }).tap();
+    let st = await estado(page);
+    assert.deepEqual(st.patrones.map(p => p.titulo), ["Otra cosa"]);
+    assert.match(st.patrones[0].color, /^#[0-9a-f]+$/i, "un color raro no entra");
+    assert.equal(await page.evaluate(() => localStorage.getItem(FKEY + "m-9")), null, "solo se aceptan imágenes");
+    await page.locator(".toast-btn").tap();
+    st = await estado(page);
+    assert.deepEqual(st.patrones.map(p => p.titulo), ["Manta para la nieta"]);
+    assert.equal(await page.evaluate(() => fotoGet("m-1")), "data:image/png;base64,MIA", "vuelve su foto");
+    assert.ok(await page.evaluate(() => localStorage.getItem(KEY + "-antes-de-recuperar")), "queda apartado lo de antes");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);

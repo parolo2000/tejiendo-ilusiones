@@ -163,3 +163,17 @@ Capturas en `tests/capturas/`.
   como «Tu apunte: …». Nuevo `state.apuntes` {idPatrón: {paso: texto}}; sin cambio de versión de datos (si no
   existe, se crea vacío al cargar).
 - Tests: 3 nuevos. 40/40.
+
+## 2026-10-07 · Imprimir, tu semana y copias más seguras
+
+- «Imprimir» en cada patrón: hoja limpia con letra grande, una casilla por paso para ir tachando, los puntos que
+  usa y tus apuntes. También sirve para guardarla en PDF. Dentro de claude.ai el navegador no deja imprimir: la
+  app lo avisa en vez de no hacer nada.
+- «Tu semana» en Inicio: barras con el tiempo tejido cada uno de los últimos 7 días (solo si se ha tejido algo).
+  Nuevo `state.diario` {"AAAA-MM-DD": segundos}; se guarda el último año. Sin cambio de versión de datos.
+- Copia de seguridad:
+  - En el móvil, «Enviarla por WhatsApp o correo» (menú de compartir del sistema; va como .txt porque los
+    móviles no comparten .json, y «Recuperar una copia» la lee igual). Solo sale si el móvil lo permite.
+  - «Recuperar una copia» se puede deshacer y aparta lo que había en `rincon-ganchillo-v1-antes-de-recuperar`.
+  - Seguridad: de una copia solo se aceptan fotos que sean imágenes (`data:image/…`).
+- Tests: 3 nuevos (y uno que fallaba a veces, arreglado). 43/43.

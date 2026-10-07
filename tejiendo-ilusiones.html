@@ -327,6 +327,25 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
   .sofa-top{grid-column:1/-1;max-width:none}
   .sofa-big{margin:0 16px calc(16px + env(safe-area-inset-bottom,0px)) 0}
 }
+.semana p{margin:.2rem 0 .6rem}
+.barras{display:flex; gap:.4rem; align-items:flex-end; height:5.5rem}
+.barra{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:.25rem}
+.barra span{display:block; width:100%; max-width:2.2rem; background:color-mix(in srgb, var(--accent) 35%, transparent); border-radius:.4rem .4rem .15rem .15rem}
+.barra.hoy span{background:var(--accent)}
+.barra small{font-size:.8rem; color:var(--muted)}
+#imprimir{display:none}
+@media print{
+  body > :not(#imprimir){display:none!important}
+  html, body{background:#fff!important; color:#000!important}
+  #imprimir{display:block; font:14pt/1.45 Georgia, serif; color:#000}
+  #imprimir h1{font-size:22pt; margin:0 0 .3em}
+  #imprimir .datos{font-size:12pt}
+  #imprimir ol{list-style:none; padding:0; margin:1em 0 0}
+  #imprimir li{display:flex; gap:.7em; padding:.45em 0; border-bottom:1px solid #ccc; break-inside:avoid}
+  #imprimir .casilla{flex:0 0 auto; width:.9em; height:.9em; border:1.5px solid #000; margin-top:.25em}
+  #imprimir em{display:block; font-size:12pt}
+  #imprimir .pie{font-size:10pt; color:#555; margin-top:2em}
+}
 </style>
 
 <header class="top"><div class="bar">
@@ -390,7 +409,7 @@ const MIGRACIONES = {
     st.labores.sort((a,b)=>b.fin-a.fin);
   }
 };
-let state = {patrones:[], progreso:{}, graficos:[], lanas:[], labores:[], apuntes:{}, conFoto:{}, libre:{vueltas:0,puntos:0}, escala:1, t:0, prefs:{...PREFS}, v:VERSION_DATOS};
+let state = {patrones:[], progreso:{}, graficos:[], lanas:[], labores:[], apuntes:{}, diario:{}, conFoto:{}, libre:{vueltas:0,puntos:0}, escala:1, t:0, prefs:{...PREFS}, v:VERSION_DATOS};
 try{
   const raw = localStorage.getItem(KEY), g = JSON.parse(raw||"null");
   if(g && typeof g==="object"){
@@ -405,11 +424,17 @@ function migrar(st){
   while(v<VERSION_DATOS){ v++; MIGRACIONES[v]?.(st); }
   st.v = v;
 }
+function diaClave(t){ const d=new Date(t); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+// Un segundo más tejiendo: en el patrón y en el día de hoy
+function unSegundo(pr){ pr.tiempo++; const d=diaClave(Date.now()); state.diario[d]=(state.diario[d]||0)+1; }
 function normalizarEstado(){
   for(const k of ["patrones","graficos","lanas","labores"]) if(!Array.isArray(state[k])) state[k]=[];
-  for(const k of ["progreso","conFoto","libre","prefs","apuntes"]) if(!state[k] || typeof state[k]!=="object") state[k]={};
+  for(const k of ["progreso","conFoto","libre","prefs","apuntes","diario"]) if(!state[k] || typeof state[k]!=="object") state[k]={};
   state.libre.vueltas = state.libre.vueltas||0; state.libre.puntos = state.libre.puntos||0;
   state.prefs = {...PREFS, ...state.prefs};
+  // Tiempo tejido por día (para «Tu semana»): solo se guarda el último año
+  const limite = diaClave(Date.now()-400*864e5);
+  for(const d of Object.keys(state.diario)) if(!(d>=limite) || typeof state.diario[d]!=="number") delete state.diario[d];
   if(!state.prefs.copiaDesde) state.prefs.copiaDesde = Date.now(); // desde cuándo cuenta el recordatorio de copia
   state.graficos.forEach(g=>{ if(!Array.isArray(g.celdas) || !g.celdas.length) g.celdas=[Array(10).fill("")]; g.cols = g.cols || g.celdas[0].length || 10; });
   // El color va a un estilo: solo se acepta un color de verdad (una copia de seguridad la puede haber tocado cualquiera)
@@ -555,7 +580,8 @@ const ICONOS = {
   corazon:"M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9z",
   sofa:"M4 11V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3M3 12a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3zM5 17v2M19 17v2",
   deshacer:"M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
-  ajustes:"M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6"
+  ajustes:"M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6",
+  imprimir:"M7 9V3h10v6M7 17H4v-8h16v8h-3M7 14h10v7H7z"
 };
 function icono(n, z=24){ const v=s("svg",{width:z, height:z, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", "stroke-width":n==="mas"?3.4:1.9, "stroke-linecap":"round", "stroke-linejoin":"round", "aria-hidden":"true"}); v.append(s("path",{d:ICONOS[n]})); if(n==="play"||n==="pausa") v.firstChild.setAttribute("fill","currentColor"); return v; }
 
@@ -1229,6 +1255,7 @@ VISTAS.inicio = V => {
     ult ? h("div",{class:"section"}, tarjetaContinuar(ult)) : null,
     tocaRecordarCopia() ? avisoCopia() : null,
     !window.TI_LOCAL && state.prefs.avisoApp ? avisoInstalar() : null,
+    tuSemana(),
     h("div",{class:"section"},
       h("div",{class:"tiles"},
         grande("pink","libro","Mis patrones", ()=>go({name:"patrones"})),
@@ -1248,6 +1275,18 @@ VISTAS.inicio = V => {
       ))
   );
 };
+// Los últimos 7 días: cuánto se ha tejido cada día. Solo aparece si se ha tejido algo.
+function tuSemana(){
+  const dias = [...Array(7)].map((_,i)=>{ const t = Date.now()-(6-i)*864e5; return {t, sg: state.diario[diaClave(t)]||0}; });
+  const total = dias.reduce((a,d)=>a+d.sg,0); if(total<60) return null;
+  const max = Math.max(...dias.map(d=>d.sg)), conTiempo = dias.filter(d=>d.sg>=60).length;
+  const INI = ["D","L","M","X","J","V","S"];
+  return h("div",{class:"section"}, h("div",{class:"panel semana"},
+    h("div",{class:"eyebrow"},"Tu semana"),
+    h("p",{}, h("b",{}, tiempoTxt(Math.floor(total/60)*60).replace(/ 0+ s$|^0 s$/,"")), " tejiendo", conTiempo>1 ? " · "+conTiempo+" días" : ""),
+    h("div",{class:"barras", role:"img", "aria-label":dias.map(d=>new Date(d.t).toLocaleDateString("es",{weekday:"long"})+": "+Math.round(d.sg/60)+" minutos").join(", ")},
+      dias.map((d,i)=>h("div",{class:"barra"+(i===6?" hoy":"")}, h("span",{style:"height:"+(d.sg ? Math.max(6, Math.round(d.sg/max*100)) : 0)+"%"}), h("small",{}, INI[new Date(d.t).getDay()]))))));
+}
 // Solo en la app de claude.ai: invita a instalar la versión del móvil, que funciona sin internet
 function avisoInstalar(){
   const caja = h("div",{class:"section"}, h("div",{class:"note stack", style:"gap:.6rem"},
@@ -1493,6 +1532,7 @@ VISTAS.patron = V => {
         h("div",{class:"row"},
           h("button",{onclick:verGrafico}, icono("rejilla",20), "Ver como gráfico"),
           h("button",{onclick:()=>enviarPatron(p)}, icono("corazon",20), "Enviar a una amiga"),
+          h("button",{onclick:()=>imprimirPatron(p)}, icono("imprimir",20), "Imprimir"),
           esMio(p) ? h("button",{onclick:()=>go({name:"editar", id:p.id})}, icono("lapiz",20), "Cambiar")
                    : h("button",{onclick:()=>{ const c=copiar(p); go({name:"editar", id:c.id}); toast("Copia creada. Cámbiala a tu gusto."); }}, icono("lapiz",20), "Copiar y cambiar")
         ),
@@ -1513,6 +1553,27 @@ VISTAS.patron = V => {
     ))
   );
 };
+// Hoja para imprimir (o guardar en PDF): letra grande, una casilla por paso y tus apuntes
+function hojaDeImpresion(p){
+  const puntos = [...new Set(p.pasos.flatMap(puntosDelPaso))];
+  return h("div",{id:"imprimir"},
+    h("h1",{}, p.titulo),
+    h("p",{class:"datos"}, [p.nivel && "Dificultad: "+p.nivel, p.ganchillo && "Ganchillo: "+p.ganchillo, p.hilo && "Hilo: "+p.hilo].filter(Boolean).join("  ·  ")),
+    p.descripcion ? h("p",{}, p.descripcion) : null,
+    p.notas ? h("p",{}, h("b",{},"Notas: "), p.notas) : null,
+    puntos.length ? h("p",{class:"datos"}, h("b",{},"Puntos: "), puntos.map(k=>NOMBRE[k]||k).join(", ")) : null,
+    h("ol",{}, p.pasos.map((t,i)=>h("li",{}, h("span",{class:"casilla"}), h("span",{}, t, apunteDe(p.id,i) ? h("em",{}, "Mi apunte: "+apunteDe(p.id,i)) : null)))),
+    h("p",{class:"pie"},"Tejiendo Ilusiones"));
+}
+function imprimirPatron(p){
+  document.getElementById("imprimir")?.remove();
+  document.body.append(hojaDeImpresion(p));
+  let abierto = false; const marca = ()=>{ abierto = true; };
+  addEventListener("beforeprint", marca, {once:true});
+  try{ window.print(); }catch(e){}
+  // Dentro de claude.ai el navegador no deja imprimir: se avisa en vez de no hacer nada
+  setTimeout(()=>{ removeEventListener("beforeprint", marca); if(!abierto) toast("Desde aquí no se puede imprimir. Hazlo desde la app instalada."); }, 1200);
+}
 function copiar(p){
   const c = {...p, id:"m-"+Date.now(), titulo:p.titulo+" (mi versión)", pasos:[...p.pasos]};
   delete c.grafico;
@@ -1606,7 +1667,7 @@ VISTAS.tejer = V => {
   // Cronómetro
   const tEl = h("span",{class:"t"}, tiempoTxt(pr.tiempo));
   const tBtn = h("button",{class: corriendo[p.id] ? "" : "teal", onclick:()=>{ corriendo[p.id]=!corriendo[p.id]; render(); }}, icono(corriendo[p.id]?"pausa":"play",18), corriendo[p.id] ? "Pausar" : "Empezar");
-  if(corriendo[p.id]){ let k=0; timerInt = setInterval(()=>{ if(document.visibilityState!=="visible") return; pr.tiempo++; tEl.textContent=tiempoTxt(pr.tiempo); if(++k%20===0) save(); }, 1000); }
+  if(corriendo[p.id]){ let k=0; timerInt = setInterval(()=>{ if(document.visibilityState!=="visible") return; unSegundo(pr); tEl.textContent=tiempoTxt(pr.tiempo); if(++k%20===0) save(); }, 1000); }
   const pasar = d => { pr.paso += d; pr.puntos=0; pr.rep=0; pr.marca=0; if(pr.paso>=n){ pr.fin=Date.now(); corriendo[p.id]=false; toast("¡Patrón terminado!"); } save(); render(); window.scrollTo({top:0}); };
   V.append(
     volver("Ver el patrón", {name:"patron", id:p.id}),
@@ -1826,7 +1887,7 @@ VISTAS.sofa = V => {
   timerInt = setInterval(()=>{
     if(document.visibilityState!=="visible") return;
     if(Date.now()-ultActividad > 10*60*1000){ tEl.textContent = tiempoTxt(pr.tiempo)+" · en pausa"; return; }
-    pr.tiempo++; tEl.textContent = tiempoTxt(pr.tiempo); if(++k%20===0) save();
+    unSegundo(pr); tEl.textContent = tiempoTxt(pr.tiempo); if(++k%20===0) save();
   }, 1000);
 
   function opciones(){
@@ -2566,16 +2627,28 @@ VISTAS.copia = V => {
   const msg = h("p",{class:"muted","aria-live":"polite"});
   let pendiente = null;
   const confirmar = h("div",{class:"stack", hidden:true});
-  async function exportar(){
+  const nombreCopia = ext => "ganchillo-copia-"+new Date().toISOString().slice(0,10)+ext;
+  function datosCopia(){
     const fotos = {}; for(const id of Object.keys(state.conFoto)){ const f=fotoGet(id); if(f) fotos[id]=f; }
-    const datos = JSON.stringify({app:"rincon-ganchillo", version:1, fecha:new Date().toISOString(), state, fotos});
+    return JSON.stringify({app:"rincon-ganchillo", version:1, fecha:new Date().toISOString(), state, fotos});
+  }
+  // Fuera del móvil: la copia se manda por WhatsApp, correo o a Drive con el menú de compartir del sistema.
+  // Va como texto (.txt) porque los móviles no dejan compartir archivos .json; «Recuperar una copia» lo lee igual.
+  const archivoCopia = () => new File([datosCopia()], nombreCopia(".txt"), {type:"text/plain"});
+  const puedeEnviar = (()=>{ try{ return !!(navigator.canShare && navigator.canShare({files:[new File(["x"], "a.txt", {type:"text/plain"})]})); }catch(e){ return false; } })();
+  async function enviarCopia(){
+    try{ await navigator.share({files:[archivoCopia()], title:"Copia de Tejiendo Ilusiones"}); copiaHecha(); msg.textContent="Copia enviada. Guárdala donde la encuentres (por ejemplo, mándatela a ti misma)."; }
+    catch(e){ if(e && e.name==="AbortError") return; msg.textContent="No se pudo enviar. Prueba con «Guardar una copia»."; }
+  }
+  async function exportar(){
+    const datos = datosCopia();
     try{
       const dl = window.claude?.use ? await claude.use("downloads") : null;
-      if(dl){ await dl.save({filename:"ganchillo-copia-"+new Date().toISOString().slice(0,10)+".json", data:datos}); copiaHecha(); msg.textContent="Copia guardada. Guárdala en un sitio seguro."; return; }
+      if(dl){ await dl.save({filename:nombreCopia(".json"), data:datos}); copiaHecha(); msg.textContent="Copia guardada. Guárdala en un sitio seguro."; return; }
     }catch(e){ if(e && e.code==="declined") return; }
     if(window.TI_LOCAL){ // en la versión instalable el navegador sí deja descargar
       const url = URL.createObjectURL(new Blob([datos], {type:"application/json"}));
-      const a = h("a",{href:url, download:"ganchillo-copia-"+new Date().toISOString().slice(0,10)+".json", hidden:true});
+      const a = h("a",{href:url, download:nombreCopia(".json"), hidden:true});
       document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 10000);
       copiaHecha(); msg.textContent="Copia guardada en Descargas. Guárdala en un sitio seguro."; return;
     }
@@ -2587,7 +2660,7 @@ VISTAS.copia = V => {
     inp.onchange = ()=>{ const f=inp.files[0]; inp.remove(); if(!f) return; const r=new FileReader(); r.onload=()=>{
       try{ const d=JSON.parse(r.result); if(!d || !d.state || !Array.isArray(d.state.patrones)) throw 0; pendiente=d;
         confirmar.hidden=false; confirmar.replaceChildren(h("div",{class:"note"},"Esta copia tiene "+d.state.patrones.length+" patrones tuyos, "+(d.state.graficos||[]).length+" gráficos y "+(d.state.lanas||[]).length+" lanas. Si la recuperas, sustituye lo que hay ahora en este aparato."),
-          h("div",{class:"row"}, h("button",{class:"primary", onclick:()=>{ state=Object.assign({patrones:[],progreso:{},graficos:[],lanas:[],labores:[],conFoto:{},libre:{vueltas:0,puntos:0},escala:1}, pendiente.state); normalizarEstado(); for(const [id,img] of Object.entries(pendiente.fotos||{})) fotoSet(id,img); save(); applyScale(); toast("Copia recuperada"); go({name:"inicio"}); }},"Recuperar esta copia"), h("button",{onclick:()=>{ confirmar.hidden=true; pendiente=null; }},"Cancelar")));
+          h("div",{class:"row"}, h("button",{class:"primary", onclick:()=>recuperarCopia(pendiente)},"Recuperar esta copia"), h("button",{onclick:()=>{ confirmar.hidden=true; pendiente=null; }},"Cancelar")));
       }catch(e){ msg.textContent="Ese archivo no es una copia de esta app."; } }; r.readAsText(f); };
     document.body.append(inp); inp.click();
   }
@@ -2596,10 +2669,27 @@ VISTAS.copia = V => {
     h("div",{class:"page-title"}, h("h1",{},"Copia de seguridad"), h("p",{class:"muted"},"Todo se guarda solo en este aparato. Haz una copia de vez en cuando por si cambias de móvil o se borra el navegador.")),
     h("div",{class:"section"},
       h("button",{class:"primary big", onclick:exportar}, icono("guardar"), "Guardar una copia"),
+      puedeEnviar ? h("button",{class:"big", onclick:enviarCopia}, icono("corazon"), "Enviarla por WhatsApp o correo") : null,
       h("button",{class:"big", onclick:importar},"Recuperar una copia"),
       msg, confirmar)
   );
 };
+
+// Recuperar una copia sustituye todo: antes se aparta lo que había, por si era la copia equivocada
+function recuperarCopia(d){
+  const antes = JSON.stringify(state), fotosAntes = {};
+  for(const id of Object.keys(d.fotos||{})){ const f = fotoGet(id); if(f) fotosAntes[id] = f; }
+  try{ localStorage.setItem(KEY+"-antes-de-recuperar", antes); }catch(e){}
+  state = Object.assign({patrones:[],progreso:{},graficos:[],lanas:[],labores:[],conFoto:{},libre:{vueltas:0,puntos:0},escala:1}, d.state); normalizarEstado();
+  for(const [id,img] of Object.entries(d.fotos||{})) if(typeof img==="string" && img.startsWith("data:image/")) fotoSet(id,img);
+  save(); applyScale(); go({name:"inicio"});
+  toast("Copia recuperada", ()=>{
+    state = JSON.parse(antes); normalizarEstado();
+    for(const id of Object.keys(d.fotos||{})) fotoSet(id, fotosAntes[id] || null);
+    for(const id of Object.keys(fotosAntes)) state.conFoto[id] = true;
+    save(); applyScale(); render(); toast("Todo está como antes");
+  });
+}
 
 VISTAS.ayuda = V => {
   V.append(
