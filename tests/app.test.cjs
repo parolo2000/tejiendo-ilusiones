@@ -65,7 +65,9 @@ const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rinc
     assert.equal(st.progreso["m-1"].notas, "voy por aquí");
     assert.equal(st.progreso["m-1"].puntos, 7);
     assert.equal(st.progreso["m-1"].rep, 0);
-    assert.deepEqual(st.prefs, { tejer: "sofa", sonido: true, vibrar: true, auto: true, avisoApp: true });
+    const { copiaDesde, ...prefs } = st.prefs;
+    assert.deepEqual(prefs, { tejer: "sofa", sonido: true, vibrar: true, auto: true, avisoApp: true, ultCopia: 0, copiaPospuesta: 0, leer: false });
+    assert.ok(Math.abs(copiaDesde - Date.now()) < 60000, "el recordatorio de copia empieza a contar hoy");
     const copia = await page.evaluate(() => localStorage.getItem("rincon-ganchillo-v1-copia-v1"));
     assert.deepEqual(JSON.parse(copia), LEGADO);
     // Al volver a abrir no se migra otra vez ni se toca la copia
@@ -683,6 +685,68 @@ Fasten off and weave in ends.`;
     await page.getByRole("button", { name: "No volver a mostrar" }).tap();
     await page.reload();
     assert.doesNotMatch(await page.locator("main").textContent(), /Ponla en tu móvil/);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  console.log("Que no se pierda nada");
+  await prueba("recuerda guardar una copia al mes, se puede posponer y se quita al guardarla", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    assert.doesNotMatch(await page.locator("main").textContent(), /copia de tus cosas|días de tu última copia/, "el primer mes no molesta");
+    await page.evaluate(() => { state.prefs.copiaDesde = Date.now() - 31 * DIA; save(); render(); });
+    assert.match(await page.locator(".aviso-copia").textContent(), /Aún no tienes una copia/);
+    await page.waitForTimeout(400);
+    await page.locator(".aviso-copia").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(CAPTURAS, "aviso-copia.png") });
+    await page.getByRole("button", { name: "Ahora no" }).tap();
+    await page.reload();
+    assert.equal(await page.locator(".aviso-copia").count(), 0, "pospuesto una semana");
+    assert.equal(await page.evaluate(() => tocaRecordarCopia(Date.now() + 8 * DIA)), true, "vuelve a la semana");
+    await page.evaluate(() => copiaHecha());
+    assert.equal(await page.evaluate(() => tocaRecordarCopia(Date.now() + 8 * DIA)), false, "con copia reciente no avisa");
+    assert.equal(await page.evaluate(() => tocaRecordarCopia(Date.now() + 31 * DIA)), true, "y al mes de la copia, otra vez");
+    // sin nada propio no hay nada que guardar
+    const vacia = await nuevaPagina(browser);
+    assert.equal(await vacia.evaluate(() => { state.prefs.copiaDesde = 1; return tocaRecordarCopia(); }), false);
+    await vacia.context().close();
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("«¿Cómo se hace?» enlaza a vídeos de los puntos del paso", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    const ks = await page.evaluate(() => puntosDelPaso("Vuelta 3: *1 pb, 1 aum* repetir 6 veces. (18)"));
+    assert.deepEqual(ks.sort(), ["aum", "pb"]);
+    await page.evaluate(() => { prog("b-gorro").paso = 2; save(); go({ name: "tejer", id: "b-gorro" }); });
+    const enlaces = page.locator(".stepbox .videos a");
+    assert.ok(await enlaces.count() >= 1);
+    const href = await enlaces.first().getAttribute("href");
+    assert.match(href, /^https:\/\/www\.youtube\.com\/results\?search_query=/);
+    assert.equal(await enlaces.first().getAttribute("target"), "_blank");
+    await page.evaluate(() => go({ name: "ayuda" }));
+    assert.ok(await page.locator(".gloss a.video").count() >= 8);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("modo sofá: lee el paso en voz alta con palabras, no abreviaturas", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    assert.equal(await page.evaluate(() => paraDecir("Vuelta 3: *1 pb, 1 aum* repetir 6 veces. (18)")), "Vuelta 3: 1 punto bajo, 1 aumento repetir 6 veces. . Al final, 18 puntos.");
+    // Se sustituye la voz del móvil por una que apunta lo que dice
+    await page.evaluate(() => { window.dicho = []; speechSynthesis.speak = u => window.dicho.push(u.text); speechSynthesis.cancel = () => {}; });
+    await page.evaluate(() => { prog("b-bola").paso = 1; save(); go({ name: "sofa", id: "b-bola" }); });
+    await page.getByRole("button", { name: "Leer el paso en voz alta" }).tap();
+    assert.match((await page.evaluate(() => window.dicho))[0], /6 punto bajo en el anillo/);
+    await page.screenshot({ path: path.join(CAPTURAS, "sofa-con-voz.png") });
+    // Con la opción puesta, lee solo cada paso nuevo
+    await page.getByRole("button", { name: "Opciones" }).tap();
+    await page.getByRole("button", { name: /Leer cada paso en voz alta/ }).tap();
+    await page.getByRole("button", { name: "Seguir tejiendo" }).tap();
+    const antes = (await page.evaluate(() => window.dicho)).length;
+    for (let i = 0; i < 6; i++) { await page.locator(".sofa-big").tap(); await page.waitForTimeout(170); }
+    await page.waitForTimeout(400);
+    const dicho = await page.evaluate(() => window.dicho);
+    assert.equal(dicho.length, antes + 1, "lee el paso siguiente una sola vez: " + JSON.stringify(dicho));
+    assert.match(dicho[dicho.length - 1], /aumento/);
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });

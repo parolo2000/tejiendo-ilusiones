@@ -74,6 +74,9 @@ button:disabled{opacity:.4;cursor:default}
 button svg{flex:none}
 .row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
 [hidden]{display:none!important}
+.videos{margin:.4rem 0 0;font-size:.95rem;line-height:1.6}
+.videos a,.gloss a.video{color:var(--accent);font-weight:700}
+.gloss a.video{font-size:.9rem;white-space:nowrap}
 .pasos-instalar{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:.35rem}
 .pasos-instalar a{color:var(--accent);font-weight:700;word-break:break-all}
 /* Mis labores: foto a la izquierda y los datos a la derecha, igual que la tarjeta de seguir tejiendo */
@@ -299,6 +302,9 @@ body.en-sofa{overflow:hidden}
 body.en-sofa .view{animation:none}
 body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
 .sofa{position:fixed;inset:0;z-index:15;background:var(--bg);display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) 45%;padding-top:env(safe-area-inset-top,0px)}
+.sofa-eye{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.sofa-voz{min-height:2rem;padding:0 .5rem;margin:-.3rem 0;gap:.3rem;font-size:.9rem;color:var(--thread)}
+@media (max-height:40em){.sofa-voz span{display:none}}
 .sofa-top{display:grid;grid-template-columns:3.2rem 1fr 3.2rem;align-items:center;gap:.4rem;padding:.3rem 8px;max-width:48rem;width:100%;margin:0 auto;box-sizing:border-box}
 .sofa-top button{min-height:3rem;font-size:1.5rem;padding:0;color:var(--fg)}
 .sofa-tit{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0;line-height:1.2}
@@ -380,7 +386,7 @@ const KEY = "rincon-ganchillo-v1", FKEY = "rg-foto-";
 // v1: formato original (sin campo v). v2: preferencias del modo sofá y repeticiones por paso.
 // v3: cuaderno de labores (lo terminado, para quién y cuándo).
 const VERSION_DATOS = 3;
-const PREFS = {tejer:"sofa", sonido:true, vibrar:true, auto:true, avisoApp:true};
+const PREFS = {tejer:"sofa", sonido:true, vibrar:true, auto:true, avisoApp:true, ultCopia:0, copiaDesde:0, copiaPospuesta:0, leer:false};
 const MIGRACIONES = {
   2: st => { for(const pr of Object.values(st.progreso||{})) if(pr && typeof pr==="object") pr.rep = pr.rep||0; },
   // Lo que ya estaba terminado pasa al cuaderno, sin tocar el progreso ni las fotos (la labor apunta a la foto del patrón)
@@ -414,6 +420,7 @@ function normalizarEstado(){
   for(const k of ["progreso","conFoto","libre","prefs"]) if(!state[k] || typeof state[k]!=="object") state[k]={};
   state.libre.vueltas = state.libre.vueltas||0; state.libre.puntos = state.libre.puntos||0;
   state.prefs = {...PREFS, ...state.prefs};
+  if(!state.prefs.copiaDesde) state.prefs.copiaDesde = Date.now(); // desde cuándo cuenta el recordatorio de copia
   state.graficos.forEach(g=>{ if(!Array.isArray(g.celdas) || !g.celdas.length) g.celdas=[Array(10).fill("")]; g.cols = g.cols || g.celdas[0].length || 10; });
   // El color va a un estilo: solo se acepta un color de verdad (una copia de seguridad la puede haber tocado cualquiera)
   const colorOk = c => typeof c==="string" && /^#[0-9a-f]{3,8}$/i.test(c);
@@ -549,6 +556,7 @@ const ICONOS = {
   imagen:"M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4M15 9h.01",
   texto:"M5 6h14M5 10h14M5 14h9M5 18h6",
   pdf:"M6 3h8l5 5v13H6zM14 3v5h5M9 13h7M9 17h5",
+  altavoz:"M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11",
   corazon:"M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9z",
   sofa:"M4 11V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3M3 12a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3zM5 17v2M19 17v2",
   deshacer:"M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
@@ -1222,6 +1230,7 @@ VISTAS.inicio = V => {
   V.append(
     h("div",{class:"hero"}, h("p",{class:"eyebrow"}, saludo), h("h1",{}, ult ? "¿Seguimos?" : "¿Qué tejemos hoy?")),
     ult ? h("div",{class:"section"}, tarjetaContinuar(ult)) : null,
+    tocaRecordarCopia() ? avisoCopia() : null,
     !window.TI_LOCAL && state.prefs.avisoApp ? avisoInstalar() : null,
     h("div",{class:"section"},
       h("div",{class:"tiles"},
@@ -1254,6 +1263,42 @@ function avisoInstalar(){
     h("button",{class:"ghost", style:"align-self:flex-start", onclick:()=>{ state.prefs.avisoApp=false; save(); caja.remove(); }},"No volver a mostrar")));
   return caja;
 }
+// ---------- Que no se pierda nada ----------
+// Todo vive en el móvil: si el navegador hace limpieza o el móvil se cambia, se perdería. Dos defensas gratis:
+// pedir almacenamiento persistente y recordar, como mucho una vez al mes, guardar una copia.
+const DIA = 86400000;
+function copiaHecha(){ state.prefs.ultCopia = Date.now(); save(); }
+function tieneAlgoSuyo(){ return state.patrones.length>0 || state.labores.length>0 || Object.keys(state.progreso).length>0 || state.graficos.length>0; }
+function tocaRecordarCopia(ahora=Date.now()){
+  const p = state.prefs;
+  if(!tieneAlgoSuyo()) return false;
+  if(ahora - (p.copiaPospuesta||0) < 7*DIA) return false;
+  return ahora - Math.max(p.ultCopia||0, p.copiaDesde||ahora) > 30*DIA;
+}
+function avisoCopia(){
+  const dias = Math.floor((Date.now() - Math.max(state.prefs.ultCopia||0, state.prefs.copiaDesde||0))/DIA);
+  const caja = h("div",{class:"section"}, h("div",{class:"note stack aviso-copia", style:"gap:.6rem"},
+    h("h2",{style:"margin:0"}, state.prefs.ultCopia ? "Hace "+dias+" días de tu última copia" : "Aún no tienes una copia de tus cosas"),
+    h("p",{},"Tus patrones y labores solo están en este móvil. Con una copia no se pierden si cambias de móvil o se borra el navegador."),
+    h("div",{class:"row"},
+      h("button",{class:"primary", onclick:()=>go({name:"copia"})}, icono("guardar",20), "Guardar una copia"),
+      h("button",{class:"ghost", onclick:()=>{ state.prefs.copiaPospuesta = Date.now(); save(); caja.remove(); }},"Ahora no"))));
+  return caja;
+}
+async function pedirAlmacenamientoFijo(){
+  try{ if(navigator.storage && navigator.storage.persist && !(await navigator.storage.persisted())) await navigator.storage.persist(); }catch(e){}
+}
+// «¿Cómo se hace?»: abre una búsqueda de vídeos del punto en YouTube (gratis, sin cuentas; lo abre la usuaria)
+const VIDEO_DE = {am:"anillo mágico", cad:"cadeneta", pd:"punto deslizado", pb:"punto bajo", pbt:"punto bajo hebra de atrás", mpa:"medio punto alto", pa:"punto alto", pad:"punto alto doble", aum:"aumento punto bajo", aumpa:"aumento punto alto", dism:"disminución invisible punto bajo", rel:"punto relieve", pina:"punto piña", garb:"punto garbanzo", picot:"picot"};
+const urlVideo = k => "https://www.youtube.com/results?search_query="+encodeURIComponent("cómo hacer "+(VIDEO_DE[k]||NOMBRE[k]||k)+" ganchillo");
+function puntosDelPaso(texto){ return [...new Set(lineaAFilas(texto||"").flat().map(pk).filter(k=>k && VIDEO_DE[k]))]; }
+function enlacesVideo(texto){
+  const ks = puntosDelPaso(texto);
+  if(!ks.length) return null;
+  return h("p",{class:"videos"}, h("span",{class:"muted"},"¿Cómo se hace? "),
+    ...ks.flatMap((k,i)=>[i ? " · " : null, h("a",{href:urlVideo(k), target:"_blank", rel:"noopener"}, NOMBRE[k]||k)]));
+}
+
 function tarjetaContinuar(p){
   const pr = state.progreso[p.id], n = p.pasos.length, pct = Math.round(Math.min(pr.paso,n)/n*100);
   return h("button",{class:"continue", onclick:()=>tejer(p.id)},
@@ -1567,6 +1612,7 @@ VISTAS.tejer = V => {
         : h("div",{class:"stepbox"},
             h("div",{class:"txt"}, texto),
             filasPaso.length>1 ? h("p",{class:"note"},"Esta vuelta se repite "+filasPaso.length+" veces. Usa el contador de vueltas.") : null,
+            enlacesVideo(texto),
             pr.paso+1<n ? h("p",{class:"muted"},"Después: "+p.pasos[pr.paso+1]) : null
           ),
       terminado ? null : h("div",{class:"stepnav"},
@@ -1633,7 +1679,22 @@ const sofaFoto = pr => ({paso:pr.paso, puntos:pr.puntos||0, vueltas:pr.vueltas||
 function sofaVolver(pr, f){ Object.assign(pr, f); if(f.fin==null) delete pr.fin; }
 
 // ---------- Modo sofá: la pantalla ----------
-let sofaHist = [], sofaDe = null, sofaTeclas = null, audioCtx = null;
+let sofaHist = [], sofaDe = null, sofaTeclas = null, audioCtx = null, sofaLeido = "";
+// Leer el paso en voz alta con la voz del propio móvil (gratis y sin internet en la mayoría de móviles)
+const DICHO = [[/\bpbt\b/gi,"punto bajo por la hebra de atrás"],[/\bpb\b/gi,"punto bajo"],[/\bmpa\b/gi,"medio punto alto"],[/\bpad\b/gi,"punto alto doble"],
+  [/\bpa\b/gi,"punto alto"],[/\bpd\b/gi,"punto deslizado"],[/\baum\b/gi,"aumento"],[/\bdism\b/gi,"disminución"],[/\bcad\b/gi,"cadeneta"],[/\bAM\b/g,"anillo mágico"],
+  [/\*/g,""],[/\bx\s*(\d+)/gi,"$1 veces"],[/\((\d+)\)/g,". Al final, $1 puntos."]];
+const paraDecir = t => DICHO.reduce((a,[rx,r])=>a.replace(rx,r), String(t||"")).replace(/\s+/g," ").trim();
+const puedeHablar = () => typeof speechSynthesis!=="undefined" && typeof SpeechSynthesisUtterance!=="undefined";
+function leerEnVoz(t){
+  if(!puedeHablar()) return false;
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(paraDecir(t)); u.lang = "es-ES"; u.rate = 0.9;
+    const voz = speechSynthesis.getVoices().find(v=>/^es(-|_|$)/i.test(v.lang)); if(voz) u.voice = voz;
+    speechSynthesis.speak(u); return true;
+  }catch(e){ return false; }
+}
 function pitar(notas){
   if(!state.prefs.sonido) return;
   try{
@@ -1696,6 +1757,8 @@ VISTAS.sofa = V => {
       : info.reps>1 ? (vNum ? "Vuelta "+vNum+" · " : "")+"repetición "+(pr.rep+1)+" de "+info.reps
       : vNum ? "Vuelta "+vNum : (info.modo==="accion" ? "Ahora" : "Esta vuelta");
     txt.textContent = p.pasos[pr.paso];
+    const clave = p.id+":"+pr.paso+":"+pr.rep;
+    if(state.prefs.leer && sofaLeido!==clave){ sofaLeido = clave; leerEnVoz(p.pasos[pr.paso]); }
     despues.textContent = pr.paso+1<n ? "Después: "+p.pasos[pr.paso+1] : "Es el último paso.";
     barra.style.width = Math.round(pr.paso/n*100)+"%";
     big.classList.toggle("accion", info.modo==="accion");
@@ -1767,7 +1830,9 @@ VISTAS.sofa = V => {
         h("div",{class:"menu"},
           interruptor("auto","Pasar de vuelta sola al cuadrar"),
           interruptor("sonido","Sonido al terminar cada vuelta"),
-          interruptor("vibrar","Vibrar al tocar")),
+          interruptor("vibrar","Vibrar al tocar"),
+          puedeHablar() ? interruptor("leer","Leer cada paso en voz alta") : null),
+        pr.paso<p.pasos.length ? enlacesVideo(p.pasos[pr.paso]) : null,
         h("div",{class:"stack", style:"gap:.6rem"},
           pr.paso>0 ? h("button",{class:"big", onclick:()=>{ cerrarV(); accion(()=>{ pr.paso--; pr.puntos=0; pr.rep=0; return "atras"; }); }},"← Volver al paso anterior") : null,
           h("button",{class:"big", onclick:()=>{ cerrarV(); state.prefs.tejer="completa"; save(); go({name:"tejer", id:p.id}); }}, icono("rejilla",22), "Vista completa: gráfico y apuntes"),
@@ -1784,7 +1849,9 @@ VISTAS.sofa = V => {
       h("button",{class:"ghost", "aria-label":"Opciones", onclick:opciones}, icono("ajustes",26))),
     h("div",{class:"sofa-info"},
       h("div",{class:"prog"}, barra),
-      eyebrow, txt, despues,
+      h("div",{class:"sofa-eye"}, eyebrow,
+        puedeHablar() ? h("button",{class:"ghost sofa-voz", "aria-label":"Leer el paso en voz alta", onclick:()=>leerEnVoz(p.pasos[pr.paso])}, icono("altavoz",20), h("span",{},"Oír")) : null),
+      txt, despues,
       h("div",{class:"sofa-acc"}, btnDeshacer, btnLista),
       flash),
     big));
@@ -2487,15 +2554,15 @@ VISTAS.copia = V => {
     const datos = JSON.stringify({app:"rincon-ganchillo", version:1, fecha:new Date().toISOString(), state, fotos});
     try{
       const dl = window.claude?.use ? await claude.use("downloads") : null;
-      if(dl){ await dl.save({filename:"ganchillo-copia-"+new Date().toISOString().slice(0,10)+".json", data:datos}); msg.textContent="Copia guardada. Guárdala en un sitio seguro."; return; }
+      if(dl){ await dl.save({filename:"ganchillo-copia-"+new Date().toISOString().slice(0,10)+".json", data:datos}); copiaHecha(); msg.textContent="Copia guardada. Guárdala en un sitio seguro."; return; }
     }catch(e){ if(e && e.code==="declined") return; }
     if(window.TI_LOCAL){ // en la versión instalable el navegador sí deja descargar
       const url = URL.createObjectURL(new Blob([datos], {type:"application/json"}));
       const a = h("a",{href:url, download:"ganchillo-copia-"+new Date().toISOString().slice(0,10)+".json", hidden:true});
       document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 10000);
-      msg.textContent="Copia guardada en Descargas. Guárdala en un sitio seguro."; return;
+      copiaHecha(); msg.textContent="Copia guardada en Descargas. Guárdala en un sitio seguro."; return;
     }
-    msg.textContent="No se puede descargar aquí. Copia este texto y guárdalo:";
+    copiaHecha(); msg.textContent="No se puede descargar aquí. Copia este texto y guárdalo:";
     V.append(h("textarea",{readonly:true, style:"min-height:8rem"}, datos));
   }
   function importar(){
@@ -2522,7 +2589,8 @@ VISTAS.ayuda = V => {
     volver("Volver", prevView && prevView.name!=="ayuda" ? prevView : {name:"mas"}),
     h("div",{class:"page-title"}, h("h1",{},"Abreviaturas")),
     h("div",{class:"section"},
-      h("div",{class:"panel"}, h("dl",{class:"gloss"}, GLOSARIO.map(([a,b])=>[h("dt",{},a), h("dd",{},b)]))),
+      h("div",{class:"panel"}, h("dl",{class:"gloss"}, GLOSARIO.map(([a,b])=>{ const k = {AM:"am", "piña":"pina", garbanzo:"garb"}[a] || a;
+        return [h("dt",{},a), h("dd",{}, b, VIDEO_DE[k] ? [" ", h("a",{href:urlVideo(k), target:"_blank", rel:"noopener", class:"video"},"Ver cómo se hace")] : null)]; }))),
       h("h2",{},"Los símbolos de los gráficos"),
       h("div",{class:"panel"}, h("dl",{class:"leyenda"}, SIMBOLOS.flatMap(x=>[h("dt",{},iconoSimbolo(x.k,30)), h("dd",{},x.n)]))),
       h("h2",{},"El mismo punto en otros países"),
@@ -2612,6 +2680,7 @@ VISTAS.herramientas = V => {
 applyScale();
 render();
 abrirEnlaceRecibido();
+pedirAlmacenamientoFijo();
 </script>
 
 <script>

@@ -139,3 +139,16 @@ Capturas en `tests/capturas/`.
   meter estilos).
 - Prueba del doble toque del modo sofá más robusta (fallaba a veces por tiempos).
 - Tests: 34/34.
+
+## 2026-10-07 · Que no se pierda nada, vídeos de los puntos y leer en voz alta
+
+- Al abrir, la app pide al navegador almacenamiento persistente (`navigator.storage.persist`), para que no borre
+  los datos al hacer limpieza.
+- Recordatorio de copia de seguridad: si hay cosas propias y hace más de 30 días de la última copia (o desde que
+  se empezó a usar), Inicio lo recuerda. «Ahora no» lo aplaza una semana. Preferencias nuevas `ultCopia`,
+  `copiaDesde`, `copiaPospuesta` (sin cambio de versión de datos: las preferencias se completan solas).
+- «¿Cómo se hace?»: en la vista completa, debajo del paso, enlaces a vídeos de YouTube de cada punto del paso;
+  también en las opciones del modo sofá y junto a cada abreviatura. Solo abre una búsqueda; no se envía nada.
+- Modo sofá: botón «Oír» que lee el paso con la voz del móvil, cambiando abreviaturas por palabras («pb» → «punto
+  bajo»). Opción «Leer cada paso en voz alta» (`prefs.leer`) que lo lee solo al cambiar de paso o repetición.
+- Tests: 3 nuevos. 37/37.
