@@ -41,6 +41,8 @@ async function nuevaPagina(browser, opts = {}, datos = null) {
   await page.goto(URL);
   return page;
 }
+// Chromium tarda un poco en pasar localStorage a disco: si se recarga en seguida, a veces lee lo de antes
+const recargar = async page => { await page.waitForTimeout(400); await page.reload(); };
 const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rincon-ganchillo-v1")));
 
 (async () => {
@@ -71,7 +73,7 @@ const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rinc
     const copia = await page.evaluate(() => localStorage.getItem("rincon-ganchillo-v1-copia-v1"));
     assert.deepEqual(JSON.parse(copia), LEGADO);
     // Al volver a abrir no se migra otra vez ni se toca la copia
-    await page.reload();
+    await recargar(page);
     assert.equal((await estado(page)).v, 3);
     assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem("rincon-ganchillo-v1-copia-v1"))), LEGADO);
     assert.deepEqual(page.errores, []);
@@ -174,7 +176,7 @@ const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rinc
     await page.keyboard.press("ArrowLeft");
     assert.match(await page.locator(".sofa-paso").textContent(), /Paso 2 de 8/);
     // Se guarda: al recargar sigue igual y vuelve al modo sofá desde Inicio
-    await page.reload();
+    await recargar(page);
     await page.locator(".continue").click();
     await page.waitForSelector(".sofa");
     assert.equal(await page.locator(".sofa-num").textContent(), "5");
@@ -434,7 +436,7 @@ Fasten off and weave in ends.`;
     assert.equal(st.labores[0].fotoDe, "m-1", "la labor apunta a la foto del patrón, no se mueve nada");
     assert.deepEqual(st.progreso["m-1"], { ...TERMINADO.progreso["m-1"], rep: 0 }, "el progreso se queda igual (solo el campo rep de la v2)");
     // y no se duplica al volver a abrir
-    await page.reload();
+    await recargar(page);
     assert.equal((await estado(page)).labores.length, 1);
     assert.deepEqual(page.errores, []);
     await page.context().close();
@@ -654,7 +656,7 @@ Fasten off and weave in ends.`;
       await page.evaluate(() => { const p = { id: "m-sin", titulo: "Sin conexión", pasos: ["Vuelta 1: 6 pb en anillo mágico (6)"], color: "#8A2F5E" }; state.patrones.unshift(p); save(); });
       await page.waitForTimeout(500);
       await ctx.setOffline(true);
-      await page.reload();
+      await recargar(page);
       await page.waitForSelector("nav.tabs .in button");
       assert.equal(await page.evaluate(() => state.patrones[0].titulo), "Sin conexión");
       await page.evaluate(() => go({ name: "sofa", id: "m-sin" }));
@@ -684,8 +686,7 @@ Fasten off and weave in ends.`;
     await page.screenshot({ path: path.join(CAPTURAS, "aviso-instalar.png"), fullPage: true });
     await page.getByRole("button", { name: "No volver a mostrar" }).tap();
     await page.waitForFunction(() => JSON.parse(localStorage.getItem(KEY)).prefs.avisoApp === false);
-    await page.waitForTimeout(400); // Chromium tarda un poco en pasar localStorage a disco; recargar en seguida lee lo de antes
-    await page.reload();
+    await recargar(page);
     assert.doesNotMatch(await page.locator("main").textContent(), /Ponla en tu móvil/);
     assert.deepEqual(page.errores, []);
     await page.context().close();
@@ -701,7 +702,7 @@ Fasten off and weave in ends.`;
     await page.locator(".aviso-copia").scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(CAPTURAS, "aviso-copia.png") });
     await page.getByRole("button", { name: "Ahora no" }).tap();
-    await page.reload();
+    await recargar(page);
     assert.equal(await page.locator(".aviso-copia").count(), 0, "pospuesto una semana");
     assert.equal(await page.evaluate(() => tocaRecordarCopia(Date.now() + 8 * DIA)), true, "vuelve a la semana");
     await page.evaluate(() => copiaHecha());
@@ -838,8 +839,7 @@ Fasten off and weave in ends.`;
     assert.equal(await page.locator(".semana").count(), 0, "sin tiempo no sale");
     await page.evaluate(() => { for (let i = 0; i < 1800; i++) unSegundo(prog("m-1")); state.diario[diaClave(Date.now() - 2 * 864e5)] = 3600; state.diario["2020-01-01"] = 99; save(); });
     assert.equal((await estado(page)).diario[await page.evaluate(() => diaClave(Date.now()))], 1800);
-    await page.waitForTimeout(400);
-    await page.reload();
+    await recargar(page);
     assert.equal(await page.evaluate(() => state.diario["2020-01-01"]), undefined, "lo de hace más de un año se borra");
     await page.evaluate(() => go({ name: "inicio" }));
     assert.match(await page.locator(".semana").textContent(), /1 h 30 min tejiendo · 2 días/);
