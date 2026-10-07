@@ -1,0 +1,35 @@
+{
+  "name": "Tejiendo Ilusiones",
+  "short_name": "Tejiendo",
+  "description": "Tu libreta de ganchillo: patrones vuelta a vuelta, contador y gráficos.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F2F4EF",
+  "theme_color": "#F2F4EF",
+  "icons": [
+    {
+      "src": "icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icono-recortable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

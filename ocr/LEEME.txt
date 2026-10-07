@@ -1,0 +1,10 @@
+Archivos para leer el texto de fotos y PDF escaneados, en el propio móvil.
+Se publican junto a la app (carpeta ocr/). Nada se envía a ningún servidor.
+
+worker.min.js                      tesseract.js 5.1.1 (Apache-2.0)
+tesseract-core-simd-lstm.wasm.js   tesseract.js-core 5.1.1 (Apache-2.0), móviles modernos
+tesseract-core-lstm.wasm.js        tesseract.js-core 5.1.1 (Apache-2.0), móviles sin SIMD
+spa.traineddata.gz, eng.traineddata.gz   tessdata 4.0.0_best_int (Apache-2.0), español e inglés
+
+Para actualizar: npm i tesseract.js@<versión> tesseract.js-core@<versión> @tesseract.js-data/spa @tesseract.js-data/eng
+y copiar los mismos archivos. Cambia también TESSERACT en tejiendo-ilusiones.html a la misma versión.
