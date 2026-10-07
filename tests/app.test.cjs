@@ -683,6 +683,8 @@ Fasten off and weave in ends.`;
     assert.equal(await page.locator(".pasos-instalar a").getAttribute("href"), "https://parolo2000.github.io/tejiendo-ilusiones/");
     await page.screenshot({ path: path.join(CAPTURAS, "aviso-instalar.png"), fullPage: true });
     await page.getByRole("button", { name: "No volver a mostrar" }).tap();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem(KEY)).prefs.avisoApp === false);
+    await page.waitForTimeout(400); // Chromium tarda un poco en pasar localStorage a disco; recargar en seguida lee lo de antes
     await page.reload();
     assert.doesNotMatch(await page.locator("main").textContent(), /Ponla en tu móvil/);
     assert.deepEqual(page.errores, []);
@@ -747,6 +749,62 @@ Fasten off and weave in ends.`;
     const dicho = await page.evaluate(() => window.dicho);
     assert.equal(dicho.length, antes + 1, "lee el paso siguiente una sola vez: " + JSON.stringify(dicho));
     assert.match(dicho[dicho.length - 1], /aumento/);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  console.log("Deshacer, volver a tejer y apuntes");
+  await prueba("borrar sin querer se puede deshacer: progreso, patrón y labor", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    await page.evaluate(() => go({ name: "patron", id: "m-1" }));
+    await page.getByRole("button", { name: "Volver a empezar" }).tap();
+    await page.getByRole("button", { name: /Toca otra vez/ }).tap();
+    assert.equal((await estado(page)).progreso["m-1"], undefined);
+    await page.locator(".toast-btn").tap();
+    assert.equal((await estado(page)).progreso["m-1"].notas, "voy por aquí", "vuelve el progreso tal cual");
+    await page.evaluate(() => go({ name: "editar", id: "m-1" }));
+    await page.getByRole("button", { name: "Borrar patrón" }).tap();
+    await page.getByRole("button", { name: /Toca otra vez/ }).tap();
+    assert.equal((await estado(page)).patrones.length, 0);
+    await page.screenshot({ path: path.join(CAPTURAS, "deshacer-borrado.png") });
+    await page.locator(".toast-btn").tap();
+    const st = await estado(page);
+    assert.equal(st.patrones[0].titulo, "Manta para la nieta");
+    assert.equal(st.progreso["m-1"].puntos, 7);
+    assert.equal(await page.evaluate(() => view.name), "patron");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("tejerlo otra vez: la labor guardada conserva su foto aunque el patrón tenga otra", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    const r = await page.evaluate(async () => {
+      const p = buscar("m-1"), pr = prog("m-1"); pr.paso = p.pasos.length; pr.fin = Date.now();
+      await fotoSet("m-1", "data:image/png;base64,UNO");
+      const l = guardarLabor(p, "Lucía");
+      state.progreso["m-1"] = { paso: 0, vueltas: 0, puntos: 0, notas: "", tiempo: 0, rep: 0 };
+      await fotoSet("m-1", "data:image/png;base64,DOS");
+      return { foto: fotoDeLabor(l), estado: estadoDe(p) };
+    });
+    assert.equal(r.foto, "data:image/png;base64,UNO");
+    assert.equal(r.estado, "nuevo");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("un apunte en un paso sale en el modo sofá y se guarda para la próxima vez", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    await page.evaluate(() => { prog("b-bola").paso = 2; save(); go({ name: "tejer", id: "b-bola" }); });
+    await page.locator("#apunte-2").fill("aquí cambio a lana rosa");
+    await page.locator("#apunte-2").press("Enter");
+    await page.locator("#apunte-2").blur();
+    assert.equal((await estado(page)).apuntes["b-bola"]["2"], "aquí cambio a lana rosa");
+    await page.evaluate(() => go({ name: "sofa", id: "b-bola" }));
+    assert.match(await page.locator(".sofa-apunte").textContent(), /lana rosa/);
+    await page.screenshot({ path: path.join(CAPTURAS, "sofa-apunte.png") });
+    await page.evaluate(() => { prog("b-bola").paso = 3; save(); render(); });
+    assert.equal(await page.locator(".sofa-apunte").isVisible(), false, "en otro paso no sale");
+    // borrar el texto quita el apunte
+    await page.evaluate(() => ponerApunte("b-bola", 2, ""));
+    assert.equal((await estado(page)).apuntes["b-bola"], undefined);
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });

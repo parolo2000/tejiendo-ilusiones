@@ -173,6 +173,7 @@ label.f small,.f small{font-weight:400;color:var(--muted)}
 .gloss{display:grid;grid-template-columns:auto 1fr;gap:.5rem 1rem;align-items:baseline}
 .gloss dt{font-family:var(--display);color:var(--accent);font-size:1.1rem}
 .gloss dd{margin:0}
+.toast-btn{background:transparent;color:inherit;border:2px solid currentColor;border-radius:99px;min-height:2.2rem;padding:0 .8rem;margin-left:.4rem;font-weight:700}
 .toast{position:fixed;left:50%;bottom:calc(var(--tabs) + 1rem + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:.6rem 1.2rem;border-radius:99px;font-weight:700;z-index:20;max-width:calc(100% - 32px);text-align:center}
 @media (prefers-reduced-motion: no-preference){.counter .num.bump{animation:bump .25s ease}@keyframes bump{50%{transform:scale(1.12)}} .view{animation:fade .18s ease}@keyframes fade{from{opacity:.4;transform:translateY(4px)}}}
 
@@ -300,6 +301,8 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
 .sofa-info{position:relative;display:flex;flex-direction:column;gap:.45rem;padding:.2rem 16px .7rem;min-height:0;min-width:0;max-width:48rem;width:100%;margin:0 auto;box-sizing:border-box}
 .sofa-info .eyebrow{color:var(--accent)}
 .sofa-txt{flex:1 1 auto;min-height:0;overflow:auto;font-size:1.6rem;line-height:1.35;overflow-wrap:anywhere}
+.sofa-apunte{margin:0;font-size:.95rem;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:.6rem;padding:.35rem .6rem;flex:none}
+.apunte input{font-weight:400}
 .sofa-desp{font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none}
 .sofa-acc{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;align-items:center;flex:none}
 .sofa-acc button{min-height:3rem;font-size:.92rem;padding-inline:.5rem;white-space:nowrap;overflow:hidden}
@@ -387,7 +390,7 @@ const MIGRACIONES = {
     st.labores.sort((a,b)=>b.fin-a.fin);
   }
 };
-let state = {patrones:[], progreso:{}, graficos:[], lanas:[], labores:[], conFoto:{}, libre:{vueltas:0,puntos:0}, escala:1, t:0, prefs:{...PREFS}, v:VERSION_DATOS};
+let state = {patrones:[], progreso:{}, graficos:[], lanas:[], labores:[], apuntes:{}, conFoto:{}, libre:{vueltas:0,puntos:0}, escala:1, t:0, prefs:{...PREFS}, v:VERSION_DATOS};
 try{
   const raw = localStorage.getItem(KEY), g = JSON.parse(raw||"null");
   if(g && typeof g==="object"){
@@ -404,7 +407,7 @@ function migrar(st){
 }
 function normalizarEstado(){
   for(const k of ["patrones","graficos","lanas","labores"]) if(!Array.isArray(state[k])) state[k]=[];
-  for(const k of ["progreso","conFoto","libre","prefs"]) if(!state[k] || typeof state[k]!=="object") state[k]={};
+  for(const k of ["progreso","conFoto","libre","prefs","apuntes"]) if(!state[k] || typeof state[k]!=="object") state[k]={};
   state.libre.vueltas = state.libre.vueltas||0; state.libre.puntos = state.libre.puntos||0;
   state.prefs = {...PREFS, ...state.prefs};
   if(!state.prefs.copiaDesde) state.prefs.copiaDesde = Date.now(); // desde cuándo cuenta el recordatorio de copia
@@ -510,7 +513,12 @@ function esMio(p){ return !p.id.startsWith("b-"); }
 // Abre la pantalla de tejer que la usuaria usó la última vez (modo sofá por defecto)
 function tejer(id){ go({name: state.prefs.tejer==="completa" ? "tejer" : "sofa", id}); }
 function estadoDe(p){ const pr=state.progreso[p.id]; if(!pr) return "nuevo"; if(pr.fin && pr.paso>=p.pasos.length) return "terminado"; if(pr.paso>0||pr.vueltas>0||pr.puntos>0||pr.tiempo>30) return "encurso"; return "nuevo"; }
-let toastT; function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2400); }
+let toastT; function toast(msg, deshacer){
+  const t=document.getElementById("toast"); t.replaceChildren(msg); t.hidden=false; clearTimeout(toastT);
+  // Con «Deshacer», el aviso dura más y lleva el botón: borrar algo sin querer no tiene que ser para siempre
+  if(deshacer) t.append(" ", h("button",{class:"toast-btn", onclick:()=>{ t.hidden=true; clearTimeout(toastT); deshacer(); }},"Deshacer"));
+  toastT=setTimeout(()=>t.hidden=true, deshacer ? 7000 : 2400);
+}
 function applyScale(){ document.documentElement.style.setProperty("--scale", state.escala||1); }
 function confirmBtn(label, askLabel, cls, action){
   let armed=false, timer;
@@ -1075,7 +1083,8 @@ function fechaTxt(ts){ try{ return new Date(ts).toLocaleDateString("es-ES", {day
 function guardarLabor(p, para){
   const pr = prog(p.id);
   const l = {id:"l-"+Date.now(), patron:p.id, titulo:p.titulo, para:(para||"").trim(), nota:pr.notas||"", fin:pr.fin||Date.now(), tiempo:pr.tiempo||0};
-  if(state.conFoto[p.id]) l.fotoDe = p.id;
+  // La foto se copia a la labor: si se vuelve a tejer el patrón con otra foto, esta labor conserva la suya
+  const foto = fotoGet(p.id); if(foto) fotoSet(l.id, foto);
   state.labores.unshift(l); save();
   return l;
 }
@@ -1093,7 +1102,8 @@ function tarjetaLabor(l, alCambiar){
     const guardar = h("button",{class:"primary", onclick:()=>{ l.para = quien.value.trim(); save(); alCambiar(); }},"Guardar");
     acciones.replaceChildren(h("div",{class:"stack", style:"gap:.5rem;width:100%"}, quien, h("div",{class:"row"}, guardar,
       h("button",{onclick:()=>{ elegirFoto(l.id, alCambiar); }}, icono("foto",20), foto ? "Cambiar la foto" : "Añadir una foto"),
-      confirmBtn("Quitar del cuaderno","¿Quitar? Toca otra vez","danger",()=>{ fotoSet(l.id,null); state.labores = state.labores.filter(x=>x.id!==l.id); save(); alCambiar(); toast("Quitada del cuaderno"); }))));
+      confirmBtn("Quitar del cuaderno","¿Quitar? Toca otra vez","danger",()=>{ const foto = fotoGet(l.id), pos = state.labores.indexOf(l); fotoSet(l.id,null); state.labores = state.labores.filter(x=>x.id!==l.id); save(); alCambiar();
+        toast("Quitada del cuaderno", ()=>{ state.labores.splice(Math.max(0,pos), 0, l); if(foto) fotoSet(l.id, foto); save(); if(view.name==="labores") render(); }); }))));
     quien.focus();
   };
   acciones.append(h("button",{class:"teal", onclick:()=>compartirLabor(l)}, icono("foto",20), "Compartir"),
@@ -1284,6 +1294,16 @@ function enlacesVideo(texto){
   if(!ks.length) return null;
   return h("p",{class:"videos"}, h("span",{class:"muted"},"¿Cómo se hace? "),
     ...ks.flatMap((k,i)=>[i ? " · " : null, h("a",{href:urlVideo(k), target:"_blank", rel:"noopener"}, NOMBRE[k]||k)]));
+}
+
+// Apuntes en un paso concreto («aquí cambié a lana rosa»). Van por patrón, así sirven también la próxima vez.
+const apunteDe = (id, i) => ((state.apuntes[id]||{})[i]) || "";
+function ponerApunte(id, i, texto){
+  texto = String(texto||"").trim().slice(0, 300);
+  const a = state.apuntes[id] = state.apuntes[id] || {};
+  if(texto) a[i] = texto; else delete a[i];
+  if(!Object.keys(a).length) delete state.apuntes[id];
+  save();
 }
 
 function tarjetaContinuar(p){
@@ -1489,7 +1509,7 @@ VISTAS.patron = V => {
     h("div",{class:"section"}, h("div",{class:"row"},
       h("button",{class:"ghost", onclick:()=>go({name:"ayuda"})},"¿Qué significa cada abreviatura?"),
       foto ? confirmBtn("Quitar la foto","¿Quitar? Toca otra vez","danger",()=>{ fotoSet(p.id,null); render(); }) : null,
-      empezado ? confirmBtn("Volver a empezar","¿Seguro? Toca otra vez","danger",()=>{ delete state.progreso[p.id]; save(); render(); toast("Progreso borrado"); }) : null
+      empezado ? confirmBtn("Volver a empezar","¿Seguro? Toca otra vez","danger",()=>{ const antes = state.progreso[p.id]; delete state.progreso[p.id]; save(); render(); toast("Progreso borrado", ()=>{ state.progreso[p.id] = antes; save(); render(); }); }) : null
     ))
   );
 };
@@ -1514,7 +1534,8 @@ function cajaTerminado(p, pr, n){
         ? h("div",{class:"stack", style:"gap:.6rem"},
             h("p",{class:"note"},"Guardada en tus labores"+(guardada.para ? " para "+guardada.para : "")+"."),
             h("button",{class:"teal big", onclick:()=>compartirLabor(guardada)}, icono("foto",22), "Compartir una foto de mi labor"),
-            h("button",{class:"big", onclick:()=>go({name:"labores"})}, icono("corazon",22), "Ver mis labores"))
+            h("button",{class:"big", onclick:()=>go({name:"labores"})}, icono("corazon",22), "Ver mis labores"),
+            h("button",{class:"big", onclick:()=>{ state.progreso[p.id] = {paso:0, vueltas:0, puntos:0, notas:"", tiempo:0, rep:0}; save(); toast("¡A por otra!"); tejer(p.id); }}, icono("sofa",22), "Tejerlo otra vez"))
         : h("div",{class:"stack", style:"gap:.6rem"},
             h("button",{class:"big", onclick:()=>elegirFoto(p.id, pintar)}, icono("foto",22), foto ? "Cambiar la foto" : "Hacer una foto de mi labor"),
             h("label",{class:"f", for:"labor-para"},"¿Para quién es?", h("small",{},"Si es para ti, puedes dejarlo vacío."), quien),
@@ -1600,7 +1621,10 @@ VISTAS.tejer = V => {
             h("div",{class:"txt"}, texto),
             filasPaso.length>1 ? h("p",{class:"note"},"Esta vuelta se repite "+filasPaso.length+" veces. Usa el contador de vueltas.") : null,
             enlacesVideo(texto),
-            pr.paso+1<n ? h("p",{class:"muted"},"Después: "+p.pasos[pr.paso+1]) : null
+            pr.paso+1<n ? h("p",{class:"muted"},"Después: "+p.pasos[pr.paso+1]) : null,
+            h("label",{class:"f apunte"}, "Apunte para este paso", h("small",{},"Sale también en el modo sofá y la próxima vez que lo tejas."),
+              h("input",{type:"text", id:"apunte-"+pr.paso, maxlength:"300", value:apunteDe(p.id, pr.paso), placeholder:"Ej.: aquí cambio a lana rosa",
+                onchange:e=>{ ponerApunte(p.id, pr.paso, e.target.value); toast("Apunte guardado"); }}))
           ),
       terminado ? null : h("div",{class:"stepnav"},
         h("button",{class:"big", disabled:pr.paso===0, onclick:()=>pasar(-1)},"← Atrás"),
@@ -1718,6 +1742,7 @@ VISTAS.sofa = V => {
   const eyebrow = h("div",{class:"eyebrow"});
   const txt = h("div",{class:"sofa-txt"});
   const despues = h("p",{class:"sofa-desp muted"});
+  const apunte = h("p",{class:"sofa-apunte", hidden:true});
   const barra = h("i",{});
   const flash = h("div",{class:"sofa-flash", hidden:true, role:"status"});
   const tEl = h("span",{class:"sofa-t"});
@@ -1747,6 +1772,7 @@ VISTAS.sofa = V => {
     const clave = p.id+":"+pr.paso+":"+pr.rep;
     if(state.prefs.leer && sofaLeido!==clave){ sofaLeido = clave; leerEnVoz(p.pasos[pr.paso]); }
     despues.textContent = pr.paso+1<n ? "Después: "+p.pasos[pr.paso+1] : "Es el último paso.";
+    const nota = apunteDe(p.id, pr.paso); apunte.hidden = !nota; apunte.textContent = nota ? "Tu apunte: "+nota : "";
     barra.style.width = Math.round(pr.paso/n*100)+"%";
     big.classList.toggle("accion", info.modo==="accion");
     big.classList.toggle("cuadra", info.modo==="puntos" && pr.puntos>=info.objetivo);
@@ -1838,7 +1864,7 @@ VISTAS.sofa = V => {
       h("div",{class:"prog"}, barra),
       h("div",{class:"sofa-eye"}, eyebrow,
         puedeHablar() ? h("button",{class:"ghost sofa-voz", "aria-label":"Leer el paso en voz alta", onclick:()=>leerEnVoz(p.pasos[pr.paso])}, icono("altavoz",20), h("span",{},"Oír")) : null),
-      txt, despues,
+      txt, apunte, despues,
       h("div",{class:"sofa-acc"}, btnDeshacer, btnLista),
       flash),
     big));
@@ -1900,7 +1926,11 @@ VISTAS.editar = V => {
       err,
       h("div",{class:"row"},
         h("button",{class:"primary big", onclick:guardar},"Guardar patrón"),
-        existente ? confirmBtn("Borrar patrón","¿Borrar? Toca otra vez","danger",()=>{ state.patrones=state.patrones.filter(x=>x.id!==existente.id); delete state.progreso[existente.id]; fotoSet(existente.id,null); save(); toast("Patrón borrado"); go({name:"patrones"}); }) : null
+        existente ? confirmBtn("Borrar patrón","¿Borrar? Toca otra vez","danger",()=>{
+          const pos = state.patrones.indexOf(existente), pr = state.progreso[existente.id], foto = fotoGet(existente.id);
+          state.patrones=state.patrones.filter(x=>x.id!==existente.id); delete state.progreso[existente.id]; fotoSet(existente.id,null); save();
+          toast("Patrón borrado", ()=>{ state.patrones.splice(Math.max(0,pos), 0, existente); if(pr) state.progreso[existente.id]=pr; if(foto) fotoSet(existente.id, foto); save(); go({name:"patron", id:existente.id}); });
+          go({name:"patrones"}); }) : null
       )
     )
   );

@@ -152,3 +152,14 @@ Capturas en `tests/capturas/`.
 - Modo sofá: botón «Oír» que lee el paso con la voz del móvil, cambiando abreviaturas por palabras («pb» → «punto
   bajo»). Opción «Leer cada paso en voz alta» (`prefs.leer`) que lo lee solo al cambiar de paso o repetición.
 - Tests: 3 nuevos. 37/37.
+
+## 2026-10-07 · Deshacer, tejer otra vez y apuntes por paso
+
+- «Deshacer» en el aviso de abajo durante 7 segundos tras «Volver a empezar», «Borrar patrón» (recupera el
+  patrón en su sitio, su progreso y su foto) y «Quitar del cuaderno» (recupera la labor y su foto).
+- Al guardar una labor terminada, botón «Tejerlo otra vez» que reinicia el progreso y abre el patrón.
+- Cada labor guarda su propia copia de la foto: si se cambia o se borra la foto del patrón, la de la labor sigue.
+- Apuntes por paso: en la vista completa, «Apunte para este paso» (hasta 300 letras); en el modo sofá se ve
+  como «Tu apunte: …». Nuevo `state.apuntes` {idPatrón: {paso: texto}}; sin cambio de versión de datos (si no
+  existe, se crea vacío al cargar).
+- Tests: 3 nuevos. 40/40.
