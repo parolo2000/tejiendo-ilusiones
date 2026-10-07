@@ -395,7 +395,7 @@ const KEY = "rincon-ganchillo-v1", FKEY = "rg-foto-";
 // v1: formato original (sin campo v). v2: preferencias del modo sofá y repeticiones por paso.
 // v3: cuaderno de labores (lo terminado, para quién y cuándo).
 const VERSION_DATOS = 3;
-const PREFS = {tejer:"sofa", sonido:true, vibrar:true, auto:true, avisoApp:true, ultCopia:0, copiaDesde:0, copiaPospuesta:0, leer:false};
+const PREFS = {tejer:"sofa", sonido:true, vibrar:true, auto:true, avisoApp:true, ultCopia:0, copiaDesde:0, copiaPospuesta:0, leer:false, descanso:true, tema:"auto"};
 const MIGRACIONES = {
   2: st => { for(const pr of Object.values(st.progreso||{})) if(pr && typeof pr==="object") pr.rep = pr.rep||0; },
   // Lo que ya estaba terminado pasa al cuaderno, sin tocar el progreso ni las fotos (la labor apunta a la foto del patrón)
@@ -425,6 +425,18 @@ function migrar(st){
   st.v = v;
 }
 function diaClave(t){ const d=new Date(t); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+// Cada hora seguida tejiendo en el modo sofá, un aviso suave para descansar las manos.
+// Si para más de 10 minutos, ya ha descansado y la cuenta empieza de nuevo.
+const DESCANSO_SG = 3600;
+let tejiendoSeguido = 0, ultSegundoTejido = 0;
+function contarSeguido(ahora=Date.now()){
+  if(ahora-ultSegundoTejido > 10*60*1000) tejiendoSeguido = 0;
+  ultSegundoTejido = ahora; tejiendoSeguido++;
+  if(tejiendoSeguido % DESCANSO_SG === 0 && state.prefs.descanso){
+    toast(tejiendoSeguido>DESCANSO_SG ? "Llevas "+Math.round(tejiendoSeguido/3600)+" horas tejiendo. Descansa las manos y la vista un momento." : "Llevas una hora tejiendo. Estira las manos y descansa la vista un momento.");
+    if(state.prefs.vibrar) try{ navigator.vibrate?.([80,80,80]); }catch(e){}
+  }
+}
 // Un segundo más tejiendo: en el patrón y en el día de hoy
 function unSegundo(pr){ pr.tiempo++; const d=diaClave(Date.now()); state.diario[d]=(state.diario[d]||0)+1; }
 function normalizarEstado(){
@@ -544,7 +556,14 @@ let toastT; function toast(msg, deshacer){
   if(deshacer) t.append(" ", h("button",{class:"toast-btn", onclick:()=>{ t.hidden=true; clearTimeout(toastT); deshacer(); }},"Deshacer"));
   toastT=setTimeout(()=>t.hidden=true, deshacer ? 7000 : 2400);
 }
-function applyScale(){ document.documentElement.style.setProperty("--scale", state.escala||1); }
+function applyScale(){ document.documentElement.style.setProperty("--scale", state.escala||1); aplicarTema(); }
+// Colores claros u oscuros a mano (por ejemplo, oscuros para tejer de noche aunque el móvil esté en claro).
+// En «Automático» no se toca nada: manda el móvil (o claude.ai).
+function aplicarTema(){
+  const t = state.prefs.tema, r = document.documentElement;
+  if(t==="claro" || t==="oscuro"){ r.dataset.theme = t==="oscuro" ? "dark" : "light"; r.dataset.temaPropio = "1"; }
+  else if(r.dataset.temaPropio){ r.removeAttribute("data-theme"); delete r.dataset.temaPropio; }
+}
 function confirmBtn(label, askLabel, cls, action){
   let armed=false, timer;
   const b = h("button",{class:cls, onclick:()=>{
@@ -1361,8 +1380,9 @@ let filtro="";
 VISTAS.patrones = V => {
   const lista = h("div",{class:"plist"});
   function pintar(){
-    const q = filtro.trim().toLowerCase();
-    const ps = todos().filter(p=>!q || (p.titulo+" "+(p.descripcion||"")+" "+(p.hilo||"")).toLowerCase().includes(q));
+    // Sin tildes ni mayúsculas: «muneco» encuentra «Muñeco»; también busca en las notas y en los pasos
+    const q = sinTildes(filtro.trim());
+    const ps = todos().filter(p=>!q || sinTildes([p.titulo, p.descripcion, p.hilo, p.notas, p.ganchillo, ...p.pasos].filter(Boolean).join(" ")).includes(q));
     // Primero lo que está tejiendo, luego los suyos, luego los de la app
     const orden = p => estadoDe(p)==="encurso" ? 0 : esMio(p) ? 1 : 2;
     ps.sort((a,b)=>orden(a)-orden(b));
@@ -1379,6 +1399,7 @@ VISTAS.patrones = V => {
   );
   pintar();
 };
+const sinTildes = t => String(t||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 function tarjeta(p){
   const pr = state.progreso[p.id], n = p.pasos.length, est = estadoDe(p);
   const pct = pr && n ? Math.round(Math.min(pr.paso, n)/n*100) : 0;
@@ -1888,6 +1909,7 @@ VISTAS.sofa = V => {
     if(document.visibilityState!=="visible") return;
     if(Date.now()-ultActividad > 10*60*1000){ tEl.textContent = tiempoTxt(pr.tiempo)+" · en pausa"; return; }
     unSegundo(pr); tEl.textContent = tiempoTxt(pr.tiempo); if(++k%20===0) save();
+    contarSeguido();
   }, 1000);
 
   function opciones(){
@@ -1905,7 +1927,8 @@ VISTAS.sofa = V => {
           interruptor("auto","Pasar de vuelta sola al cuadrar"),
           interruptor("sonido","Sonido al terminar cada vuelta"),
           interruptor("vibrar","Vibrar al tocar"),
-          puedeHablar() ? interruptor("leer","Leer cada paso en voz alta") : null),
+          puedeHablar() ? interruptor("leer","Leer cada paso en voz alta") : null,
+          interruptor("descanso","Avisarme cada hora para descansar las manos")),
         pr.paso<p.pasos.length ? enlacesVideo(p.pasos[pr.paso]) : null,
         h("div",{class:"stack", style:"gap:.6rem"},
           pr.paso>0 ? h("button",{class:"big", onclick:()=>{ cerrarV(); accion(()=>{ pr.paso--; pr.puntos=0; pr.rep=0; return "atras"; }); }},"← Volver al paso anterior") : null,
@@ -2620,7 +2643,13 @@ VISTAS.mas = V => {
         h("p",{},"Así se lee el texto ahora. Ajústalo hasta que lo leas cómoda."),
         h("div",{class:"row"},
           h("button",{class:"big", onclick:()=>{ document.getElementById("smaller").click(); }},"A− Más pequeña"),
-          h("button",{class:"big", onclick:()=>{ document.getElementById("bigger").click(); }},"A+ Más grande"))))
+          h("button",{class:"big", onclick:()=>{ document.getElementById("bigger").click(); }},"A+ Más grande")))),
+    h("div",{class:"section"},
+      h("h2",{},"Colores"),
+      h("div",{class:"panel stack"},
+        h("p",{},"«Oscuros» cansan menos la vista de noche."),
+        h("div",{class:"row", role:"group", "aria-label":"Colores"},
+          [["auto","Automáticos"],["claro","Claros"],["oscuro","Oscuros"]].map(([v,t])=>h("button",{class:state.prefs.tema===v?"primary":"", "aria-pressed":String(state.prefs.tema===v), onclick:()=>{ state.prefs.tema=v; save(); applyScale(); render(); }}, t)))))
   );
 };
 VISTAS.copia = V => {

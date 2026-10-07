@@ -177,3 +177,15 @@ Capturas en `tests/capturas/`.
   - «Recuperar una copia» se puede deshacer y aparta lo que había en `rincon-ganchillo-v1-antes-de-recuperar`.
   - Seguridad: de una copia solo se aceptan fotos que sean imágenes (`data:image/…`).
 - Tests: 3 nuevos (y uno que fallaba a veces, arreglado). 43/43.
+
+## 2026-10-07 · Descanso, buscar mejor y colores oscuros
+
+- Modo sofá: cada hora seguida tejiendo, un aviso suave («Estira las manos y descansa la vista»), con vibración
+  si está activada. Si para más de 10 minutos, la cuenta empieza de nuevo. Se quita en Opciones
+  (`prefs.descanso`, activado por defecto).
+- Buscar patrones sin importar tildes ni mayúsculas («muneco» encuentra «Muñeco»), y también dentro de las notas
+  y los pasos.
+- Más → Colores: Automáticos, Claros u Oscuros (`prefs.tema`). Oscuros cansan menos de noche aunque el móvil
+  esté en claro. En Automáticos manda el móvil.
+- Tests: ahora todos abren la app desde un servidor local (con `file://` Chromium a veces perdía localStorage al
+  recargar y alguna prueba fallaba sin motivo). 3 nuevos. 46/46.

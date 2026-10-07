@@ -10,7 +10,7 @@ const http = require("node:http");
 const { snapshot } = require("./motor-snapshot.cjs");
 
 const APP = path.resolve(__dirname, "..", "tejiendo-ilusiones.html");
-const URL = pathToFileURL(APP).href;
+let URL = pathToFileURL(APP).href;
 const CAPTURAS = path.join(__dirname, "capturas");
 fs.mkdirSync(CAPTURAS, { recursive: true });
 
@@ -32,7 +32,9 @@ async function prueba(nombre, fn) {
 
 async function nuevaPagina(browser, opts = {}, datos = null) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, ...opts });
-  if (datos) await ctx.addInitScript(d => { if (!sessionStorage.getItem("sembrado")) { localStorage.clear(); localStorage.setItem("rincon-ganchillo-v1", d); sessionStorage.setItem("sembrado", "1"); } }, JSON.stringify(datos));
+  // Los datos se siembran solo al abrir la pestaña, no al recargar. La marca va en window.name, que sigue al
+  // recargar: sessionStorage a veces llega vacío al principio de la recarga y se volvían a sembrar los datos.
+  if (datos) await ctx.addInitScript(d => { if (window.name !== "sembrado") { localStorage.clear(); localStorage.setItem("rincon-ganchillo-v1", d); window.name = "sembrado"; } }, JSON.stringify(datos));
   const page = await ctx.newPage();
   page.errores = [];
   page.on("pageerror", e => page.errores.push(e.message));
@@ -41,12 +43,24 @@ async function nuevaPagina(browser, opts = {}, datos = null) {
   await page.goto(URL);
   return page;
 }
-// Chromium tarda un poco en pasar localStorage a disco: si se recarga en seguida, a veces lee lo de antes
-const recargar = async page => { await page.waitForTimeout(400); await page.reload(); };
+const recargar = page => page.reload();
 const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rincon-ganchillo-v1")));
 
 (async () => {
   const browser = await chromium.launch();
+  // Servidor local: la app se prueba desde una dirección web, como en el artifact y en GitHub Pages (con file://
+  // el lector de fotos no funciona y Chromium a veces pierde localStorage al recargar)
+  const RAIZ = path.resolve(__dirname, "..");
+  const TIPOS = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".gz": "application/gzip", ".pdf": "application/pdf", ".png": "image/png" };
+  const servidor = http.createServer((req, res) => {
+    const f = path.join(RAIZ, decodeURIComponent(new globalThis.URL(req.url, "http://x").pathname));
+    if (!f.startsWith(RAIZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { "Content-Type": TIPOS[path.extname(f)] || "application/octet-stream" });
+    res.end(req.method === "HEAD" ? undefined : fs.readFileSync(f));
+  });
+  await new Promise(ok => servidor.listen(0, "127.0.0.1", ok));
+  const WEB = "http://127.0.0.1:" + servidor.address().port + "/tejiendo-ilusiones.html";
+  URL = WEB;
 
   console.log("Motor de patrones");
   await prueba("lee los patrones igual que la versión de referencia", async () => {
@@ -68,7 +82,7 @@ const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rinc
     assert.equal(st.progreso["m-1"].puntos, 7);
     assert.equal(st.progreso["m-1"].rep, 0);
     const { copiaDesde, ...prefs } = st.prefs;
-    assert.deepEqual(prefs, { tejer: "sofa", sonido: true, vibrar: true, auto: true, avisoApp: true, ultCopia: 0, copiaPospuesta: 0, leer: false });
+    assert.deepEqual(prefs, { tejer: "sofa", sonido: true, vibrar: true, auto: true, avisoApp: true, ultCopia: 0, copiaPospuesta: 0, leer: false, descanso: true, tema: "auto" });
     assert.ok(Math.abs(copiaDesde - Date.now()) < 60000, "el recordatorio de copia empieza a contar hoy");
     const copia = await page.evaluate(() => localStorage.getItem("rincon-ganchillo-v1-copia-v1"));
     assert.deepEqual(JSON.parse(copia), LEGADO);
@@ -325,17 +339,6 @@ Fasten off and weave in ends.`;
   });
 
   console.log("Importar desde PDF y foto");
-  // Servidor local: el lector de fotos necesita abrir la app desde una dirección web, como en el artifact
-  const RAIZ = path.resolve(__dirname, "..");
-  const TIPOS = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".gz": "application/gzip", ".pdf": "application/pdf", ".png": "image/png" };
-  const servidor = http.createServer((req, res) => {
-    const f = path.join(RAIZ, decodeURIComponent(new globalThis.URL(req.url, "http://x").pathname));
-    if (!f.startsWith(RAIZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
-    res.writeHead(200, { "Content-Type": TIPOS[path.extname(f)] || "application/octet-stream" });
-    res.end(req.method === "HEAD" ? undefined : fs.readFileSync(f));
-  });
-  await new Promise(ok => servidor.listen(0, "127.0.0.1", ok));
-  const WEB = "http://127.0.0.1:" + servidor.address().port + "/tejiendo-ilusiones.html";
   const VENDOR = path.join(RAIZ, "lib");
   async function paginaWeb(opts = {}, datos = null) {
     const page = await nuevaPagina(browser, opts, datos);
@@ -623,7 +626,6 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
-  servidor.close();
 
   console.log("Versión instalable (PWA)");
   // La carpeta docs/ la genera tools/construir-web.cjs; aquí se comprueba que se instala y funciona sin conexión
@@ -872,6 +874,61 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  console.log("Descanso y buscar");
+  await prueba("en el modo sofá avisa cada hora seguida para descansar, y se puede quitar", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    const r = await page.evaluate(() => {
+      const t0 = Date.now(); tejiendoSeguido = DESCANSO_SG - 2; ultSegundoTejido = t0;
+      contarSeguido(t0 + 1000); const antes = !document.getElementById("toast").hidden;
+      contarSeguido(t0 + 2000); const aviso = document.getElementById("toast").textContent;
+      // tras parar más de 10 minutos, empieza de nuevo
+      contarSeguido(t0 + 15 * 60 * 1000); const reinicio = tejiendoSeguido;
+      return { antes, aviso, reinicio };
+    });
+    assert.equal(r.antes, false);
+    assert.match(r.aviso, /Llevas una hora tejiendo/);
+    assert.equal(r.reinicio, 1);
+    await page.evaluate(() => go({ name: "sofa", id: "m-1" }));
+    await page.getByRole("button", { name: "Opciones", exact: true }).tap();
+    await page.getByRole("button", { name: /descansar las manos/ }).tap();
+    assert.equal((await estado(page)).prefs.descanso, false);
+    const sin = await page.evaluate(() => { document.getElementById("toast").hidden = true; tejiendoSeguido = DESCANSO_SG - 1; ultSegundoTejido = Date.now(); contarSeguido(); return document.getElementById("toast").hidden; });
+    assert.equal(sin, true, "con la opción quitada no avisa");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("buscar un patrón sin tildes y por lo que dicen sus pasos", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    await page.evaluate(() => go({ name: "patrones" }));
+    await page.locator("#buscar").fill("MANTA PARA LA NIETA");
+    assert.equal(await page.locator(".pitem").count(), 1);
+    await page.locator("#buscar").fill("hasta que mida 80");
+    assert.match(await page.locator(".pitem h3").first().textContent(), /Manta/);
+    await page.evaluate(() => { state.patrones.push({ id: "m-2", titulo: "Muñeco de nieve", pasos: ["Haz 6 pb"], color: "#8A2F5E" }); });
+    await page.locator("#buscar").fill("muneco");
+    assert.equal(await page.locator(".pitem h3").first().textContent(), "Muñeco de nieve");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("colores oscuros a mano, aunque el móvil esté en claro", async () => {
+    const page = await nuevaPagina(browser, { colorScheme: "light" }, LEGADO);
+    await page.evaluate(() => go({ name: "mas" }));
+    await page.getByRole("button", { name: "Oscuros" }).tap();
+    const fondo = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    assert.equal(await fondo(), "rgb(20, 26, 24)");
+    await recargar(page);
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark", "se acuerda");
+    await page.evaluate(() => go({ name: "sofa", id: "m-1" }));
+    await page.screenshot({ path: path.join(CAPTURAS, "sofa-oscuro.png") });
+    await page.evaluate(() => go({ name: "mas" }));
+    await page.getByRole("button", { name: "Automáticos" }).tap();
+    assert.equal(await page.evaluate(() => document.documentElement.hasAttribute("data-theme")), false);
+    assert.notEqual(await fondo(), "rgb(20, 26, 24)");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);
@@ -889,6 +946,7 @@ Fasten off and weave in ends.`;
   });
 
   await browser.close();
+  servidor.close();
   console.log(`\n${pasados} bien, ${fallos} mal`);
   process.exit(fallos ? 1 : 0);
 })();
