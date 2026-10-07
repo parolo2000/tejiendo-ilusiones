@@ -251,6 +251,11 @@ th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.
 .hero-par figcaption{font-size:.8rem;font-weight:700;color:var(--muted);text-align:center}
 .hero-par .herothumb{aspect-ratio:1 !important;width:100%}
 .hero-par .photo-btn{right:.4rem;bottom:.6rem;left:.4rem;justify-content:center;font-size:.8rem;padding-inline:.4rem}
+.sofa-lana{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;font-size:.85rem;font-weight:700;color:var(--muted);flex:none}
+.lana-chip{display:inline-flex;align-items:center;gap:.35rem;font-size:.85rem;text-transform:lowercase}
+.lana-chip i{width:.95rem;height:.95rem;border-radius:50%;border:1px solid var(--line);background:var(--sunk)}
+ol.steps li.parte{grid-template-columns:1fr;background:var(--thread-soft);font-family:var(--display);font-size:1.1rem;margin-top:.6rem}
+ol.steps li.parte b{display:none}
 .checkline{display:flex;gap:.7rem;align-items:flex-start;font-weight:700;cursor:pointer}
 .checkline input{width:1.5rem;height:1.5rem;margin-top:.1rem;flex:none;accent-color:var(--accent)}
 .checkline small{display:block;font-weight:400;color:var(--muted)}
@@ -372,6 +377,7 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
   #imprimir li{display:flex; gap:.7em; padding:.45em 0; border-bottom:1px solid #ccc; break-inside:avoid}
   #imprimir .casilla{flex:0 0 auto; width:.9em; height:.9em; border:1.5px solid #000; margin-top:.25em}
   #imprimir em{display:block; font-size:12pt}
+  #imprimir li.parte{font-size:16pt;border-bottom:2px solid #000;padding-top:1em}
   #imprimir .pie{font-size:10pt; color:#555; margin-top:2em}
 }
 </style>
@@ -773,6 +779,7 @@ function segmentoAPuntos(seg, total){
   const out=[]; let m; const rx = new RegExp(RX_PUNTO.source, "g");
   // "en la 2ª cad", "en cada cad"... dicen dónde va el punto, no son puntos nuevos
   seg = seg.replace(/\ben (la|el)\s*\d+\s*[ªºao]?\s*(cad|punto|pb|pa)\w*(\s+desde el \w+)?/g, " en ese sitio ")
+           .replace(/\ben (la|el) (primer[ao]?|[uú]ltim[ao]|siguiente|misma?)\s+(cad|punto|pb|pa|mpa|pad)\w*/g, " en ese sitio ")
            .replace(/\ben cada (cad|pb|pa|punto)\w*/g, " en cada punto ");
   while((m=rx.exec(seg))){
     const n = m[1]?+m[1]:1; let k = m[2]==="anillo magico" ? "am" : m[2];
@@ -1027,8 +1034,29 @@ function celdaRedonda(v, px, py, rot, zz, parent, ink, ahora=false){
 
 // ---------- Miniaturas ----------
 const miniCache = {};
+// Un patrón con partes (cuerpo, pies, alas…) tiene un gráfico por parte. Sin decir cuál, el de la primera.
+function parteDe(p, i){
+  const pasos = p.pasos; if(!pasos.some(esParte)) return null;
+  let m = -1; for(let k=Math.min(i, pasos.length-1); k>=0; k--) if(esParte(pasos[k])){ m = k; break; }
+  if(m<0) return {ini:0, fin:pasos.findIndex(esParte), marca:-1};
+  let fin = pasos.findIndex((t,k)=>k>m && esParte(t)); if(fin<0) fin = pasos.length;
+  return {ini:m+1, fin, marca:m};
+}
+function subPatron(p, parte){ return {...p, id:p.id+"#"+parte.ini, pasos:p.pasos.slice(parte.ini, parte.fin), grafico:undefined}; }
+// La lana con la que se teje en el paso i: la de su parte o el último «Cambia a la lana …»
+function lanaEnPaso(p, i){
+  for(let k=Math.min(i, p.pasos.length-1); k>=0; k--){
+    const t = p.pasos[k];
+    const m = esParte(t) ? t.match(/· con (.+)$/) : esCambioLana(t) ? t.match(/^cambia a la lana (.+?)\.?$/i) : null;
+    if(m){ const c = COLORES_LANA.find(([rx])=>rx.test(m[1])); return {nombre:m[1].trim(), hex:c ? c[2] : null}; }
+    if(esParte(t)) return null;
+  }
+  return null;
+}
 function graficoDePatron(p){
   if(p.grafico){ const g = state.graficos.find(x=>x.id===p.grafico); if(g) return g; }
+  const parte = parteDe(p, 0);
+  if(parte) return parte.fin>parte.ini ? graficoDePatron(subPatron(p, parte)) : null;
   if(miniCache[p.id] && miniCache[p.id].src===p.pasos.join("\n")) return miniCache[p.id].g;
   const g = {cols:10, celdas:[], vista:"filas"};
   const ok = graficoDesdeTexto(g, p.pasos.join("\n"), true);
@@ -1126,7 +1154,12 @@ function graficoDesdeTexto(g, texto, cambiarVista){
   if(!filas.length) return false;
   const cols = Math.min(120, Math.max(10, ...filas.map(f=>f.length)));
   g.cols = cols; g.celdas = filas.map(f=>{ const r=f.slice(0,cols); while(r.length<cols) r.push(""); return r; });
-  if(cambiarVista) g.vista = filas[0][0]==="am" ? "redondo" : "filas";
+  // «Vuelta 1: 6 pb en anillo mágico» también es en redondo: se pone el anillo en el centro
+  const primera = (texto.split("\n").find(l=>l.trim()) || "").toLowerCase();
+  if(cambiarVista && filas[0][0]!=="am" && /anillo\s+m[aá]gico|anillo\s+amigurumi/.test(primera)){
+    g.celdas.unshift(["am", ...Array(cols-1).fill("")]);
+  }
+  if(cambiarVista) g.vista = g.celdas[0][0]==="am" ? "redondo" : "filas";
   return true;
 }
 function patronDesdeGrafico(g){
@@ -1605,15 +1638,15 @@ VISTAS.patron = V => {
           esMio(p) ? h("button",{onclick:()=>go({name:"editar", id:p.id})}, icono("lapiz",20), "Cambiar")
                    : h("button",{onclick:()=>{ const c=copiar(p); go({name:"editar", id:c.id}); toast("Copia creada. Cámbiala a tu gusto."); }}, icono("lapiz",20), "Copiar y cambiar")
         ),
-        p.notas ? h("div",{class:"note"}, h("strong",{},"Notas: "), p.notas) : null,
+        p.notas ? h("div",{class:"note", style:"white-space:pre-line"}, h("strong",{},"Notas: "), p.notas) : null,
         pr && pr.notas ? h("div",{class:"note", style:"background:var(--accent-soft)"}, h("strong",{},"Mis apuntes: "), pr.notas) : null
       )
     ),
     h("div",{class:"section"},
       h("div",{class:"sechead"}, h("h2",{},"Instrucciones"), h("span",{class:"muted", style:"font-size:.85rem"},"Toca un paso para ir a él")),
-      h("ol",{class:"steps", role:"group", "aria-label":"Pasos"}, p.pasos.map((t,i)=>h("li",{class:"tap "+(pr ? (i<pr.paso?"done":(i===pr.paso && empezado?"now":"")) : ""), tabindex:"0", role:"button",
+      h("ol",{class:"steps", role:"group", "aria-label":"Pasos"}, p.pasos.map((t,i)=>h("li",{class:"tap "+(esParte(t)?"parte ":"")+(pr ? (i<pr.paso?"done":(i===pr.paso && empezado?"now":"")) : ""), tabindex:"0", role:"button",
         onclick:()=>{ const q=prog(p.id); q.paso=i; q.puntos=0; q.rep=0; delete q.fin; save(); tejer(p.id); },
-        onkeydown:e=>{ if(e.key==="Enter") e.currentTarget.click(); }}, h("b",{},String(i+1)), h("span",{},t))))
+        onkeydown:e=>{ if(e.key==="Enter") e.currentTarget.click(); }}, h("b",{},String(i+1)), h("span",{}, esParte(t) ? t.replace(/^parte:\s*/i, "") : t))))
     ),
     h("div",{class:"section"}, h("div",{class:"row"},
       h("button",{class:"ghost", onclick:()=>go({name:"ayuda"})},"¿Qué significa cada abreviatura?"),
@@ -1631,7 +1664,7 @@ function hojaDeImpresion(p){
     p.descripcion ? h("p",{}, p.descripcion) : null,
     p.notas ? h("p",{}, h("b",{},"Notas: "), p.notas) : null,
     puntos.length ? h("p",{class:"datos"}, h("b",{},"Puntos: "), puntos.map(k=>NOMBRE[k]||k).join(", ")) : null,
-    h("ol",{}, p.pasos.map((t,i)=>h("li",{}, h("span",{class:"casilla"}), h("span",{}, t, apunteDe(p.id,i) ? h("em",{}, "Mi apunte: "+apunteDe(p.id,i)) : null)))),
+    h("ol",{}, p.pasos.map((t,i)=>esParte(t) ? h("li",{class:"parte"}, h("b",{}, t.replace(/^parte:\s*/i, ""))) : h("li",{}, h("span",{class:"casilla"}), h("span",{}, t, apunteDe(p.id,i) ? h("em",{}, "Mi apunte: "+apunteDe(p.id,i)) : null)))),
     h("p",{class:"pie"},"Tejiendo Ilusiones"));
 }
 function imprimirPatron(p){
@@ -1699,16 +1732,27 @@ function contadorUI(label, get, set, objetivo){
 // El gráfico del patrón tal como va: las vueltas hechas y la de ahora resaltada.
 // Con «rep» (modo sofá) se ve solo hasta la vuelta exacta en la que está, dentro de un paso de varias vueltas.
 function graficoEnCurso(p, pr, rep=null){
+  // Con partes, el gráfico es solo el de la parte en la que está (cada parte empieza otra vez en la vuelta 1)
+  const parte = !p.grafico && p.pasos.length ? parteDe(p, Math.min(pr.paso, p.pasos.length-1)) : null;
+  if(parte){
+    const ini = parte.marca===pr.paso ? pr.paso+1 : parte.ini;
+    const par = ini===parte.ini ? parte : parteDe(p, ini);
+    if(par.fin>par.ini) return graficoEnCurso(subPatron(p, par), {...pr, paso:Math.max(0, pr.paso-par.ini), rep: parte.marca===pr.paso ? 0 : pr.rep}, parte.marca===pr.paso ? null : rep);
+  }
   const n = p.pasos.length, terminado = pr.paso>=n;
   const graf = graficoDePatron(p);
-  const filasCon = graf ? graf.celdas.map((f,i)=>hayPunto(f)?i:-1).filter(i=>i>=0) : [];
+  let filasCon = graf ? graf.celdas.map((f,i)=>hayPunto(f)?i:-1).filter(i=>i>=0) : [];
   let cuentas = p.pasos.map(t=>lineaAFilas(t).length);
+  // El anillo del centro puesto por el gráfico («6 pb en anillo mágico») no es una vuelta: se ve siempre
+  let centro = null;
+  if(filasCon.length && soloAnillo(graf.celdas[filasCon[0]]) && cuentas.reduce((x,y)=>x+y,0)===filasCon.length-1){ centro = filasCon[0]; filasCon = filasCon.slice(1); }
   if(cuentas.reduce((x,y)=>x+y,0)!==filasCon.length) cuentas = p.pasos.map((t,i)=>i<filasCon.length?1:0);
   const desde = cuentas.slice(0, Math.min(pr.paso,n)).reduce((x,y)=>x+y,0);
   let hasta = terminado ? filasCon.length : desde + (cuentas[pr.paso]||0);
   let ahora = terminado ? [] : filasCon.slice(desde, hasta);
   if(rep!=null && ahora.length){ const i = Math.min(rep, ahora.length-1); ahora = [ahora[i]]; hasta = desde+i+1; }
   const visibles = new Set(filasCon.slice(0, Math.max(hasta,1)));
+  if(centro!=null) visibles.add(centro);
   const grafOk = filasCon.length>0;
   const ultimaVisible = Math.max(...visibles, 0);
   const parcial = grafOk ? {...graf, celdas: graf.celdas.slice(0, ultimaVisible+1).map((f,i)=>visibles.has(i) ? f : f.map(()=>""))} : null;
@@ -1808,7 +1852,7 @@ function infoPaso(texto){
   const medida = /^(cm|mm|m|g|gr|gramos|metros)$/.test(palabra);
   const objetivo = medida ? 0 : objetivoDe(texto);
   const modo = objetivo>0 ? "puntos" : /\bhasta\b/.test(normalizar(texto)) ? "hasta" : "accion";
-  const ini = texto.match(/^\s*(?:vueltas?|v|rnd|round|row|fila|filas|r)\s*(\d+)/i);
+  const ini = texto.match(/^\s*(?:vueltas?|v|rnd|round|row|fila|filas|r)\s*(\d+)/i) || texto.match(/^\s*(\d+)\s*[ªº°]\s*vueltas?/i);
   return {
     modo, objetivo,
     reps: modo==="puntos" ? Math.max(1, lineaAFilas(texto).length) : 1,
@@ -1894,6 +1938,7 @@ VISTAS.sofa = V => {
   const txt = h("div",{class:"sofa-txt"});
   const despues = h("p",{class:"sofa-desp muted"});
   const apunte = h("p",{class:"sofa-apunte", hidden:true});
+  const lana = h("div",{class:"sofa-lana", hidden:true});
   // El dibujo de la vuelta: con el móvil de pie, una tira con sus puntos; tumbado o en el ordenador, el gráfico
   // entero. Lo que se va contando se marca en verde y el punto que toca, con un borde.
   const grafSofa = h("div",{class:"sofa-graf"});
@@ -1926,7 +1971,14 @@ VISTAS.sofa = V => {
     eyebrow.textContent = info.modo==="hasta" ? "Repite hasta que esté"
       : info.reps>1 ? (vNum ? "Vuelta "+vNum+" · " : "")+"repetición "+(pr.rep+1)+" de "+info.reps
       : vNum ? "Vuelta "+vNum : (info.modo==="accion" ? "Ahora" : "Esta vuelta");
-    txt.textContent = p.pasos[pr.paso];
+    const parte = esParte(p.pasos[pr.paso]);
+    if(parte) eyebrow.textContent = "Nueva parte: se empieza otra vez por la vuelta 1";
+    txt.textContent = parte ? p.pasos[pr.paso].replace(/^parte:\s*/i, "") : p.pasos[pr.paso];
+    // La lana de ahora y los colores que pide este paso («con blanco: …»)
+    const actual = lanaEnPaso(p, pr.paso), pide = coloresDelPaso(p.pasos[pr.paso]).filter(c=>!actual || c.nombre!==actual.nombre.toLowerCase());
+    const muestra = c => h("span",{class:"chip lana-chip"}, h("i",{style:c.hex ? "background:"+c.hex : ""}), c.nombre);
+    lana.hidden = !actual && !pide.length;
+    lana.replaceChildren(...(actual ? [h("span",{},"Lana"), muestra(actual)] : []), ...(pide.length ? [h("span",{}, actual ? "y en esta vuelta" : "En esta vuelta"), ...pide.map(muestra)] : []));
     const clave = p.id+":"+pr.paso+":"+pr.rep;
     if(state.prefs.leer && sofaLeido!==clave){ sofaLeido = clave; leerEnVoz(p.pasos[pr.paso]); }
     despues.textContent = pr.paso+1<n ? "Después: "+p.pasos[pr.paso+1] : "Es el último paso.";
@@ -1950,7 +2002,7 @@ VISTAS.sofa = V => {
       btnLista.onclick = ()=>accion(()=>sofaSiguientePaso(pr, n));
     } else {
       num.textContent = "✓";
-      meta.textContent = pr.paso+1<n ? "Hecho, siguiente paso" : "Hecho, ¡terminar!";
+      meta.textContent = esParte(p.pasos[pr.paso]) ? "Empezar esta parte" : pr.paso+1<n ? "Hecho, siguiente paso" : "Hecho, ¡terminar!";
       pista.textContent = "Toca aquí cuando lo tengas";
       big.setAttribute("aria-label", meta.textContent);
       btnLista.replaceChildren("Saltar →");
@@ -2044,6 +2096,7 @@ VISTAS.sofa = V => {
       h("button",{class:"ghost", "aria-label":"Opciones", onclick:opciones}, icono("ajustes",26))),
     h("div",{class:"sofa-info"},
       h("div",{class:"prog"}, barra),
+      lana,
       h("div",{class:"sofa-eye"}, eyebrow,
         puedeHablar() ? h("button",{class:"ghost sofa-voz", "aria-label":"Leer el paso en voz alta", onclick:()=>leerEnVoz(p.pasos[pr.paso])}, icono("altavoz",20), h("span",{},"Oír")) : null),
       txt, dibujo, apunte, despues,
@@ -2172,6 +2225,47 @@ function traducirIngles(linea, uk){
 }
 const RX_VUELTA = /^(?:vueltas?|v|rnds?|rounds?|rows?|r|filas?)\s*\d+/i;
 
+// ---------- Vueltas con ordinal, partes y colores ----------
+// «1ª vuelta:», «16ª vuelta», «1era vuelta», «5ª a 10ª vuelta», «de la 5ª a la 10ª vuelta» → «Vuelta 1:», «Vueltas 5 a 10:»
+function normalizarVuelta(l){
+  const O = "\\s*(?:[ªº°]|era|ra|da|ta|na|ma|va|o|a)?\\.?";
+  return l
+    .replace(new RegExp("^\\s*(?:de\\s+la\\s+)?(\\d+)"+O+"\\s*(?:a\\s+la|a|al|-|–|y)\\s*(\\d+)"+O+"\\s*vueltas?\\s*[:.)-]?\\s*", "i"), "Vueltas $1 a $2: ")
+    .replace(new RegExp("^\\s*(\\d+)"+O+"\\s*vuelta\\s*[:.)-]?\\s*", "i"), "Vuelta $1: ")
+    .replace(/^\s*vuelta\s*(\d+)\s*[ªº°]\s*/i, "Vuelta $1 ");
+}
+// Líneas de leyenda («Pto = punto», «pb = punto bajo»): van a las notas, no son pasos
+const esLeyenda = l => /^\s*[\p{L}.\s]{1,20}\s*=\s*\p{L}/u.test(l);
+// Cabecera de una parte del muñeco: «CUERPO», «PIES (hacer 2)», «Alas (hacer 2)», «Cabeza:»
+const NO_PARTES = /^(materiales?|abreviaturas?|notas?|necesitas|medidas?|tama[ñn]o|montaje|instrucciones|leyenda|puntos? (usados|utilizados))\b/i;
+function cabeceraParte(l){
+  const t = l.trim().replace(/[:.]$/, "");
+  if(t.length > 40 || /\d+\s*\)?\s*$/.test(t.replace(/\(hacer \d+\)|\(\d+ (piezas|veces)\)/i, "")) && !/\(hacer \d+\)/i.test(t)) return null;
+  if(NO_PARTES.test(t) || RX_VUELTA.test(t) || lineaAFilas(t).length) return null;
+  const letras = t.replace(/\(.*?\)/g, "").replace(/[^\p{L}]/gu, "");
+  if(letras.length < 3) return null;
+  const mayus = letras === letras.toUpperCase();
+  return mayus || /\(hacer \d+\)/i.test(t) ? t.replace(/\s+/g, " ") : null;
+}
+// «Con gris», «Con lana blanca», «Color: rosa» → el color
+function lineaDeColor(l){
+  const m = l.trim().match(/^(?:con|en|color|cambia a|cambiar a)\s*:?\s*(?:el\s+|la\s+)?(?:lana\s+|hilo\s+|color\s+)?([\p{L} ]{3,25}?)\s*[:.]?$/iu);
+  if(!m) return null;
+  const c = COLORES_LANA.find(([rx])=>rx.test(m[1]));
+  return c ? {nombre:m[1].trim().toLowerCase(), hex:c[2]} : null;
+}
+const esParte = t => /^parte:/i.test(t||"");
+const esCambioLana = t => /^cambia a la lana /i.test(t||"");
+// Colores que pide un paso: «con blanco: 10 pa, con gris: 3 pa»
+function coloresDelPaso(t){
+  const out = [];
+  for(const m of (t||"").matchAll(/\bcon\s+(?:la\s+lana\s+|lana\s+|el\s+)?([\p{L}]{3,15})/giu)){
+    const c = COLORES_LANA.find(([rx])=>rx.test(m[1]));
+    if(c && !out.some(x=>x.nombre===m[1].toLowerCase())) out.push({nombre:m[1].toLowerCase(), hex:c[2]});
+  }
+  return out;
+}
+
 // ---------- Patrones en ruso ----------
 // Abreviaturas rusas de ganchillo: сбн (столбик без накида) = punto bajo, ссн/с1н = punto alto, пссн = medio alto,
 // с2н = alto doble, вп = cadeneta, сс = punto deslizado, пр = aumento, уб = disminución, КА = anillo mágico.
@@ -2209,38 +2303,42 @@ function traducirRuso(linea){
 // El color de la lana del patrón: se busca en las líneas de materiales y se pasa a un color para la ficha
 const COLORES_LANA = [
   [/\b(rojo|roja|red)\b|красн/iu, "rojo", "#C0392B"], [/\b(fucsia|fuchsia|magenta)\b|фукси|малинов/iu, "fucsia", "#C2185B"],
-  [/\b(rosa|pink)\b|розов/iu, "rosa", "#E07AA8"], [/\b(naranja|orange)\b|оранжев/iu, "naranja", "#E67E22"],
+  [/\b(rosa|pink)\b|розов/iu, "rosa", "#E07AA8"], [/\b(naranja|anaranjad[oa]|orange|coral|salm[oó]n)\b|оранжев/iu, "naranja", "#E67E22"],
   [/\b(amarill[oa]|mostaza|yellow|mustard)\b|ж[её]лт|горчичн/iu, "amarillo", "#E1B12C"], [/\b(verde|green|mint|menta)\b|зел[её]н|мятн/iu, "verde", "#2E8B57"],
   [/\b(turquesa|turquoise|teal)\b|бирюз/iu, "turquesa", "#1A9E8F"], [/\b(celeste|azul claro|light blue|sky blue)\b|голуб/iu, "celeste", "#7FB3E0"],
   [/\b(azul|blue|navy|marino)\b|син(?:ий|его|яя|ей)/iu, "azul", "#2C6FB7"], [/\b(morad[oa]|lila|violeta|lilac|purple|lavender|lavanda)\b|фиолет|сирен|лаванд/iu, "lila", "#8E44AD"],
   [/\b(marr[oó]n|chocolate|brown|camel)\b|коричн|шоколад/iu, "marrón", "#8B5A2B"], [/\b(beige|arena|sand|tan)\b|бежев|песочн/iu, "beige", "#C8A97E"],
   [/\b(crudo|natural|cream|crema|ecru)\b|молочн|кремов/iu, "crudo", "#D9C9A3"], [/\b(gris|grey|gray)\b|сер(?:ый|ого|ая)/iu, "gris", "#8A9594"],
-  [/\b(negr[oa]|black)\b|ч[её]рн/iu, "negro", "#2B2B2B"], [/\b(blanc[oa]|white)\b|бел(?:ый|ого|ая)/iu, "blanco", "#E8E4DC"]
+  [/\b(negr[oa]|black)\b|ч[её]рн/iu, "negro", "#2B2B2B"], [/\b(blanc[oa]s?|white)\b|бел(?:ый|ого|ая)/iu, "blanco", "#E8E4DC"]
 ];
 function lanaDelTexto(lineas){
   const linea = lineas.find(l => /^(lana|hilo|hilado|yarn|color|colour|пряжа|нитки|цвет)\b|^(lana|hilo|yarn|пряжа)\s*[:(-]/iu.test(l.trim()))
              || lineas.find(l => /\b(lana|hilo|yarn)\b|пряж/iu.test(l) && COLORES_LANA.some(([rx])=>rx.test(l)));
   if(!linea) return {hilo:"", color:null};
   const hilo = linea.replace(/^[^:]{0,20}:\s*/, "").replace(/[,;.]?\s*(ganchillo|aguja|hook|крючок).*$/iu, "").trim().slice(0, 80);
-  const c = COLORES_LANA.find(([rx])=>rx.test(linea));
+  // El primer color que se nombra en la línea («gris, blanca y anaranjada» → gris)
+  let c = null, pos = Infinity;
+  for(const x of COLORES_LANA){ const m = linea.match(x[0]); if(m && m.index < pos){ pos = m.index; c = x; } }
   return {hilo, color: c ? {nombre:c[1], hex:c[2]} : null};
 }
 function limpiarPegado(texto){
   let t = (texto||"").replace(/\r/g, "").replace(/ /g, " ").replace(/[•●▪◦]\s*/g, "").replace(/[ \t]+/g, " ");
   // Separa las vueltas que vienen pegadas en un mismo párrafo
-  t = t.replace(/([^\n])\s+(?=(?:vueltas?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*\d+\s*)?[:.)])/gi, "$1\n");
+  t = t.replace(/([^\n])\s+(?=(?:vueltas?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*\d+\s*)?[:.)])/gi, "$1\n")
+       .replace(/([^\n])\s+(?=\d+\s*[ªº°]\s*vueltas?\s*:)/gi, "$1\n");
   const lineas = [];
   for(let l of t.split("\n")){
     l = l.trim();
     if(!l || /^[^\p{L}\p{N}]+$/u.test(l) || /^(https?:\/\/|www\.)/i.test(l) || /^(©|copyright|p[aá]g(ina)?\.? ?\d+$|page \d+$)/i.test(l)) continue;
     const prev = lineas[lineas.length-1];
-    if(prev && (/^[a-záéíóúñ(]/.test(l) || /[,;]$/.test(prev)) && !RX_VUELTA.test(l)) lineas[lineas.length-1] = prev+" "+l; // línea cortada
+    const suelta = RX_VUELTA.test(normalizarVuelta(l)) || esLeyenda(l) || esLeyenda(prev||"") || lineaDeColor(l) || cabeceraParte(l);
+    if(prev && (/^[a-záéíóúñ(]/.test(l) || /[,;]$/.test(prev)) && !suelta) lineas[lineas.length-1] = prev+" "+l; // línea cortada
     else lineas.push(l);
   }
   return lineas;
 }
 // ¿Es una instrucción para tejer (y no materiales, notas o el título)?
-function esPaso(l){ if(/^(materials?|materiales|yarn|hook|gauge|notes?|abbreviations|size|lana|hilo|ganchillo|necesitas|tension|muestra)\b/i.test(l)) return false; return RX_VUELTA.test(l) || lineaAFilas(l).length>0 || /\b(haz|teje|monta|anillo|corta|esconde|rellena|cose|remata|cierra)\b/i.test(l); }
+function esPaso(l){ if(esLeyenda(l)) return false; if(/^(materials?|materiales|yarn|hook|gauge|notes?|abbreviations|size|lana|hilo|ganchillo|necesitas|tension|muestra)\b/i.test(l)) return false; return RX_VUELTA.test(l) || lineaAFilas(l).length>0 || /\b(haz|teje|monta|anillo|corta|esconde|rellena|cose|remata|cierra)\b/i.test(l); }
 function revisarLinea(t){
   const filas = lineaAFilas(t), info = infoPaso(t);
   if(!filas.length) return /\b(pb|pa|mpa|pad|aum|dism)\b/i.test(t) ? {estado:"duda"} : {estado:"texto"};
@@ -2257,26 +2355,45 @@ function importarTexto(texto, uk, soloVueltas=false){
   const ingles = !rus && esIngles(texto);
   if(uk==null) uk = ingles && esUK(texto);
   const originales = limpiarPegado(texto);
-  const lineas = originales.map(l => rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : l);
+  const lineas = originales.map(l => normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : l));
   // La primera línea corta y sin números es el título, aunque nombre puntos («Bufanda de punto bajo»)
   const conTitulo = originales.length>1 && originales[0].length<=60 && !/\d|:/.test(originales[0]) && !/^(haz|teje|monta|make|chain|start)\b/i.test(originales[0]);
   const desde = conTitulo ? 1 : 0;
   let primero = lineas.slice(desde).findIndex(esPaso); if(primero>=0) primero += desde;
   const antes = primero<0 ? originales : originales.slice(0, primero); // título y materiales, sin traducir
   let pasos = primero<0 ? [] : lineas.slice(primero), apartadas = [];
+  // Partes del muñeco («CUERPO», «PIES (hacer 2)») y su lana («Con gris»): cada parte empieza con un paso
+  // «Parte: …» que avisa de que se vuelve a empezar y con qué color. Un «Con blanco» suelto entre vueltas es un
+  // cambio de lana. Se mira también justo antes del primer paso, donde suelen estar la primera parte y su color.
+  if(primero>=0){
+    let ini = primero; while(ini>desde && (cabeceraParte(lineas[ini-1]) || lineaDeColor(lineas[ini-1]))) ini--;
+    const salida = []; let parte = null, color = null, pendiente = false;
+    for(const l of lineas.slice(ini)){
+      const cab = cabeceraParte(l), col = !cab && lineaDeColor(l);
+      if(cab){ parte = cab; color = null; pendiente = true; continue; }
+      if(col){ color = col; if(!pendiente && salida.length) salida.push("Cambia a la lana "+col.nombre+"."); continue; }
+      if(pendiente){ salida.push("Parte: "+parte+(color ? " · con "+color.nombre : "")); pendiente = false; }
+      salida.push(l);
+    }
+    if(salida.some(esParte) || salida.some(esCambioLana)) pasos = salida;
+  }
   // «Solo las vueltas»: se quedan las líneas que empiezan por «Vuelta N»; lo demás va a las notas, no se pierde
-  if(soloVueltas && pasos.some(l=>RX_VUELTA.test(l))){ apartadas = pasos.filter(l=>!RX_VUELTA.test(l)); pasos = pasos.filter(l=>RX_VUELTA.test(l)); }
+  const queda = l => RX_VUELTA.test(l) || esParte(l) || esCambioLana(l);
+  if(soloVueltas && pasos.some(l=>RX_VUELTA.test(l))){ apartadas = pasos.filter(l=>!queda(l)); pasos = pasos.filter(queda); }
+  // La primera lana: la de los materiales o, si no, la de la primera parte
+  const primeraLana = (()=>{ for(const l of lineas){ const c = lineaDeColor(l); if(c) return c; } return null; })();
   const tituloLinea = conTitulo ? originales[0] : antes.find(l => l.length<=60 && !/\d\s*mm|:/.test(l));
   // El grosor del ganchillo: mejor el que va junto a «ganchillo» o «hook» que el de la lana
   const gan = texto.match(/(?:ganchillo|aguja|hook|crochet|крючок)[^\n\d]{0,25}(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])/iu) || texto.match(/(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])[^\n]{0,4}(?:ganchillo|hook)?/iu);
   const lana = lanaDelTexto(antes.length ? antes : originales);
+  if(!lana.color && primeraLana) lana.color = primeraLana;
   return {
     ingles, ruso:rus, uk, pasos, apartadas,
     revision: pasos.map(revisarLinea),
     titulo: tituloLinea || "",
     ganchillo: gan ? gan[1].replace(".", ",")+" mm" : "",
     hilo: lana.hilo, colorLana: lana.color,
-    notas: [antes.filter(l => l!==tituloLinea).join("\n"), apartadas.length ? "Otras líneas del patrón:\n"+apartadas.join("\n") : ""].filter(Boolean).join("\n\n")
+    notas: [antes.filter(l => l!==tituloLinea && !cabeceraParte(l) && !lineaDeColor(l)).join("\n"), apartadas.length ? "Otras líneas del patrón:\n"+apartadas.join("\n") : ""].filter(Boolean).join("\n\n")
   };
 }
 
@@ -2412,6 +2529,7 @@ VISTAS.importar = V => {
       h("div",{class:"two"}, h("label",{class:"f"},"Nombre", nombre), h("label",{class:"f"},"Ganchillo", gan)),
       h("label",{class:"f"}, "Lana", r.colorLana ? h("small",{class:"color-lana"}, h("i",{style:"background:"+r.colorLana.hex}), "Color de la lana: "+r.colorLana.nombre+". La ficha del patrón irá de este color.") : null, hilo),
       h("ol",{class:"steps importados"}, r.pasos.map((t,i)=>{ const [cls,msg] = ESTADOS[r.revision[i].estado](r.revision[i]);
+        if(esParte(t)) return h("li",{class:"parte"}, h("b",{},String(i+1)), h("span",{}, t.replace(/^parte:\s*/i, ""), h("small",{class:"rev"}, "Parte nueva: empieza otra vez por la vuelta 1")));
         return h("li",{}, h("b",{},String(i+1)), h("span",{}, t, h("small",{class:"rev "+cls}, msg))); })),
       r.notas ? h("details",{class:"panel"}, h("summary",{},"Materiales y notas"), h("p",{style:"white-space:pre-line"}, r.notas)) : null,
       err,

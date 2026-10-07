@@ -1011,6 +1011,46 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  await prueba("patrón con partes y colores: «1ª vuelta», CUERPO/PIES/ALAS, con gris y con blanco", async () => {
+    const page = await nuevaPagina(browser);
+    const TXT = ["Pingüino", "Materiales: lana gris, blanca y anaranjada. Ganchillo 3 mm", "Pto = punto", "pb = punto bajo", "CUERPO", "Con gris",
+      "1ª vuelta: 20 cad, por el otro lado de la cadeneta 1 pb en cada cad (40)", "16ª vuelta: 2 cad, 3 pa, con blanco: 10 pa, con gris: 3 pa,", "pd en el primer pa (16)",
+      "PIES (hacer 2)", "Con anaranjado", "1ª vuelta: Hacer una anillo mágico de 6 pb (6)", "2ª vuelta: 6 aum (12)",
+      "ALAS (hacer 2)", "Con gris", "1ª vuelta: hacer un anillo mágico, 2 cad, 6 pa en el anillo, 1 pd en el primer pa (6)"].join("\n");
+    const r = await page.evaluate(t => importarTexto(t, null, true), TXT);
+    assert.deepEqual(r.pasos, ["Parte: CUERPO · con gris", "Vuelta 1: 20 cad, por el otro lado de la cadeneta 1 pb en cada cad (40)",
+      "Vuelta 16: 2 cad, 3 pa, con blanco: 10 pa, con gris: 3 pa, pd en el primer pa (16)",
+      "Parte: PIES (hacer 2) · con anaranjado", "Vuelta 1: Hacer una anillo mágico de 6 pb (6)", "Vuelta 2: 6 aum (12)",
+      "Parte: ALAS (hacer 2) · con gris", "Vuelta 1: hacer un anillo mágico, 2 cad, 6 pa en el anillo, 1 pd en el primer pa (6)"]);
+    assert.ok(!r.pasos.some(l => /=/.test(l)), "las leyendas no son pasos");
+    assert.equal(r.colorLana.nombre, "gris", "el primer color de los materiales");
+    assert.equal(r.revision[7].estado, "cuadra", "«en el primer pa» es un sitio, no un punto");
+    await page.evaluate(() => go({ name: "importar" }));
+    await page.locator("#im-texto").fill(TXT);
+    await page.getByRole("button", { name: "Leer el patrón" }).tap();
+    assert.equal(await page.locator("ol.importados li.parte").count(), 3);
+    await page.getByRole("button", { name: "Guardar patrón" }).tap();
+    const id = await page.evaluate(() => state.patrones[0].id);
+    assert.equal(await page.locator("ol.steps li.parte").count(), 3);
+    // Modo sofá: la parte nueva avisa de que se empieza otra vez, con su lana; el gráfico es solo el de esa parte
+    await page.evaluate(id => { prog(id).paso = 3; save(); go({ name: "sofa", id }); }, id);
+    await page.waitForTimeout(200);
+    assert.match(await page.locator(".sofa-eye .eyebrow").textContent(), /Nueva parte/);
+    assert.match(await page.locator(".sofa-lana").textContent(), /anaranjado/);
+    assert.match(await page.locator(".sofa-goal").textContent(), /Empezar esta parte/);
+    await page.locator(".sofa-big").tap();
+    await page.waitForTimeout(200);
+    assert.match(await page.locator(".sofa-txt").textContent(), /Vuelta 1: Hacer una anillo/);
+    assert.equal(await page.evaluate(id => { const ge = graficoEnCurso(buscar(id), prog(id)); return ge.graf.vista + ":" + ge.ahora.length; }, id), "redondo:1", "los pies van en redondo, desde su vuelta 1");
+    // En el cuerpo, la vuelta con «con blanco» lo enseña
+    await page.evaluate(id => { prog(id).paso = 2; save(); render(); }, id);
+    await page.waitForTimeout(150);
+    assert.match(await page.locator(".sofa-lana").textContent(), /gris.*blanco/);
+    await page.screenshot({ path: path.join(CAPTURAS, "sofa-partes-lana.png") });
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);

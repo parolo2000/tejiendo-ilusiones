@@ -216,3 +216,19 @@ Capturas en `tests/capturas/`.
     («Otras líneas del patrón»), no se pierde. Se puede desmarcar.
   - Arreglo: una línea solo con letras rusas se tiraba como si fuera adorno.
 - Tests: 4 nuevos y 2 adaptados a «Solo las vueltas». 50/50. Accesibilidad (axe) sin avisos.
+
+## 2026-10-07 · Patrones con partes y colores («1ª vuelta», CUERPO, PIES, ALAS)
+
+- Importar entiende «1ª vuelta», «16ª vuelta», «1era vuelta», «5ª a 10ª vuelta» (`normalizarVuelta`), también
+  para «Solo las vueltas».
+- Partes: una cabecera en mayúsculas o con «(hacer N)» seguida de «Con gris» se guarda como un paso
+  «Parte: PIES (hacer 2) · con anaranjado». Un «Con blanco» suelto entre vueltas es «Cambia a la lana blanco.».
+  Sin cambio de datos: siguen siendo pasos de texto.
+- Modo sofá: en una parte nueva avisa «Nueva parte: se empieza otra vez por la vuelta 1» y el botón dice
+  «Empezar esta parte». Arriba se ve la lana de ahora y los colores que pide la vuelta («con blanco»).
+- El gráfico es el de la parte en la que se está (`parteDe`, `subPatron`); si la vuelta 1 dice «anillo mágico»,
+  va en redondo con el anillo en el centro.
+- Leyendas «Pto = punto» no son pasos ni se pegan a otras líneas; van a las notas.
+- Motor: «en el primer pa», «en el último punto»… son un sitio, no un punto (antes salía 1 de más).
+- Las notas del patrón respetan los saltos de línea.
+- Tests: 1 nuevo. 51/51.
