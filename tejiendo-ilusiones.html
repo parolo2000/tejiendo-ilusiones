@@ -2077,11 +2077,19 @@ function infoPaso(texto){
   const ult = [...texto.matchAll(/\((\d+)\s*([a-záéíóúñ]*)[^)]*\)/gi)].pop();
   const palabra = ult ? ult[2].toLowerCase() : "";
   const medida = /^(cm|mm|m|g|gr|gramos|metros)$/.test(palabra);
-  const objetivo = medida ? 0 : objetivoDe(texto);
+  let objetivo = medida ? 0 : objetivoDe(texto), implicito = false;
+  // «Filas 11 a 18: 60 pb» o «Fila 35: Teje 6 dism»: sin total entre paréntesis, el total son esos mismos puntos
+  if(!objetivo && !ult && RX_VUELTA.test(texto.trim()) && !/\bhasta\b/i.test(texto)){
+    const cuerpo = texto.replace(/^[^:]*:\s*/, "");
+    if(/^\s*(teje\s+)?(por la hebra de (atr[aá]s|delante)\s*)?(y\s+teje\s+)?((\d+\s*(pb|pa|mpa|pbt|pad|aum|dism)\b)[,\s]*(y\s+)?)+\.?\s*$/i.test(cuerpo)){
+      const f = lineaAFilas(texto)[0]; const n = f ? f.reduce((a,k)=>a+anchoDe(k),0) : 0;
+      if(n>0){ objetivo = n; implicito = true; }
+    }
+  }
   const modo = objetivo>0 ? "puntos" : /\bhasta\b/.test(normalizar(texto)) ? "hasta" : "accion";
   const ini = texto.match(/^\s*(?:vueltas?|v|rnd|round|row|filas?|hileras?|r)\s*(\d+)/i) || texto.match(/^\s*(\d+)\s*[ªº°]\s*(?:vueltas?|filas?|hileras?)/i);
   return {
-    modo, objetivo,
+    modo, objetivo, implicito,
     reps: modo==="puntos" ? Math.max(1, lineaAFilas(texto).length) : 1,
     vuelta: ini ? +ini[1] : 0,
     unidad: UNIDADES.includes(palabra) ? (palabra==="cad" ? "cadenetas" : palabra) : "puntos",
@@ -2583,6 +2591,8 @@ function traducirIngles(linea, uk){
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 const RX_VUELTA = /^(?:vueltas?|v|rnds?|rounds?|rows?|r|filas?|hileras?)\s*\d+/i;
+// Una vuelta de verdad empieza con mayúscula o lleva «:» («Fila 3: …»); «filas 6 a 8. Cose…» es parte de una frase
+const esVueltaDeVerdad = l => RX_VUELTA.test(l) && (/^[A-ZÁÉÍÓÚ]/.test(l) || /^\S+\s*\d+(?:\s*(?:a|al|y|-|–)\s*\d+)?\s*:/.test(l));
 
 // ---------- Vueltas con ordinal, partes y colores ----------
 // «1ª vuelta:», «16ª vuelta», «1era vuelta», «5ª a 10ª vuelta», «de la 5ª a la 10ª vuelta» → «Vuelta 1:», «Vueltas 5 a 10:»
@@ -2599,15 +2609,21 @@ function normalizarVuelta(l){
 const esLeyenda = l => /^\s*[\p{L}.\s]{1,20}\s*=\s*\p{L}/u.test(l);
 // Cabecera de una parte del muñeco: «CUERPO», «PIES (hacer 2)», «Alas (hacer 2)», «Cabeza:»
 // «(hacer 2)», «(2 piezas)», «(make 2)», «(x2)», «(2 детали)»: cuántas veces se teje esa parte
-const RX_VECES = /\((?:hacer|haz|tejer|teje|make|связать)\s*(\d+)(?:\s*(?:veces|piezas|times|pieces|шт\.?))?\)|\((\d+)\s*(?:piezas|veces|pieces|times|детали|деталей|шт\.?)\)|\(\s*[xх×]\s*(\d+)\s*\)/iu;
-function vecesDe(t){ const m = (t||"").match(RX_VECES); return m ? Math.max(1, Math.min(20, +(m[1]||m[2]||m[3]))) : 1; }
-const NO_PARTES = /^(materiales?|abreviaturas?|notas?|necesitas|medidas?|tama[ñn]o|montaje|instrucciones|leyenda|puntos? (usados|utilizados))\b/i;
+const RX_VECES = /\s[xх×]\s*(\d+)\s*$|\((?:hacer|haz|tejer|teje|make|связать)\s*(\d+)(?:\s*(?:veces|piezas|times|pieces|шт\.?))?\)|\((\d+)\s*(?:piezas|veces|pieces|times|детали|деталей|шт\.?)\)|\(\s*[xх×]\s*(\d+)\s*\)/iu;
+function vecesDe(t){ const m = (t||"").replace(/\s*·\s*con .+$/, "").match(RX_VECES); return m ? Math.max(1, Math.min(20, +(m[1]||m[2]||m[3]||m[4]))) : 1; }
+const NO_PARTES = /^(materiales?|abreviaturas?|notas?|necesitas|necesitar[aá]s|tambi[eé]n necesitar[aá]s|medidas?|tama[ñn]o|montaje|armado|instrucciones|leyenda|puntos y abreviaturas|puntos? (usados|utilizados)|puntos y)\b/i;
 function cabeceraParte(l){
-  const t = l.trim().replace(/[:.]$/, "");
+  const conCont = l.trim().replace(/[:.]$/, ""), cont = /\s*\(?\s*contin[uú]a\s*\)?\s*$/i;
+  const r = cabeceraSin(conCont.replace(cont, ""));
+  return r && cont.test(conCont) ? r+" (continúa)" : r;
+}
+function cabeceraSin(t){
   if(t.length > 40 || /\d+\s*\)?\s*$/.test(t.replace(RX_VECES, "")) && !RX_VECES.test(t)) return null;
   if(NO_PARTES.test(t) || RX_VUELTA.test(t) || lineaAFilas(t).length) return null;
   const letras = t.replace(/\(.*?\)/g, "").replace(/[^\p{L}]/gu, "");
   if(letras.length < 3) return null;
+  // Un nombre de verdad tiene alguna palabra de 3 letras o más («— NA E O» es ruido de una foto)
+  if(!/\p{L}{3,}/u.test(t.replace(/\(.*?\)/g, ""))) return null;
   const mayus = letras === letras.toUpperCase();
   return mayus || RX_VECES.test(t) ? t.replace(/\s+/g, " ") : null;
 }
@@ -2628,6 +2644,20 @@ function coloresDelPaso(t){
     if(c && !out.some(x=>x.nombre===m[1].toLowerCase())) out.push({nombre:m[1].toLowerCase(), hex:c[2]});
   }
   return out;
+}
+
+// ---------- Términos de Latinoamérica ----------
+// mp (medio punto) = pb, au = aum, dis = dism, pe (punto enano) = pd, mv (media vareta) = mpa, var (vareta) = pa,
+// THT = por la hebra de atrás. Se reconocen por la leyenda o porque «mp», «au» o «dis» se repiten.
+function esLatino(texto){
+  return /\bmp\s*[:=-]\s*medio punto|\bau\s*[:=-]\s*aumento|\bvar\s*[:=-]\s*vareta/i.test(texto) || (texto.match(/\b\d*\s*(mp|au|dis)\b/gi)||[]).length >= 6;
+}
+function traducirLatino(l){
+  return l.replace(/\b(\d+)(mp|au|dis|var|mv|pe)\b/gi, "$1 $2")
+    .replace(/\bTHT\b/g, "por la hebra de atrás")
+    .replace(/\b(levanta|haz|monta|teje)\s+una\s+cadena\s+(?:de\s+)?base\s+de\s+(\d+)\s+puntos/gi, "$1 $2 cad de base")
+    .replace(/\bmp\b/gi, "pb").replace(/\bau\b/gi, "aum").replace(/\bdis\b/gi, "dism").replace(/\bmv\b/gi, "mpa").replace(/\bvar\b/gi, "pa")
+    .replace(/(\d\s*)\bpe\b/gi, "$1pd").replace(/\b(\d+)\s+disminuciones\b/gi, "$1 dism").replace(/\b(\d+)\s+aumentos\b/gi, "$1 aum");
 }
 
 // ---------- Patrones en ruso ----------
@@ -2669,7 +2699,7 @@ const COLORES_LANA = [
   [/\b(rojo|roja|red)\b|красн/iu, "rojo", "#C0392B"], [/\b(fucsia|fuchsia|magenta)\b|фукси|малинов/iu, "fucsia", "#C2185B"],
   [/\b(rosa|pink)\b|розов/iu, "rosa", "#E07AA8"], [/\b(naranja|anaranjad[oa]|orange|coral|salm[oó]n)\b|оранжев/iu, "naranja", "#E67E22"],
   [/\b(amarill[oa]|mostaza|yellow|mustard)\b|ж[её]лт|горчичн/iu, "amarillo", "#E1B12C"], [/\b(verde|green|mint|menta)\b|зел[её]н|мятн/iu, "verde", "#2E8B57"],
-  [/\b(turquesa|turquoise|teal)\b|бирюз/iu, "turquesa", "#1A9E8F"], [/\b(celeste|azul claro|light blue|sky blue)\b|голуб/iu, "celeste", "#7FB3E0"],
+  [/\b(turquesa|turquoise|teal|aqua|aguamarina|agua marina)\b|бирюз/iu, "turquesa", "#1A9E8F"], [/\b(celeste|azul claro|light blue|sky blue)\b|голуб/iu, "celeste", "#7FB3E0"],
   [/\b(azul|blue|navy|marino)\b|син(?:ий|его|яя|ей)/iu, "azul", "#2C6FB7"], [/\b(morad[oa]|lila|violeta|lilac|purple|lavender|lavanda)\b|фиолет|сирен|лаванд/iu, "lila", "#8E44AD"],
   [/\b(marr[oó]n|chocolate|brown|camel)\b|коричн|шоколад/iu, "marrón", "#8B5A2B"], [/\b(beige|arena|sand|tan)\b|бежев|песочн/iu, "beige", "#C8A97E"],
   [/\b(crudo|natural|cream|crema|ecru)\b|молочн|кремов/iu, "crudo", "#D9C9A3"], [/\b(gris|grey|gray)\b|сер(?:ый|ого|ая)/iu, "gris", "#8A9594"],
@@ -2691,12 +2721,26 @@ function limpiarPegado(texto){
   t = t.replace(/([^\n])\s+(?=(?:vueltas?|filas?|hileras?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*\d+\s*)?[:.)])/gi, "$1\n")
        .replace(/([^\n])(?<!\b(?:a|al|la|y)|[-–])\s+(?=\d+\s*[ªº°]\s*(?:vueltas?|filas?|hileras?)\s*:)/gi, "$1\n"); // no corta «de la 11ª a la 14ª fila»
   const lineas = [];
+  // Pies y cabeceras de página en mayúsculas que se repiten en todas las hojas («MAGIA PARA PEQUES EN SU DÍA»)
+  const veces = {}; for(const l of t.split("\n")){ const k = l.trim(); if(k) veces[k] = (veces[k]||0)+1; }
+  const repetida = l => veces[l]>=3 && !/\d/.test(l) && /\p{L}{3}/u.test(l) && l===l.toUpperCase();
+  // y los trozos de ese pie que la foto ha partido («MAGIA PARA»)
+  const pies = Object.keys(veces).filter(repetida);
+  const trozoDePie = l => l.length>=6 && l===l.toUpperCase() && /\p{L}{3}/u.test(l) && pies.some(r=>r!==l && r.includes(l));
+  let nuevoParrafo = true;
   for(let l of t.split("\n")){
+    if(repetida(l.trim()) || trozoDePie(l.trim())) continue;
     l = l.trim();
-    if(!l || /^[^\p{L}\p{N}]+$/u.test(l) || /^(https?:\/\/|www\.)/i.test(l) || /^(©|copyright|p[aá]g(ina)?\.? ?\d+$|page \d+$)/i.test(l)) continue;
+    if(!l){ nuevoParrafo = true; continue; }
+    const enParrafo = !nuevoParrafo; nuevoParrafo = false;
+    if( /^[^\p{L}\p{N}]+$/u.test(l) || /^(https?:\/\/|www\.)/i.test(l) || /^(©|copyright|p[aá]g(ina)?\.? ?\d+$|page \d+$)/i.test(l)) continue;
     const prev = lineas[lineas.length-1];
-    const suelta = RX_VUELTA.test(normalizarVuelta(l)) || esLeyenda(l) || esLeyenda(prev||"") || lineaDeColor(l) || cabeceraParte(l);
-    if(prev && (/^[a-záéíóúñ(]/.test(l) || /[,;]$/.test(prev)) && !suelta) lineas[lineas.length-1] = prev+" "+l; // línea cortada
+    const suelta = esVueltaDeVerdad(normalizarVuelta(l)) || esLeyenda(l) || esLeyenda(prev||"") || lineaDeColor(l) || cabeceraParte(l);
+    // Una vuelta larga sigue en las líneas de su mismo párrafo hasta que cierra con su total: «(13 puntos en total)»
+    const sigueVuelta = prev && enParrafo && esVueltaDeVerdad(normalizarVuelta(prev)) && !/(\)|\]|\d+\s*(sts?|stitches|puntos|p\.?))\s*\.?\s*$/i.test(prev)
+      && !/^(al finalizar|corta|rellena|remata|cose|c[oó]sel|borda|repite|ahora,? borda|a partir|stuff|fasten|sew|cut|weave|finish|embroider|набей|закреп|приш|отрез)/i.test(l);
+    const cortada = prev && (/^[a-záéíóúñ(]/.test(l) || /[,;]$/.test(prev) || /(\s[xх×]|\bpor|\by|\bde|\ben|\(|[-–])\s*$/i.test(prev) || sigueVuelta);
+    if(cortada && !suelta) lineas[lineas.length-1] = prev+" "+l; // línea cortada
     else lineas.push(l);
   }
   return lineas;
@@ -2708,7 +2752,7 @@ function revisarLinea(t){
   if(!filas.length) return /\b(pb|pa|mpa|pad|aum|dism)\b/i.test(t) ? {estado:"duda"} : {estado:"texto"};
   let n = filas[0].reduce((a,k)=>a+anchoDe(k),0);
   if(/cuentan? como (1|un) (pa|mpa|pad|punto)/i.test(t)) n++;
-  if(!info.objetivo || info.unidad!=="puntos") return {estado:"ok", n};
+  if(!info.objetivo || info.implicito || info.unidad!=="puntos") return {estado:"ok", n};
   if(n===info.objetivo) return {estado:"cuadra", n, obj:info.objetivo};
   // Las cadenetas de subida a veces cuentan como punto y a veces no: una diferencia pequeña no es un error
   if(/^[^a-z]*((?:vueltas?|filas?|hileras?)\s*[\d\sa-]+:)?\s*\d+\s*cad/i.test(t) && Math.abs(n-info.objetivo)<=2) return {estado:"ok", n:info.objetivo};
@@ -2740,9 +2784,11 @@ function sugerirArreglo(t){
 function importarTexto(texto, uk, soloVueltas=false){
   const rus = esRuso(texto);
   const ingles = !rus && esIngles(texto);
+  const latino = !rus && !ingles && esLatino(texto);
   if(uk==null) uk = ingles && esUK(texto);
   const originales = limpiarPegado(texto);
-  const lineas = originales.map(l => normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : l));
+  const lineas = originales.map(l => normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : latino ? traducirLatino(l) : l)
+    .replace(/\bpor cada punto( de la vuelta anterior| de la fila anterior)?/gi, "en cada punto"));
   // La primera línea corta y sin números es el título, aunque nombre puntos («Bufanda de punto bajo»)
   const conTitulo = originales.length>1 && originales[0].length<=60 && !/\d|:/.test(originales[0]) && !/^(haz|teje|monta|make|chain|start)\b/i.test(originales[0]);
   const desde = conTitulo ? 1 : 0;
@@ -2755,21 +2801,34 @@ function importarTexto(texto, uk, soloVueltas=false){
   if(primero>=0){
     let ini = primero; while(ini>desde && (cabeceraParte(lineas[ini-1]) || lineaDeColor(lineas[ini-1]))) ini--;
     const salida = []; let parte = null, color = null, pendiente = false;
+    // «En hilo color rosa pastel, inicia…» o «Cambia a color blanco y teje…» dentro de una vuelta
+    const colorEn = (l, rx) => { const m = l.match(rx); if(!m) return null; const c = COLORES_LANA.find(([r])=>r.test(m[1])); return c ? {nombre:m[1].trim().toLowerCase(), hex:c[2]} : null; };
+    const RX_HILO = /\b(?:en\s+)?(?:hilo\s+)?colou?r\s+([\p{L} ]{3,25}?)(?=\s*[,.]|\s+(?:inicia|teje|levanta|haz|y|monta)\b)/iu;
+    const RX_CAMBIA = /\bcambia(?:r)?\s+(?:a|al)\s+(?:la\s+)?(?:color|hilo|lana)\s+([\p{L} ]{3,25}?)(?=\s*[,.]|\s+y\b|$)/iu;
     for(const l of lineas.slice(ini)){
       const cab = cabeceraParte(l), col = !cab && lineaDeColor(l);
-      if(cab){ parte = cab; color = null; pendiente = true; continue; }
+      if(cab){
+        // «CABEZA (continúa)»: es la misma parte que sigue en otra página
+        const base = cab.replace(/\s*\(?\s*contin[uú]a\s*\)?\s*$/i, "").trim();
+        if(base!==cab){ if(pendiente) parte = base; continue; }
+        parte = cab; color = null; pendiente = true; continue;
+      }
       if(col){ color = col; if(!pendiente && salida.length) salida.push("Cambia a la lana "+col.nombre+"."); continue; }
-      if(pendiente){ salida.push("Parte: "+parte+(color ? " · con "+color.nombre : "")); pendiente = false; }
+      if(pendiente && (!soloVueltas || esVueltaDeVerdad(l) || /\b(anillo|cad|monta)\b/i.test(l))){ if(!color && RX_VUELTA.test(l)) color = colorEn(l, RX_HILO); salida.push("Parte: "+parte+(color ? " · con "+color.nombre : "")); pendiente = false; }
+      const cambio = RX_VUELTA.test(l) && colorEn(l, RX_CAMBIA);
+      if(cambio) salida.push("Cambia a la lana "+cambio.nombre+".");
       salida.push(l);
     }
     if(salida.some(esParte) || salida.some(esCambioLana)) pasos = salida;
   }
   // «Solo las vueltas»: se quedan las líneas que empiezan por «Vuelta N»; lo demás va a las notas, no se pierde
-  const queda = l => RX_VUELTA.test(l) || esParte(l) || esCambioLana(l);
+  const queda = l => esVueltaDeVerdad(l) || esParte(l) || esCambioLana(l);
   // Lo que va justo antes de la primera vuelta y monta la labor («Monta 21 cad», «Haz un anillo mágico») también se queda
   const primeraV = pasos.findIndex(l=>RX_VUELTA.test(l));
   const montaje = (l, i) => i<primeraV && i>=primeraV-2 && /\b(cad|cadenetas?|anillo|monta|montar|base)\b/i.test(l) && lineaAFilas(l).length>0;
   if(soloVueltas && primeraV>=0){ const q = (l,i)=>queda(l) || montaje(l,i); apartadas = pasos.filter((l,i)=>!q(l,i)); pasos = pasos.filter(q); }
+  // Una parte sin nada que tejer (un título repetido arriba de la página) no se queda
+  pasos = pasos.filter((l,i)=>!esParte(l) || (i+1<pasos.length && !esParte(pasos[i+1])));
   // La primera lana: la de los materiales o, si no, la de la primera parte
   const primeraLana = (()=>{ for(const l of lineas){ const c = lineaDeColor(l); if(c) return c; } return null; })();
   const tituloLinea = conTitulo ? originales[0] : antes.find(l => l.length<=60 && !/\d\s*mm|:/.test(l));
@@ -2778,7 +2837,7 @@ function importarTexto(texto, uk, soloVueltas=false){
   const lana = lanaDelTexto(antes.length ? antes : originales);
   if(!lana.color && primeraLana) lana.color = primeraLana;
   return {
-    ingles, ruso:rus, uk, pasos, apartadas,
+    ingles, ruso:rus, latino, uk, pasos, apartadas,
     revision: pasos.map(revisarLinea),
     titulo: tituloLinea || "",
     ganchillo: gan ? gan[1].replace(".", ",")+" mm" : "",
@@ -2862,21 +2921,63 @@ async function leerImagenes(imgs, avisar){
     errorHandler: ()=>{}
   })]).finally(()=>clearTimeout(plazo));
   try{
+    // Página en automático: así respeta las columnas (muchos patrones van a dos columnas) en vez de mezclar las líneas
+    try{ await worker.setParameters({tessedit_pageseg_mode: "3", preserve_interword_spaces: "1"}); }catch(e){}
     const textos = [];
-    for(; actual<imgs.length; actual++) textos.push((await worker.recognize(imgs[actual])).data.text);
+    for(; actual<imgs.length; actual++){ const d = (await worker.recognize(imgs[actual], {}, {text:true, blocks:true})).data; let t = null; try{ t = textoEnColumnas(d, imgs[actual].width); }catch(e){} textos.push(t || d.text); }
     return arreglarLectura(textos.join("\n\n"));
   } finally { worker.terminate(); }
 }
+// Una página a dos columnas: el lector a veces junta la línea de la izquierda con la de la derecha. Con la
+// posición de cada palabra se busca el hueco vertical entre columnas y se lee primero una y luego la otra.
+function textoEnColumnas(d, ancho){
+  const lineas = []; let par = 0;
+  for(const b of d.blocks||[]) for(const p of b.paragraphs||[]){ par++; for(const l of p.lines||[]){ const ws = (l.words||[]).filter(w=>w && w.text && w.text.trim() && w.bbox); if(ws.length){ ws.par = par; lineas.push(ws); } } }
+  const palabras = lineas.flat(); if(palabras.length<30 || !ancho) return null;
+  let mejor = null;
+  for(let x=Math.round(ancho*.3); x<=ancho*.7; x+=Math.max(2, Math.round(ancho/200))){
+    const cruzan = palabras.filter(w=>w.bbox.x0<x && w.bbox.x1>x).length;
+    const izq = palabras.filter(w=>w.bbox.x1<=x).length, der = palabras.length-izq-cruzan;
+    if(izq<palabras.length*.2 || der<palabras.length*.2) continue;
+    if(!mejor || cruzan<mejor.cruzan) mejor = {x, cruzan};
+  }
+  if(!mejor || mejor.cruzan > Math.max(2, palabras.length*.03)) return null;
+  // Las líneas que cruzan el hueco (títulos centrados) van arriba; luego la columna izquierda y después la derecha
+  const lado = (ws, f) => ws.filter(f).sort((a,b)=>a.bbox.x0-b.bbox.x0).map(w=>w.text).join(" ");
+  const arriba = [], izq = [], der = [];
+  for(const ws of lineas){
+    if(ws.some(w=>w.bbox.x0<mejor.x && w.bbox.x1>mejor.x)){ arriba.push({y:ws[0].bbox.y0, t:lado(ws, ()=>true), p:"a"+ws.par}); continue; }
+    const y = ws[0].bbox.y0, a = lado(ws, w=>w.bbox.x1<=mejor.x), b = lado(ws, w=>w.bbox.x0>=mejor.x);
+    if(a) izq.push({y, t:a, p:"i"+ws.par}); if(b) der.push({y, t:b, p:"d"+ws.par});
+  }
+  // Entre párrafos, una línea en blanco: así se sabe dónde acaba una vuelta larga
+  const orden = xs => { const o = xs.sort((a,b)=>a.y-b.y), out = []; o.forEach((x,i)=>{ if(i && x.p!==o[i-1].p) out.push(""); out.push(x.t); }); return out; };
+  // Un título que cruza y va por debajo de las columnas (pie de página) se queda al final
+  const yIni = Math.min(...[...izq, ...der].map(x=>x.y));
+  return [...orden(arriba.filter(x=>x.y<=yIni)), "", ...orden(izq), "", ...orden(der), "", ...orden(arriba.filter(x=>x.y>yIni))].join("\n");
+}
 // Errores típicos al leer letras en un patrón: «(l2)» es «(12)» y «(3O)» es «(30)»
+// Con el ruso cargado, en un patrón en español a veces lee «тр» por «mp» o «о» cirílica por «o»
+const PARECIDAS = {"а":"a","е":"e","о":"o","р":"p","с":"c","у":"y","х":"x","т":"m","м":"m","к":"k","і":"i","А":"A","Е":"E","О":"O","Р":"P","С":"C","Т":"T","М":"M","К":"K","Х":"X","Н":"H","В":"B"};
 function arreglarLectura(t){
+  const cir = (t.match(/[а-яё]/gi)||[]).length, lat = (t.match(/[a-záéíóúñ]/gi)||[]).length;
+  if(cir && cir < (cir+lat)*.05) t = t.replace(/[\u0400-\u04FF]+/g, w => [...w].every(c=>PARECIDAS[c]) ? [...w].map(c=>PARECIDAS[c]).join("") : w);
   return t.replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"')
+    .replace(/\*([^*"]{2,60})"(?=\s*[xх×])/g, "*$1*")
+    .replace(/(^|[\s,(*])[lI|]\s?(?=(au|aum|mp|pb|pa|dis|dism|cad|var|mv|mpa)\b)/g, (m, a) => a+"1 ")
     .replace(/\(\s*([\dlIOo|]{1,4})\s*\)/g, (m, n) => /\d/.test(n) ? "("+n.replace(/[lI|]/g,"1").replace(/[Oo]/g,"0")+")" : m)
     .replace(/\b(vueltas?|rnds?|rounds?|rows?|filas?|hileras?)\s+([lI|])(?=\s*[:.)\-–])/gi, "$1 1")
     .replace(/[ \t]+\n/g, "\n");
 }
 const AYUDA_FOTO = "Otra forma: en muchos móviles puedes abrir la foto, mantener el dedo sobre el texto, copiarlo y pegarlo aquí.";
 
-let importarBorrador = "", importarUK = null, importarSoloVueltas = true, importarArreglos = {};
+let importarBorrador = "", importarUK = null, importarSoloVueltas = true, importarArreglos = {}, importarArchivo = "";
+// El nombre del archivo suele ser mejor título que lo que se lee de una portada con letra de adorno
+function tituloDeArchivo(nombre){
+  const t = String(nombre||"").replace(/\.[a-z0-9]{2,4}$/i, "").replace(/[_\-.]+/g, " ").replace(/\s+/g, " ").trim();
+  if(!t || /^(img|image|imagen|scan|escaneo|dsc|pxl|whatsapp|document|documento|pdf|captura|screenshot|foto|photo|patron|pattern)\b|^\d/i.test(t) || !/\p{L}{3,}.*\s.*\p{L}{3,}/u.test(t)) return "";
+  return t.charAt(0).toUpperCase()+t.slice(1);
+}
 VISTAS.importar = V => {
   const area = h("textarea",{id:"im-texto", style:"min-height:12rem", placeholder:"Rnd 1: 6 sc in magic ring (6)\nRnd 2: 2 sc in each st (12)\n\no en español:\nVuelta 1: 6 pb en el anillo (6)", oninput:e=>{ importarBorrador=e.target.value; }}, importarBorrador);
   const res = h("div",{class:"stack", "aria-live":"polite"});
@@ -2894,7 +2995,7 @@ VISTAS.importar = V => {
     // Los arreglos que ha aceptado con «Aplicar» se mantienen mientras revisa
     r.pasos = r.pasos.map(t=>importarArreglos[t]||t); r.revision = r.pasos.map(revisarLinea);
     if(!r.pasos.length){ res.replaceChildren(h("div",{class:"empty"}, h("h3",{},"No he encontrado instrucciones"), h("p",{class:"muted"},"¿Has pegado el patrón entero? Busca las líneas que empiezan por «Vuelta» o «Round»."))); return; }
-    const nombre = h("input",{type:"text", id:"im-nombre", value:r.titulo, placeholder:"Ponle un nombre"});
+    const nombre = h("input",{type:"text", id:"im-nombre", value:tituloDeArchivo(importarArchivo) || r.titulo, placeholder:"Ponle un nombre"});
     const gan = h("input",{type:"text", id:"im-gan", value:r.ganchillo, placeholder:"Ej.: 4 mm"});
     const hilo = h("input",{type:"text", id:"im-hilo", value:r.hilo, placeholder:"Ej.: algodón rosa"});
     const hayVueltas = importarTexto(area.value, importarUK, false).pasos.some(l=>RX_VUELTA.test(l));
@@ -2905,7 +3006,7 @@ VISTAS.importar = V => {
       const titulo = nombre.value.trim();
       if(!titulo){ err.textContent="Ponle un nombre al patrón."; err.hidden=false; nombre.focus(); return; }
       const p = {id:"m-"+Date.now(), titulo, descripcion:"Importado"+(r.ingles?" del inglés":r.ruso?" del ruso":"")+".", nivel:"", hilo:hilo.value.trim(), ganchillo:gan.value.trim(), notas:r.notas, pasos:r.pasos, color:r.colorLana ? r.colorLana.hex : COLORES[state.patrones.length % COLORES.length], original:area.value};
-      state.patrones.unshift(p); save(); importarBorrador=""; importarUK=null; importarSoloVueltas=true; importarArreglos={};
+      state.patrones.unshift(p); save(); importarBorrador=""; importarUK=null; importarSoloVueltas=true; importarArreglos={}; importarArchivo="";
       toast("Patrón guardado");
       if(yTejer) tejer(p.id); else go({name:"patron", id:p.id});
     };
@@ -2915,6 +3016,7 @@ VISTAS.importar = V => {
         h("div",{class:"seg", role:"group"}, [["us","EE. UU."],["uk","Reino Unido"]].map(([k,l])=>h("button",{class:(r.uk?"uk":"us")===k?"sel":"", "aria-pressed":String((r.uk?"uk":"us")===k), onclick:()=>{ importarUK = k==="uk"; leer(); }}, l))),
         h("p",{class:"muted", style:"font-size:.88rem"},"Cambia el nombre de los puntos: en el Reino Unido «dc» es punto bajo y «tr» es punto alto.")) : null,
       r.ruso ? h("div",{class:"note"},"Está en ruso y lo he pasado a español. Revisa que los puntos estén bien.") : null,
+      r.latino ? h("div",{class:"note"},"Usa los nombres de Latinoamérica (mp, au, dis, var…). Los he pasado a los de aquí: pb, aum, dism, pa.") : null,
       hayVueltas ? h("label",{class:"checkline"}, h("input",{type:"checkbox", id:"im-solo", checked:importarSoloVueltas, onchange:e=>{ importarSoloVueltas=e.target.checked; leer(); }}),
         h("span",{}, "Solo las vueltas («Vuelta 1», «Vuelta 2»…)", r.apartadas.length ? h("small",{}, r.apartadas.length===1 ? "1 línea más va a las notas." : r.apartadas.length+" líneas más van a las notas.") : null)) : null,
       h("div",{class:"row"}, h("span",{class:"chip go"}, r.pasos.length+" pasos"), cuenta("cuadra") ? h("span",{class:"chip ok"}, cuenta("cuadra")+" cuadran") : null, revisar ? h("span",{class:"chip mine"}, revisar+" para revisar") : null),
@@ -2936,7 +3038,7 @@ VISTAS.importar = V => {
       h("p",{class:"muted", style:"font-size:.88rem"},"Después de guardarlo puedes cambiar cualquier línea con «Cambiar».")
     ].filter(Boolean));
   }
-  const pegar = navigator.clipboard && navigator.clipboard.readText ? h("button",{class:"big", onclick:async()=>{ try{ area.value = await navigator.clipboard.readText(); leer(); }catch(e){ toast("No me deja pegar. Mantén el dedo en el recuadro y elige Pegar."); } }}, "Pegar lo que he copiado") : null;
+  const pegar = navigator.clipboard && navigator.clipboard.readText ? h("button",{class:"big", onclick:async()=>{ try{ area.value = await navigator.clipboard.readText(); importarArchivo = ""; leer(); }catch(e){ toast("No me deja pegar. Mantén el dedo en el recuadro y elige Pegar."); } }}, "Pegar lo que he copiado") : null;
   // Abrir un PDF o una foto: el texto leído se pone en el recuadro para revisarlo antes de guardar
   const estado = h("div",{class:"note stack leyendo", "aria-live":"polite", hidden:true});
   const botones = [];
@@ -2959,7 +3061,7 @@ VISTAS.importar = V => {
     } finally { botones.forEach(b=>b.disabled=false); }
   }
   const conFoto = fn => async ()=>{ try{ return await fn(); } catch(e){ const err = e instanceof Error ? e : new Error(String(e)); err.foto = true; throw err; } };
-  const elegirPDF = h("input",{type:"file", accept:"application/pdf,.pdf", hidden:true, id:"im-pdf", onchange:e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  const elegirPDF = h("input",{type:"file", accept:"application/pdf,.pdf", hidden:true, id:"im-pdf", onchange:e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return; importarArchivo = f.name;
     traer(async ()=>{
       avisar("Abriendo «"+f.name+"»…", null);
       const doc = await abrirPDF(new Uint8Array(await f.arrayBuffer()));
@@ -2967,12 +3069,12 @@ VISTAS.importar = V => {
       if(texto.replace(/\s/g,"").length >= 30){ doc.destroy(); return texto; }
       // PDF escaneado: no tiene texto, solo imágenes de las páginas
       avisar("Este PDF es una imagen escaneada. Lo leo como una foto…", null);
-      const imgs = await paginasComoImagen(doc, 6); doc.destroy();
+      const imgs = await paginasComoImagen(doc, 20); doc.destroy();
       const leido = await conFoto(()=>leerImagenes(imgs, avisar))();
       if(!leido.trim()) throw Object.assign(new Error("vacio"), {foto:true});
       return leido;
     }); }});
-  const elegirFoto = h("input",{type:"file", accept:"image/*", hidden:true, id:"im-foto", onchange:e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  const elegirFoto = h("input",{type:"file", accept:"image/*", hidden:true, id:"im-foto", onchange:e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return; importarArchivo = f.name;
     traer(conFoto(async ()=>{
       avisar("Preparando la foto…", null);
       const leido = await leerImagenes([await prepararFoto(f)], avisar);

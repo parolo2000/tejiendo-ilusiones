@@ -296,3 +296,19 @@ Capturas en `tests/capturas/`.
 - Con «Solo las vueltas», la cadeneta de base o el anillo de justo antes de la primera vuelta se queda en los pasos.
 - Inglés: «Row» → «Fila», «Round» → «Vuelta»; «sc in 2nd ch from hook», «in each ch» y «across» se traducen.
 - Tests: 1 nuevo. 64/64.
+
+## 2026-10-07 · PDF «Manta apego unicornio» (escaneado, dos columnas, términos latinoamericanos)
+
+- Copia previa: `versiones/tejiendo-ilusiones-antes-pdf-unicornio.html`.
+- OCR: modo de página automático y `textoEnColumnas` (busca el canal entre columnas con las cajas de palabras
+  de Tesseract y lee izquierda y luego derecha). Hasta 20 páginas escaneadas.
+- `arreglarLectura`: letras cirílicas parecidas a latinas en textos en español, comilla leída en lugar del
+  asterisco de cierre (`*2 mp en el mismo espacio" x 10`), «1» leído en vez de «l».
+- Términos latinoamericanos (`esLatino`, `traducirLatino`): mp→pb, au→aum, dis→dism, mv→mpa, var→pa, THT,
+  «cadena base de N puntos», «por cada punto». Aviso en la pantalla de importar.
+- Partes «BRAZOS X 2», «(continúa)», color de la parte por «en hilo color X», «cambia a color X» como cambio
+  de lana, se quitan partes vacías y pies de página repetidos en mayúsculas.
+- Vueltas cortadas en varias líneas de un mismo párrafo se juntan; una vuelta cerrada con «– 18 sts» o «[24]»
+  ya no se come la línea siguiente. «Filas 11 a 18: 60 pb» toma el total de los puntos (`implicito`).
+- Nombre del patrón a partir del nombre del archivo. Colores aqua/aguamarina.
+- Test nuevo (65).

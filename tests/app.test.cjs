@@ -1319,6 +1319,29 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  await prueba("PDF latinoamericano (mp, au, dis), partes «X 2», «(continúa)» y pies de página", async () => {
+    const page = await nuevaPagina(browser);
+    const TXT = ["Manta apego unicornio", "Necesitarás: hilo de algodón, ganchillo de 2,75 mm", "Puntos y abreviaturas", "mp: medio punto", "au: aumento", "dis: disminución",
+      "BRAZOS X 2", "Fila 1: En color rosa confite, teje 6 mp en", "un anillo mágico (6 mp)", "Fila 2: Teje 1 au por cada punto (12 mp)", "Fila 3: 1 mp, 1 au x 6 (18 mp)",
+      "Fila 4: THT 18 mp", "PATRÓN DE TEJIDO TEJIENDO ILUSIONES", "Filas 5 y 6: 18 mp", "Fila 7: Cambia a color rosa pastel y teje", "18 mp", "Fila 8: 4 mp, 1 dis x 3 (15 mp)",
+      "Rellena un poco.", "PATRÓN DE TEJIDO TEJIENDO ILUSIONES", "BRAZOS X 2 (continúa)", "Filas 9 a 12: 15 mp", "CINTAS x 12",
+      "Fila 1: En el color que corresponda, levanta una", "cadena base de 31 puntos. Deja 1 cad libre y teje *2 mp", "en el mismo espacio\" x 10, 20 mv.",
+      "PATRÓN DE TEJIDO TEJIENDO ILUSIONES"].join("\n");
+    const r = await page.evaluate(t => { const r = importarTexto(arreglarLectura(t), null, true); return { latino: r.latino, pasos: r.pasos, rev: r.revision.map(x => x.estado), veces: vecesDe(r.pasos[0]) }; }, TXT);
+    assert.equal(r.latino, true);
+    assert.deepEqual(r.pasos, ["Parte: BRAZOS X 2 · con rosa confite", "Fila 1: En color rosa confite, teje 6 pb en un anillo mágico (6 pb)", "Fila 2: Teje 1 aum en cada punto (12 pb)",
+      "Fila 3: 1 pb, 1 aum x 6 (18 pb)", "Fila 4: por la hebra de atrás 18 pb", "Filas 5 y 6: 18 pb", "Cambia a la lana rosa pastel.", "Fila 7: Cambia a color rosa pastel y teje 18 pb",
+      "Fila 8: 4 pb, 1 dism x 3 (15 pb)", "Filas 9 a 12: 15 pb", "Parte: CINTAS x 12",
+      "Fila 1: En el color que corresponda, levanta 31 cad de base. Deja 1 cad libre y teje *2 pb en el mismo espacio* x 10, 20 mpa."]);
+    assert.equal(r.veces, 2, "«BRAZOS X 2» se teje dos veces");
+    assert.ok(r.rev.every(e => ["cuadra", "ok", "texto"].includes(e)), JSON.stringify(r.rev));
+    // «Rnd 9: … – 18 sts» ya está cerrada: «Stuff the ball.» no se pega a ella
+    const en = await page.evaluate(() => importarTexto("Ball\nRnd 9: (2 sc, dec) x 6 – 18 sts\nStuff the ball.\nRnd 10: dec 6 times (6)").pasos);
+    assert.equal(en.length, 3, JSON.stringify(en));
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);
