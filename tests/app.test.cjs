@@ -1071,6 +1071,23 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  await prueba("patrón por partes: se elige la parte, se ve su gráfico y si va en redondo o en filas", async () => {
+    const page = await nuevaPagina(browser);
+    await page.evaluate(() => { state.patrones.unshift({ id: "m-par", titulo: "Pingüino", color: "#8A9594", pasos: ["Parte: CUERPO · con gris", "Vuelta 1: 18 cad, 1 pd en la primera cad (18)",
+      "Parte: PIES (hacer 2) · con anaranjado", "Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 6 aum (12)"] }); save(); go({ name: "patron", id: "m-par" }); });
+    assert.equal(await page.locator(".chip-parte").count(), 2);
+    assert.match(await page.locator(".hero-par figcaption").first().textContent(), /CUERPO.*En filas/);
+    await page.locator(".chip-parte", { hasText: "PIES" }).tap();
+    assert.match(await page.locator(".hero-par figcaption").first().textContent(), /PIES.*En redondo/);
+    await page.getByRole("button", { name: "Ver el gráfico" }).tap();
+    const g = await page.evaluate(() => ({ vista: state.graficos[0].vista, nombre: state.graficos[0].nombre, naranja: state.graficos[0].celdas.flat().filter(v => pk(v)).every(v => pcol(v) === 1) }));
+    assert.deepEqual(g, { vista: "redondo", nombre: "Pingüino · PIES (hacer 2)", naranja: true });
+    await page.getByRole("button", { name: "← Patrón" }).tap();
+    assert.equal(await page.evaluate(() => view.name), "patron");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);

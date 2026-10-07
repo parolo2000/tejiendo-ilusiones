@@ -243,3 +243,12 @@ Capturas en `tests/capturas/`.
 - El color se ve más (más opaco y con borde, para que el blanco no desaparezca) y lo hecho en el modo sofá se
   marca con un borde verde sin tapar el color. En la tira del móvil, cada punto lleva una raya de su color.
 - Tests: 1 nuevo. 52/52.
+
+## 2026-10-07 · Elegir la parte del patrón y ver si va en redondo o en filas
+
+- En un patrón por partes, arriba salen botones con cada parte (con el color de su lana). Al elegir una, se ve su
+  gráfico, con su nombre y «En redondo (como un círculo)» o «En filas (plano, como un cuadrado)». Por defecto, la
+  parte en la que va tejiendo.
+- «Ver el gráfico» abre el gráfico de esa parte, con sus colores (se guarda con `de` y `parte`), y desde ahí
+  «← Patrón» vuelve al patrón.
+- Tests: 1 nuevo. 53/53.
