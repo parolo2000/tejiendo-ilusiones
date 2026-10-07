@@ -259,6 +259,18 @@ th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.
 .thumb svg.chart.cover{width:100%;height:100%}
 .thumb svg.ovillo{width:62%;height:62%}
 .herothumb{aspect-ratio:4/3 !important;border-radius:1rem !important;max-height:22rem}
+.hero-par{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;align-self:start;max-width:34rem;width:100%}
+.hero-par figure{margin:0;display:flex;flex-direction:column;gap:.3rem;min-width:0}
+.hero-par figcaption{font-size:.8rem;font-weight:700;color:var(--muted);text-align:center}
+.hero-par .herothumb{aspect-ratio:1 !important;width:100%}
+.hero-par .photo-btn{right:.4rem;bottom:.6rem;left:.4rem;justify-content:center;font-size:.8rem;padding-inline:.4rem}
+.checkline{display:flex;gap:.7rem;align-items:flex-start;font-weight:700;cursor:pointer}
+.checkline input{width:1.5rem;height:1.5rem;margin-top:.1rem;flex:none;accent-color:var(--accent)}
+.checkline small{display:block;font-weight:400;color:var(--muted)}
+.color-lana{display:flex;gap:.45rem;align-items:center}
+.color-lana i{width:1.1rem;height:1.1rem;border-radius:50%;border:1px solid var(--line);flex:none}
+.hueco-foto{display:flex;flex-direction:column;justify-content:center;gap:.25rem;border:2px dashed var(--accent);background:var(--accent-soft);color:var(--accent);padding:.5rem;text-align:center}
+.hueco-foto small{color:var(--fg);font-weight:400}
 .tira{display:flex;flex-wrap:wrap;gap:.4rem}
 .tira .pt{position:relative;flex-direction:column;gap:0;min-width:3.6rem;min-height:4.4rem;padding:.25rem;border-radius:.8rem;background:var(--surface);font-weight:700}
 .tira .pt small{font-size:.75rem;color:var(--muted)}
@@ -334,8 +346,24 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
 @media (max-height:40em){.sofa-desp,.sofa-hint{display:none} .sofa-num{font-size:clamp(3rem,15vmin,6rem)} .sofa-goal{font-size:1rem}}
 @media (max-width:22em){.sofa-acc button svg{display:none} .sofa-acc button{font-size:.8rem;padding-inline:.3rem}}
 @media (max-height:40em) and (orientation:portrait){.sofa{grid-template-rows:auto minmax(0,1fr) 38%}}
+.sofa-dibujo{display:flex;flex-direction:column;min-height:0;flex:none}
+.sofa-dibujo[hidden]{display:none}
+.sofa-graf{display:none}
+.sofa-tira{display:flex;gap:.3rem;overflow-x:auto;padding:.15rem .1rem;scrollbar-width:none}
+.sofa-tira .pt{flex:none;display:grid;place-items:center;width:2.3rem;height:2.3rem;border-radius:.55rem;background:var(--surface);border:1px solid var(--line);color:var(--fg)}
+.sofa-tira .pt.hecho{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.sofa-tira .pt.siguiente{border:2px solid var(--accent);color:var(--accent)}
+.chart .marca.hecho{fill:var(--ok-soft)}
+.chart .marca.siguiente{fill:none;stroke:var(--accent);stroke-width:2.5}
+.chart g.hecho{color:var(--ok)}
+.chart g.siguiente{color:var(--accent)}
 /* Móvil tumbado o tableta: texto a la izquierda, botón a la derecha */
 @media (orientation:landscape) and (min-width:40em){
+  .sofa-txt{flex:0 1 auto}
+  .sofa-dibujo{flex:1 1 0}
+  .sofa-dibujo.con-graf .sofa-graf{display:block;flex:1 1 0;min-height:0;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:1rem;padding:.4rem}
+  .sofa-dibujo.con-graf .sofa-tira{display:none}
+  .sofa-dibujo:not(.con-graf) .sofa-tira{flex-wrap:wrap;overflow:auto}
   .sofa{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
   .sofa-top{grid-column:1/-1;max-width:none}
   .sofa-big{margin:0 16px calc(16px + env(safe-area-inset-bottom,0px)) 0}
@@ -890,7 +918,7 @@ const EXP = {cell:"#FFFFFF", alt:"#F1F4EF", line:"#C9D2CC", lab:"#56655F", ink:"
 function dibujarGrafico(g, opts={}){ return g.vista==="redondo" ? dibujarRedondo(g,opts) : dibujarFilas(g,opts); }
 function hayPunto(f){ return f.some(v=>pk(v) || pcol(v)>=0); }
 
-function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false, zMini=22, colorHL=false}={}){
+function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false, zMini=22, colorHL=false, marcar=null}={}){
   const esHL = r => Array.isArray(resaltar) ? resaltar.includes(r) : r===resaltar;
   const filas = g.celdas.length, cols = g.cols, gut = mini ? 0 : 30;
   const colorMode = g.modo==="color";
@@ -903,6 +931,12 @@ function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false
     const y = (filas-1-r)*z + 1;   // la vuelta 1 queda abajo, como en las revistas
     const fila = g.celdas[r], am = soloAnillo(fila), tiene = hayPunto(fila);
     if(!am && tiene) n++;
+    // Modo sofá: en la vuelta de ahora se marcan los puntos hechos, en el orden en que se tejen
+    let estadoCol = null;
+    if(marcar && marcar.fila===r){
+      const orden = [...Array(cols).keys()].filter(c=>pk(fila[c]));
+      estadoCol = {}; orden.forEach((c,i)=>{ estadoCol[c] = i<marcar.hechos ? "hecho" : i===marcar.hechos ? "siguiente" : ""; });
+    }
     if(!mini && tiene && !am){
       // El número va en el lado por donde empieza la vuelta: impares a la derecha, pares a la izquierda
       const der = n%2===1;
@@ -922,7 +956,8 @@ function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false
       if(exp){ cell.setAttribute("fill", r%2?EXP.alt:EXP.cell); cell.setAttribute("stroke", EXP.line); } else cell.setAttribute("class", r%2?"cell alt":"cell");
       svg.append(cell);
       if(col>=0) svg.append(s("rect",{x:x+1.5, y:y+1.5, width:z-3, height:z-3, rx:3, fill:LANAS[col][0], "fill-opacity":.5}));
-      if(pk(v)){ const sy = simbolo(pk(v), x, y, z, exp?EXP.ink:undefined); if(colorHL && esHL(r)) sy.classList.add("ahora"); svg.append(sy); }
+      if(estadoCol && estadoCol[c]) svg.append(s("rect",{x:x+2, y:y+2, width:z-4, height:z-4, rx:4, class:"marca "+estadoCol[c]}));
+      if(pk(v)){ const sy = simbolo(pk(v), x, y, z, exp?EXP.ink:undefined); if(colorHL && esHL(r)) sy.classList.add("ahora"); if(estadoCol && estadoCol[c]) sy.classList.add(estadoCol[c]); svg.append(sy); }
     }
     if(esHL(r) && !mini) svg.append(s("rect",{x:gut-2, y:y-1, width:cols*z+5, height:z+2, rx:4, class:"hl"}));
   }
@@ -933,7 +968,7 @@ function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false
   };
   return {svg, celda};
 }
-function dibujarRedondo(g, {ancho=360, resaltar=-1, exp=false, mini=false, zMini=22, minStep=14, fantasma=false, colorHL=false}={}){
+function dibujarRedondo(g, {ancho=360, resaltar=-1, exp=false, mini=false, zMini=22, minStep=14, fantasma=false, colorHL=false, marcar=null}={}){
   const esHL = r => Array.isArray(resaltar) ? resaltar.includes(r) : r===resaltar;
   const anillos=[]; let k=0;
   g.celdas.forEach((f,r)=>{ if(soloAnillo(f)) anillos.push({r, centro:true}); else if(hayPunto(f) || !mini){ k++; anillos.push({r, k, n:largoFila(f)}); } });
@@ -958,10 +993,14 @@ function dibujarRedondo(g, {ancho=360, resaltar=-1, exp=false, mini=false, zMini
     const zz = Math.max(mini?2:9, Math.min(step*.92, 2*Math.PI*R/(Math.max(nd,1)+0.8)*.92));
     if(esHL(a.r) && !mini) svg.append(s("circle",{cx:C, cy:C, r:R, class:"hl", "stroke-width":step*.9}));
     const fila = g.celdas[a.r];
+    let j = 0; // puntos con símbolo ya dibujados en esta vuelta, para marcar los hechos en el modo sofá
     for(let i=0;i<a.n;i++){
       const ang = -90 + (i+0.9)*sa, rad = ang*Math.PI/180;
       const px = C + R*Math.cos(rad), py = C + R*Math.sin(rad);
-      if(pk(fila[i]) || pcol(fila[i])>=0) celdaRedonda(fila[i], px, py, ang+90, zz, svg, ink, colorHL && esHL(a.r));
+      const est = marcar && marcar.fila===a.r && pk(fila[i]) ? (j<marcar.hechos ? "hecho" : j===marcar.hechos ? "siguiente" : "") : "";
+      if(pk(fila[i])) j++;
+      if(est) svg.append(s("circle",{cx:px, cy:py, r:zz*.5, class:"marca "+est}));
+      if(pk(fila[i]) || pcol(fila[i])>=0){ celdaRedonda(fila[i], px, py, ang+90, zz, svg, ink, colorHL && esHL(a.r)); if(est) svg.lastElementChild.classList.add(est); }
       else if(!mini) svg.append(s("circle",{cx:px, cy:py, r:2, class:"hole", fill: exp?EXP.line:null}));
     }
     if(fantasma){
@@ -1549,8 +1588,14 @@ VISTAS.patron = V => {
   const pr = state.progreso[p.id];
   const est = estadoDe(p), empezado = est!=="nuevo";
   const foto = fotoGet(p.id);
-  const hero = miniaturaPatron(p); hero.classList.add("herothumb");
-  hero.append(h("button",{class:"photo-btn", onclick:()=>elegirFoto(p.id, render)}, icono("foto",18), foto ? "Cambiar foto" : "Añadir foto de mi labor"));
+  // Arriba, el gráfico del patrón y al lado la foto de lo que ha tejido (o el hueco para ponerla)
+  const graf = graficoDePatron(p);
+  const dibujoP = miniatura(graf, p.color||"#2C6A63"); dibujoP.classList.add("herothumb");
+  if(graf) dibujoP.append(h("button",{class:"photo-btn", onclick:()=>verGrafico()}, icono("rejilla",18), "Ver el gráfico"));
+  const fotoP = foto
+    ? h("div",{class:"thumb herothumb"}, h("img",{src:foto, alt:"Foto de mi "+p.titulo}), h("button",{class:"photo-btn", onclick:()=>elegirFoto(p.id, render)}, icono("foto",18), "Cambiar foto"))
+    : h("button",{class:"thumb herothumb hueco-foto", onclick:()=>elegirFoto(p.id, render)}, icono("foto",34), h("b",{},"Añadir foto"), h("small",{},"de tu creación"));
+  const hero = h("div",{class:"hero-par"}, h("figure",{}, dibujoP, h("figcaption",{},"El patrón")), h("figure",{}, fotoP, h("figcaption",{},"Tu creación")));
   const verGrafico = ()=>{ let g = state.graficos.find(x=>x.id===p.grafico) || state.graficos.find(x=>x.de===p.id); if(!g){ g=nuevoGrafico({nombre:p.titulo, de:p.id, texto:p.pasos.join("\n")}); graficoDesdeTexto(g, g.texto, true); save(); } go({name:"grafico", id:g.id}); };
   V.append(
     volver("Patrones", {name:"patrones"}),
@@ -1664,6 +1709,37 @@ function contadorUI(label, get, set, objetivo){
   return box;
 }
 // Los puntos de una vuelta dibujados en grande, para ir tocando por dónde vas
+// El gráfico del patrón tal como va: las vueltas hechas y la de ahora resaltada.
+// Con «rep» (modo sofá) se ve solo hasta la vuelta exacta en la que está, dentro de un paso de varias vueltas.
+function graficoEnCurso(p, pr, rep=null){
+  const n = p.pasos.length, terminado = pr.paso>=n;
+  const graf = graficoDePatron(p);
+  const filasCon = graf ? graf.celdas.map((f,i)=>hayPunto(f)?i:-1).filter(i=>i>=0) : [];
+  let cuentas = p.pasos.map(t=>lineaAFilas(t).length);
+  if(cuentas.reduce((x,y)=>x+y,0)!==filasCon.length) cuentas = p.pasos.map((t,i)=>i<filasCon.length?1:0);
+  const desde = cuentas.slice(0, Math.min(pr.paso,n)).reduce((x,y)=>x+y,0);
+  let hasta = terminado ? filasCon.length : desde + (cuentas[pr.paso]||0);
+  let ahora = terminado ? [] : filasCon.slice(desde, hasta);
+  if(rep!=null && ahora.length){ const i = Math.min(rep, ahora.length-1); ahora = [ahora[i]]; hasta = desde+i+1; }
+  const visibles = new Set(filasCon.slice(0, Math.max(hasta,1)));
+  const grafOk = filasCon.length>0;
+  const ultimaVisible = Math.max(...visibles, 0);
+  const parcial = grafOk ? {...graf, celdas: graf.celdas.slice(0, ultimaVisible+1).map((f,i)=>visibles.has(i) ? f : f.map(()=>""))} : null;
+  return {graf, parcial, ahora, grafOk};
+}
+// Cuántos símbolos de la vuelta están ya hechos según los puntos contados. Un aumento son 2 puntos, por eso no
+// basta con contar símbolos. Si la cuenta del patrón no cuadra con los símbolos, se reparte en proporción.
+function simbolosHechos(fila, puntos, objetivo){
+  const ks = fila.map(pk).filter(Boolean);
+  const anchos = ks.map(k=>anchoDe(k)), total = anchos.reduce((a,b)=>a+b,0);
+  if(!ks.length) return 0;
+  if(!total) return Math.min(ks.length, puntos);
+  const llevo = objetivo ? puntos*total/objetivo : puntos;
+  let suma = 0, hechos = 0;
+  // Una cadeneta de subida (no cuenta como punto) se da por hecha en cuanto se teje el punto siguiente
+  for(const a of anchos){ if(a ? suma + a <= llevo + 1e-9 : llevo > suma + 1e-9){ suma += a; hechos++; } else break; }
+  return hechos;
+}
 function tiraDePuntos(fila, marca, alTocar){
   const ks = fila.map(pk).filter(Boolean);
   const box = h("div",{class:"tira", role:"group", "aria-label":"Puntos de esta vuelta"});
@@ -1686,17 +1762,7 @@ VISTAS.tejer = V => {
   const fila = filasPaso[0] || [];
   const objetivo = terminado ? 0 : objetivoDe(texto);
   // Gráfico que va creciendo: se ven las vueltas hechas y la de ahora resaltada
-  const graf = graficoDePatron(p);
-  const filasCon = graf ? graf.celdas.map((f,i)=>hayPunto(f)?i:-1).filter(i=>i>=0) : [];
-  let cuentas = p.pasos.map(t=>lineaAFilas(t).length);
-  if(cuentas.reduce((x,y)=>x+y,0)!==filasCon.length) cuentas = p.pasos.map((t,i)=>i<filasCon.length?1:0);
-  const desde = cuentas.slice(0, Math.min(pr.paso,n)).reduce((x,y)=>x+y,0);
-  const hasta = terminado ? filasCon.length : desde + (cuentas[pr.paso]||0);
-  const visibles = new Set(filasCon.slice(0, Math.max(hasta,1)));
-  const ahora = terminado ? [] : filasCon.slice(desde, hasta);
-  const grafOk = filasCon.length>0;
-  const ultimaVisible = Math.max(...visibles, 0);
-  const parcial = grafOk ? {...graf, celdas: graf.celdas.slice(0, ultimaVisible+1).map((f,i)=>visibles.has(i) ? f : f.map(()=>""))} : null;
+  const {parcial, ahora, grafOk} = graficoEnCurso(p, pr);
   const grafWrap = h("div",{class:"gridwrap tejergraf", style:"cursor:default"});
   const pintarGraf = ()=>{ grafWrap.replaceChildren(dibujarGrafico(parcial, {ancho:(grafWrap.clientWidth||340)-20, resaltar:ahora, minZ:26, minStep:30, colorHL:true}).svg); const hl=grafWrap.querySelector(".hl"); if(hl) hl.scrollIntoView({block:"nearest", inline:"center"}); };
   if(grafOk) requestAnimationFrame(pintarGraf);
@@ -1841,6 +1907,11 @@ VISTAS.sofa = V => {
   const txt = h("div",{class:"sofa-txt"});
   const despues = h("p",{class:"sofa-desp muted"});
   const apunte = h("p",{class:"sofa-apunte", hidden:true});
+  // El dibujo de la vuelta: con el móvil de pie, una tira con sus puntos; tumbado o en el ordenador, el gráfico
+  // entero. Lo que se va contando se marca en verde y el punto que toca, con un borde.
+  const grafSofa = h("div",{class:"sofa-graf"});
+  const tiraSofa = h("div",{class:"sofa-tira", "aria-hidden":"true"});
+  const dibujo = h("div",{class:"sofa-dibujo", hidden:true}, grafSofa, tiraSofa);
   const barra = h("i",{});
   const flash = h("div",{class:"sofa-flash", hidden:true, role:"status"});
   const tEl = h("span",{class:"sofa-t"});
@@ -1858,6 +1929,8 @@ VISTAS.sofa = V => {
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
     let z = Math.round(rem*1.6); txt.style.fontSize = z+"px";
     while(txt.scrollHeight > txt.clientHeight+1 && z > 17){ z--; txt.style.fontSize = z+"px"; }
+    // Si aun así el paso no cabe, manda el texto: el dibujo se quita en esta pantalla
+    if(txt.scrollHeight > txt.clientHeight+1 && !dibujo.hidden){ dibujo.hidden = true; ajustarTexto(); }
   }
   function pintar(){
     const info = infoPaso(p.pasos[pr.paso]);
@@ -1898,7 +1971,29 @@ VISTAS.sofa = V => {
     }
     btnDeshacer.disabled = !sofaHist.length;
     tEl.textContent = tiempoTxt(pr.tiempo);
-    requestAnimationFrame(ajustarTexto);
+    requestAnimationFrame(()=>{ pintarDibujo(); ajustarTexto(); });
+  }
+  function pintarDibujo(){
+    const info = infoPaso(p.pasos[pr.paso]);
+    const ge = graficoEnCurso(p, pr, pr.rep);
+    const filaGraf = ge.grafOk && ge.ahora.length ? ge.graf.celdas[ge.ahora[0]] : null;
+    const filasTexto = lineaAFilas(p.pasos[pr.paso]);
+    const fila = filaGraf || filasTexto[Math.min(pr.rep, filasTexto.length-1)] || [];
+    const hechos = info.modo==="puntos" ? simbolosHechos(fila, pr.puntos, info.objetivo) : 0;
+    const marcar = info.modo==="puntos" && filaGraf ? {fila:ge.ahora[0], hechos} : null;
+    // Tira de puntos de la vuelta
+    const ks = fila.map(pk).filter(Boolean);
+    tiraSofa.replaceChildren(...ks.map((k,i)=>h("span",{class:"pt"+(info.modo==="puntos" ? (i<hechos?" hecho":i===hechos?" siguiente":"") : "")}, iconoSimbolo(k, 26))));
+    // Gráfico entero (solo se ve con la pantalla tumbada o ancha)
+    dibujo.hidden = !ks.length && !ge.grafOk;
+    dibujo.classList.toggle("con-graf", ge.grafOk);
+    const sig = tiraSofa.querySelector(".siguiente") || tiraSofa.lastElementChild;
+    if(sig) tiraSofa.scrollLeft = Math.max(0, sig.offsetLeft - tiraSofa.offsetLeft - tiraSofa.clientWidth/2);
+    if(ge.grafOk && grafSofa.offsetParent){
+      const svg = dibujarGrafico(ge.parcial, {ancho:Math.max(200, grafSofa.clientWidth-12), resaltar:ge.ahora, minZ:20, minStep:18, colorHL:true, marcar}).svg;
+      svg.style.cursor = "default"; grafSofa.replaceChildren(svg);
+      const hl = grafSofa.querySelector(".hl"); if(hl) hl.scrollIntoView({block:"nearest", inline:"nearest"});
+    } else grafSofa.replaceChildren();
   }
   // Toda acción guarda cómo estaba antes, para poder deshacer
   function accion(fn){
@@ -1917,7 +2012,7 @@ VISTAS.sofa = V => {
     const f = sofaHist.pop(); if(!f) return;
     sofaVolver(pr, f); save(); vibrar(25); flash.hidden=true; pintar();
   }
-  sofaTeclas = {tocar, deshacer, ajustar:ajustarTexto};
+  sofaTeclas = {tocar, deshacer, ajustar:()=>{ pintarDibujo(); ajustarTexto(); }};
 
   // El tiempo cuenta solo mientras teje: se para si pasan 10 minutos sin tocar nada
   let k = 0;
@@ -1964,7 +2059,7 @@ VISTAS.sofa = V => {
       h("div",{class:"prog"}, barra),
       h("div",{class:"sofa-eye"}, eyebrow,
         puedeHablar() ? h("button",{class:"ghost sofa-voz", "aria-label":"Leer el paso en voz alta", onclick:()=>leerEnVoz(p.pasos[pr.paso])}, icono("altavoz",20), h("span",{},"Oír")) : null),
-      txt, apunte, despues,
+      txt, dibujo, apunte, despues,
       h("div",{class:"sofa-acc"}, btnDeshacer, btnLista),
       flash),
     big));
@@ -2016,6 +2111,9 @@ VISTAS.editar = V => {
     volver("Volver sin guardar", existente?{name:"patron",id:existente.id}:{name:"patrones"}),
     h("div",{class:"stack", style:"margin-top:.4rem"},
       h("h1",{}, existente ? "Cambiar mi patrón" : "Escribir un patrón"),
+      existente ? null : h("div",{class:"note stack", style:"gap:.5rem"},
+        h("p",{},"¿Prefieres dibujarlo? Pon los puntos en un gráfico y la app escribe los pasos por ti."),
+        h("button",{class:"teal big", onclick:()=>{ const g = nuevoGrafico({nombre: f.titulo.value.trim() || "Mi patrón"}); go({name:"grafico", id:g.id, paraPatron:true}); }}, icono("rejilla",22), "Dibujarlo en un gráfico")),
       h("label",{class:"f"},"Nombre", f.titulo),
       h("label",{class:"f"},"Descripción", f.descripcion),
       h("div",{class:"two"}, h("label",{class:"f"},"Hilo", f.hilo), h("label",{class:"f"},"Ganchillo", f.ganchillo)),
@@ -2086,6 +2184,60 @@ function traducirIngles(linea, uk){
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 const RX_VUELTA = /^(?:vueltas?|v|rnds?|rounds?|rows?|r|filas?)\s*\d+/i;
+
+// ---------- Patrones en ruso ----------
+// Abreviaturas rusas de ganchillo: сбн (столбик без накида) = punto bajo, ссн/с1н = punto alto, пссн = medio alto,
+// с2н = alto doble, вп = cadeneta, сс = punto deslizado, пр = aumento, уб = disminución, КА = anillo mágico.
+// Las palabras rusas no valen con \b, así que los límites se marcan a mano.
+const RU_L = "(?<![а-яёa-z])", RU_R = "(?![а-яёa-z])";
+const ru = (patron, flags="giu") => new RegExp(RU_L+"(?:"+patron+")"+RU_R, flags);
+function esRuso(texto){
+  return (texto.match(ru("сбн|ссн|с1н|с2н|пссн|вп|пр|уб|ряд|ряды|круг|петл[а-яё]*|прибав[а-яё]*|убав[а-яё]*|ка")) || []).length >= 2;
+}
+function traducirRuso(linea){
+  let t = " "+linea+" ";
+  t = t.replace(/(\d)(?=[а-яё])/giu, "$1 ")                                                        // 6сбн → 6 сбн
+       .replace(/[\[(]([^\])]*[а-яё][^\])]*)[\])]\s*(?:[xх×*]\s*(\d+)|(\d+)\s*раз[а]?)/giu, "*$1* repetir $2$3 veces") // (сбн, пр) х 6
+       .replace(/\*([^*]+?)\*\s*[xх×]\s*(\d+)/giu, "*$1* repetir $2 veces");
+  // Número de vuelta: «1 ряд:», «1р:», «Ряд 1.», «2-5 ряды», «3 круг»
+  t = t.replace(/^\s*(\d+)\s*[-–]\s*(\d+)\s*(?:рядах|ряды|ряд|круги|круг|р)\.?\s*[:.)]?/iu, "Vueltas $1 a $2:")
+       .replace(/^\s*(?:ряды|круги)\s*(\d+)\s*[-–]\s*(\d+)\s*[:.)]?/iu, "Vueltas $1 a $2:")
+       .replace(/^\s*(\d+)\s*(?:ряд|круг|р)\.?\s*[:.)]?/iu, "Vuelta $1:")
+       .replace(/^\s*(?:ряд|круг|р)\.?\s*(\d+)\s*[:.)]?/iu, "Vuelta $1:");
+  const P = [
+    ["пссн|полустолбик[а-яё]* с накидом", "mpa"], ["с2н|столбик[а-яё]* с двумя накидами", "pad"],
+    ["ссн|с1н|столбик[а-яё]* с накидом", "pa"], ["сбн|столбик[а-яё]* без накида", "pb"],
+    ["вп|возд\\.?\\s*п[а-яё]*|воздушн[а-яё]* петл[а-яё]*", "cad"], ["сс|соед[а-яё]*\\.?\\s*ст[а-яё]*", "pd"],
+    ["пр|прибав[а-яё]*", "aum"], ["уб|убав[а-яё]*", "dism"], ["ка|кольц[а-яё]* амигуруми|волшебн[а-яё]* кольц[а-яё]*", "anillo mágico"],
+    ["в каждую петлю|в каждый столбик|в каждую|в каждый", "en cada punto"], ["по кругу", "alrededor"],
+    ["закрепить нить|закрепить|закрепляем нить|закрепляем", "corta el hilo"], ["набить|набиваем|набивка", "rellena"],
+    ["повторить|повторяем|повтор", "repetir"], ["раз|раза", "veces"], ["петель|петли|петля|петлю|п\\.", "puntos"],
+    ["за заднюю стенку|за задн[а-яё]* полупетл[а-яё]*", "por la hebra de atrás"], ["за переднюю стенку|за передн[а-яё]* полупетл[а-яё]*", "por la hebra de delante"],
+    ["в", "en"], ["и", "y"]
+  ];
+  for(const [rx, es] of P) t = t.replace(ru(rx), es);
+  t = t.replace(/\s+/g, " ").trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+// El color de la lana del patrón: se busca en las líneas de materiales y se pasa a un color para la ficha
+const COLORES_LANA = [
+  [/\b(rojo|roja|red)\b|красн/iu, "rojo", "#C0392B"], [/\b(fucsia|fuchsia|magenta)\b|фукси|малинов/iu, "fucsia", "#C2185B"],
+  [/\b(rosa|pink)\b|розов/iu, "rosa", "#E07AA8"], [/\b(naranja|orange)\b|оранжев/iu, "naranja", "#E67E22"],
+  [/\b(amarill[oa]|mostaza|yellow|mustard)\b|ж[её]лт|горчичн/iu, "amarillo", "#E1B12C"], [/\b(verde|green|mint|menta)\b|зел[её]н|мятн/iu, "verde", "#2E8B57"],
+  [/\b(turquesa|turquoise|teal)\b|бирюз/iu, "turquesa", "#1A9E8F"], [/\b(celeste|azul claro|light blue|sky blue)\b|голуб/iu, "celeste", "#7FB3E0"],
+  [/\b(azul|blue|navy|marino)\b|син(?:ий|его|яя|ей)/iu, "azul", "#2C6FB7"], [/\b(morad[oa]|lila|violeta|lilac|purple|lavender|lavanda)\b|фиолет|сирен|лаванд/iu, "lila", "#8E44AD"],
+  [/\b(marr[oó]n|chocolate|brown|camel)\b|коричн|шоколад/iu, "marrón", "#8B5A2B"], [/\b(beige|arena|sand|tan)\b|бежев|песочн/iu, "beige", "#C8A97E"],
+  [/\b(crudo|natural|cream|crema|ecru)\b|молочн|кремов/iu, "crudo", "#D9C9A3"], [/\b(gris|grey|gray)\b|сер(?:ый|ого|ая)/iu, "gris", "#8A9594"],
+  [/\b(negr[oa]|black)\b|ч[её]рн/iu, "negro", "#2B2B2B"], [/\b(blanc[oa]|white)\b|бел(?:ый|ого|ая)/iu, "blanco", "#E8E4DC"]
+];
+function lanaDelTexto(lineas){
+  const linea = lineas.find(l => /^(lana|hilo|hilado|yarn|color|colour|пряжа|нитки|цвет)\b|^(lana|hilo|yarn|пряжа)\s*[:(-]/iu.test(l.trim()))
+             || lineas.find(l => /\b(lana|hilo|yarn)\b|пряж/iu.test(l) && COLORES_LANA.some(([rx])=>rx.test(l)));
+  if(!linea) return {hilo:"", color:null};
+  const hilo = linea.replace(/^[^:]{0,20}:\s*/, "").replace(/[,;.]?\s*(ganchillo|aguja|hook|крючок).*$/iu, "").trim().slice(0, 80);
+  const c = COLORES_LANA.find(([rx])=>rx.test(linea));
+  return {hilo, color: c ? {nombre:c[1], hex:c[2]} : null};
+}
 function limpiarPegado(texto){
   let t = (texto||"").replace(/\r/g, "").replace(/ /g, " ").replace(/[•●▪◦]\s*/g, "").replace(/[ \t]+/g, " ");
   // Separa las vueltas que vienen pegadas en un mismo párrafo
@@ -2093,7 +2245,7 @@ function limpiarPegado(texto){
   const lineas = [];
   for(let l of t.split("\n")){
     l = l.trim();
-    if(!l || /^[\W_]+$/.test(l) || /^(https?:\/\/|www\.)/i.test(l) || /^(©|copyright|p[aá]g(ina)?\.? ?\d+$|page \d+$)/i.test(l)) continue;
+    if(!l || /^[^\p{L}\p{N}]+$/u.test(l) || /^(https?:\/\/|www\.)/i.test(l) || /^(©|copyright|p[aá]g(ina)?\.? ?\d+$|page \d+$)/i.test(l)) continue;
     const prev = lineas[lineas.length-1];
     if(prev && (/^[a-záéíóúñ(]/.test(l) || /[,;]$/.test(prev)) && !RX_VUELTA.test(l)) lineas[lineas.length-1] = prev+" "+l; // línea cortada
     else lineas.push(l);
@@ -2113,26 +2265,31 @@ function revisarLinea(t){
   if(/^[^a-z]*(vueltas?\s*[\d\sa]+:)?\s*\d+\s*cad/i.test(t) && Math.abs(n-info.objetivo)<=2) return {estado:"ok", n:info.objetivo};
   return {estado:"distinto", n, obj:info.objetivo};
 }
-function importarTexto(texto, uk){
-  const ingles = esIngles(texto);
+function importarTexto(texto, uk, soloVueltas=false){
+  const rus = esRuso(texto);
+  const ingles = !rus && esIngles(texto);
   if(uk==null) uk = ingles && esUK(texto);
   const originales = limpiarPegado(texto);
-  const lineas = originales.map(l => ingles ? traducirIngles(l, uk) : l);
+  const lineas = originales.map(l => rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : l);
   // La primera línea corta y sin números es el título, aunque nombre puntos («Bufanda de punto bajo»)
   const conTitulo = originales.length>1 && originales[0].length<=60 && !/\d|:/.test(originales[0]) && !/^(haz|teje|monta|make|chain|start)\b/i.test(originales[0]);
   const desde = conTitulo ? 1 : 0;
   let primero = lineas.slice(desde).findIndex(esPaso); if(primero>=0) primero += desde;
   const antes = primero<0 ? originales : originales.slice(0, primero); // título y materiales, sin traducir
-  const pasos = primero<0 ? [] : lineas.slice(primero);
+  let pasos = primero<0 ? [] : lineas.slice(primero), apartadas = [];
+  // «Solo las vueltas»: se quedan las líneas que empiezan por «Vuelta N»; lo demás va a las notas, no se pierde
+  if(soloVueltas && pasos.some(l=>RX_VUELTA.test(l))){ apartadas = pasos.filter(l=>!RX_VUELTA.test(l)); pasos = pasos.filter(l=>RX_VUELTA.test(l)); }
   const tituloLinea = conTitulo ? originales[0] : antes.find(l => l.length<=60 && !/\d\s*mm|:/.test(l));
   // El grosor del ganchillo: mejor el que va junto a «ganchillo» o «hook» que el de la lana
-  const gan = texto.match(/(?:ganchillo|aguja|hook|crochet)[^\n\d]{0,25}(\d+(?:[.,]\d+)?)\s*mm\b/i) || texto.match(/(\d+(?:[.,]\d+)?)\s*mm\b[^\n]{0,4}(?:ganchillo|hook)?/i);
+  const gan = texto.match(/(?:ganchillo|aguja|hook|crochet|крючок)[^\n\d]{0,25}(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])/iu) || texto.match(/(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])[^\n]{0,4}(?:ganchillo|hook)?/iu);
+  const lana = lanaDelTexto(antes.length ? antes : originales);
   return {
-    ingles, uk, pasos,
+    ingles, ruso:rus, uk, pasos, apartadas,
     revision: pasos.map(revisarLinea),
     titulo: tituloLinea || "",
     ganchillo: gan ? gan[1].replace(".", ",")+" mm" : "",
-    notas: antes.filter(l => l!==tituloLinea).join("\n")
+    hilo: lana.hilo, colorLana: lana.color,
+    notas: [antes.filter(l => l!==tituloLinea).join("\n"), apartadas.length ? "Otras líneas del patrón:\n"+apartadas.join("\n") : ""].filter(Boolean).join("\n\n")
   };
 }
 
@@ -2225,7 +2382,7 @@ function arreglarLectura(t){
 }
 const AYUDA_FOTO = "Otra forma: en muchos móviles puedes abrir la foto, mantener el dedo sobre el texto, copiarlo y pegarlo aquí.";
 
-let importarBorrador = "", importarUK = null;
+let importarBorrador = "", importarUK = null, importarSoloVueltas = true;
 VISTAS.importar = V => {
   const area = h("textarea",{id:"im-texto", style:"min-height:12rem", placeholder:"Rnd 1: 6 sc in magic ring (6)\nRnd 2: 2 sc in each st (12)\n\no en español:\nVuelta 1: 6 pb en el anillo (6)", oninput:e=>{ importarBorrador=e.target.value; }}, importarBorrador);
   const res = h("div",{class:"stack", "aria-live":"polite"});
@@ -2239,18 +2396,20 @@ VISTAS.importar = V => {
   function leer(){
     importarBorrador = area.value;
     if(!area.value.trim()){ res.replaceChildren(h("div",{class:"empty"}, h("p",{},"Pega aquí el patrón: copia el texto de la web o del PDF y mantén el dedo en el recuadro para pegarlo."))); return; }
-    const r = importarTexto(area.value, importarUK);
+    const r = importarTexto(area.value, importarUK, importarSoloVueltas);
     if(!r.pasos.length){ res.replaceChildren(h("div",{class:"empty"}, h("h3",{},"No he encontrado instrucciones"), h("p",{class:"muted"},"¿Has pegado el patrón entero? Busca las líneas que empiezan por «Vuelta» o «Round»."))); return; }
     const nombre = h("input",{type:"text", id:"im-nombre", value:r.titulo, placeholder:"Ponle un nombre"});
     const gan = h("input",{type:"text", id:"im-gan", value:r.ganchillo, placeholder:"Ej.: 4 mm"});
+    const hilo = h("input",{type:"text", id:"im-hilo", value:r.hilo, placeholder:"Ej.: algodón rosa"});
+    const hayVueltas = importarTexto(area.value, importarUK, false).pasos.some(l=>RX_VUELTA.test(l));
     const cuenta = k => r.revision.filter(x=>x.estado===k).length;
     const revisar = cuenta("distinto")+cuenta("duda");
     const err = h("p",{style:"color:var(--danger);font-weight:700", hidden:true});
     const guardar = (yTejer)=>{
       const titulo = nombre.value.trim();
       if(!titulo){ err.textContent="Ponle un nombre al patrón."; err.hidden=false; nombre.focus(); return; }
-      const p = {id:"m-"+Date.now(), titulo, descripcion:"Importado"+(r.ingles?" del inglés":"")+".", nivel:"", hilo:"", ganchillo:gan.value.trim(), notas:r.notas, pasos:r.pasos, color:COLORES[state.patrones.length % COLORES.length], original:area.value};
-      state.patrones.unshift(p); save(); importarBorrador=""; importarUK=null;
+      const p = {id:"m-"+Date.now(), titulo, descripcion:"Importado"+(r.ingles?" del inglés":r.ruso?" del ruso":"")+".", nivel:"", hilo:hilo.value.trim(), ganchillo:gan.value.trim(), notas:r.notas, pasos:r.pasos, color:r.colorLana ? r.colorLana.hex : COLORES[state.patrones.length % COLORES.length], original:area.value};
+      state.patrones.unshift(p); save(); importarBorrador=""; importarUK=null; importarSoloVueltas=true;
       toast("Patrón guardado");
       if(yTejer) tejer(p.id); else go({name:"patron", id:p.id});
     };
@@ -2259,8 +2418,12 @@ VISTAS.importar = V => {
         h("p",{},"Está en inglés y lo he pasado a español. Elige de dónde es el patrón:"),
         h("div",{class:"seg", role:"group"}, [["us","EE. UU."],["uk","Reino Unido"]].map(([k,l])=>h("button",{class:(r.uk?"uk":"us")===k?"sel":"", "aria-pressed":String((r.uk?"uk":"us")===k), onclick:()=>{ importarUK = k==="uk"; leer(); }}, l))),
         h("p",{class:"muted", style:"font-size:.88rem"},"Cambia el nombre de los puntos: en el Reino Unido «dc» es punto bajo y «tr» es punto alto.")) : null,
+      r.ruso ? h("div",{class:"note"},"Está en ruso y lo he pasado a español. Revisa que los puntos estén bien.") : null,
+      hayVueltas ? h("label",{class:"checkline"}, h("input",{type:"checkbox", id:"im-solo", checked:importarSoloVueltas, onchange:e=>{ importarSoloVueltas=e.target.checked; leer(); }}),
+        h("span",{}, "Solo las vueltas («Vuelta 1», «Vuelta 2»…)", r.apartadas.length ? h("small",{}, r.apartadas.length===1 ? "1 línea más va a las notas." : r.apartadas.length+" líneas más van a las notas.") : null)) : null,
       h("div",{class:"row"}, h("span",{class:"chip go"}, r.pasos.length+" pasos"), cuenta("cuadra") ? h("span",{class:"chip ok"}, cuenta("cuadra")+" cuadran") : null, revisar ? h("span",{class:"chip mine"}, revisar+" para revisar") : null),
       h("div",{class:"two"}, h("label",{class:"f"},"Nombre", nombre), h("label",{class:"f"},"Ganchillo", gan)),
+      h("label",{class:"f"}, "Lana", r.colorLana ? h("small",{class:"color-lana"}, h("i",{style:"background:"+r.colorLana.hex}), "Color de la lana: "+r.colorLana.nombre+". La ficha del patrón irá de este color.") : null, hilo),
       h("ol",{class:"steps importados"}, r.pasos.map((t,i)=>{ const [cls,msg] = ESTADOS[r.revision[i].estado](r.revision[i]);
         return h("li",{}, h("b",{},String(i+1)), h("span",{}, t, h("small",{class:"rev "+cls}, msg))); })),
       r.notas ? h("details",{class:"panel"}, h("summary",{},"Materiales y notas"), h("p",{style:"white-space:pre-line"}, r.notas)) : null,
@@ -2317,7 +2480,7 @@ VISTAS.importar = V => {
   const opcion = (cls, ic, titulo, sub, fn) => { const b = h("button",{class:"action "+cls, onclick:fn}, h("span",{class:"ic"}, icono(ic)), h("span",{}, titulo, h("br"), h("small",{}, sub))); botones.push(b); return b; };
   V.append(
     volver("Patrones", {name:"patrones"}),
-    h("div",{class:"page-title"}, h("h1",{},"Añadir un patrón"), h("p",{class:"muted"},"Tráelo de un PDF, de una foto o pegando el texto. Lo separo en pasos y te aviso de lo que no cuadra. Entiende español e inglés.")),
+    h("div",{class:"page-title"}, h("h1",{},"Añadir un patrón"), h("p",{class:"muted"},"Tráelo de un PDF, de una foto o pegando el texto. Lo separo en pasos y te aviso de lo que no cuadra. Entiende español, inglés y ruso.")),
     h("div",{class:"section"},
       estado,
       h("div",{class:"actions"},
@@ -2471,9 +2634,15 @@ VISTAS.grafico = V => {
   pintarSegs();
   let nomT;
   V.append(
-    h("div",{class:"row", style:"justify-content:space-between;margin-top:.6rem"},
-      h("button",{class:"ghost", onclick:()=>go({name:"graficos"})},"← Gráficos"),
-      h("button",{class:"primary", onclick:()=>{ const p=patronDesdeGrafico(g); if(!p){ toast("Dibuja algún punto primero"); return; } toast("Listo para tejer"); tejer(p.id); }}, "Tejer este gráfico")),
+    view.paraPatron
+      // Viene de «Escribir un patrón → Dibujarlo»: lo importante es guardarlo como patrón
+      ? h("div",{class:"row", style:"justify-content:space-between;margin-top:.6rem"},
+          h("button",{class:"ghost", onclick:()=>atras({name:"editar"})},"← Volver"),
+          h("button",{class:"primary", onclick:()=>{ const p=patronDesdeGrafico(g); if(!p){ toast("Dibuja algún punto primero"); return; } toast("Patrón creado"); go({name:"patron", id:p.id}); }}, icono("libro",20), "Guardar como patrón"))
+      : h("div",{class:"row", style:"justify-content:space-between;margin-top:.6rem"},
+          h("button",{class:"ghost", onclick:()=>go({name:"graficos"})},"← Gráficos"),
+          h("button",{class:"primary", onclick:()=>{ const p=patronDesdeGrafico(g); if(!p){ toast("Dibuja algún punto primero"); return; } toast("Listo para tejer"); tejer(p.id); }}, "Tejer este gráfico")),
+    ...(view.paraPatron ? [h("p",{class:"note", style:"margin-top:.5rem"},"Elige un punto y toca las casillas para ponerlo. Cada fila es una vuelta. Cuando acabes, toca «Guardar como patrón».")] : []),
     h("div",{class:"stack", style:"margin-top:.2rem;gap:.8rem"},
       h("input",{type:"text", class:"titleinput", id:"gr-nombre", value:g.nombre||"", "aria-label":"Nombre del gráfico", oninput:e=>{ g.nombre=e.target.value; clearTimeout(nomT); nomT=setTimeout(save,600); }}),
       segs,

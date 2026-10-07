@@ -197,3 +197,22 @@ Capturas en `tests/capturas/`.
   la lista de pasos del patrón y las tablas de Abreviaturas y Herramientas, que ahora se pueden mover con teclado.
 - Un patrón recibido por enlace no se guarda dos veces aunque se toque «Guardar» otra vez.
 - Tests: 46/46.
+
+## 2026-10-07 · Dibujo en el modo sofá, gráfico y foto, dibujar un patrón, importar del ruso
+
+- Modo sofá: el dibujo de la vuelta se va marcando al tocar (en verde lo hecho, con borde el punto que toca).
+  Con el móvil de pie, una tira con los puntos de la vuelta; tumbado o en el ordenador, el gráfico entero con la
+  vuelta marcada. Un aumento cuenta 2 puntos (`simbolosHechos`). Si el texto del paso no cabe, manda el texto y el
+  dibujo se quita en esa pantalla. Gráficos en filas y en redondo (`marcar` en `dibujarFilas`/`dibujarRedondo`);
+  `graficoEnCurso` sale de la vista completa y lo usan las dos.
+- Patrón: arriba, el gráfico («Ver el gráfico») y al lado la foto de tu creación o el hueco «Añadir foto».
+- Escribir un patrón: «Dibujarlo en un gráfico» abre un gráfico nuevo con el nombre puesto y el botón
+  «Guardar como patrón».
+- Importar:
+  - Patrones en ruso (сбн, ссн, пссн, с2н, вп, сс, пр, уб, КА, «1 ряд», «4-6 ряды», «(сбн, пр) х 6»…).
+  - Lana y color: de la línea «Lana/Hilo/Yarn/Пряжа» se coge la lana (nuevo campo al revisar) y su color, que pasa
+    a ser el color de la ficha.
+  - «Solo las vueltas» (marcado por defecto): se quedan las líneas «Vuelta N»; lo demás va a las notas
+    («Otras líneas del patrón»), no se pierde. Se puede desmarcar.
+  - Arreglo: una línea solo con letras rusas se tiraba como si fuera adorno.
+- Tests: 4 nuevos y 2 adaptados a «Solo las vueltas». 50/50. Accesibilidad (axe) sin avisos.
