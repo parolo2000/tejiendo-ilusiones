@@ -1051,6 +1051,26 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  await prueba("cada punto del gráfico sale del color de su lana, también dentro de una vuelta", async () => {
+    const page = await nuevaPagina(browser);
+    const filas = await page.evaluate(() => {
+      const p = { id: "m-col", titulo: "Pingüino", color: "#8A9594", pasos: ["Parte: CUERPO · con gris", "Vuelta 1: 18 cad, 1 pd en la primera cad (18)",
+        "Vuelta 2: 2 cad, 3 pa, con blanco: 10 pa, con gris: 5 pa, 1 pd en el primer pa (18)", "Parte: PIES (hacer 2) · con anaranjado", "Vuelta 1: 6 pb en anillo mágico (6)"] };
+      state.patrones.unshift(p);
+      const cuerpo = graficoEnCurso(p, { paso: 1, rep: 0 }).graf.celdas.map(f => f.filter(v => pk(v)).map(pcol));
+      const pies = graficoEnCurso(p, { paso: 4, rep: 0 }).graf.celdas.map(f => f.filter(v => pk(v)).map(pcol));
+      const sinColores = graficoDePatron({ id: "m-x", pasos: ["Vuelta 1: 6 pb en anillo mágico (6)"] }).celdas.flat().filter(v => pk(v)).map(pcol);
+      return { cuerpo, pies, sinColores };
+    });
+    const GRIS = 8, BLANCO = 9, NARANJA = 1;
+    assert.ok(filas.cuerpo[0].every(c => c === GRIS));
+    assert.deepEqual(filas.cuerpo[1], [...Array(5).fill(GRIS), ...Array(10).fill(BLANCO), ...Array(6).fill(GRIS)], "2 cad y 3 pa grises, 10 blancos, 5 pa y el pd grises");
+    assert.ok(filas.pies.flat().every(c => c === NARANJA), "los pies, naranjas");
+    assert.ok(filas.sinColores.every(c => c === -1), "si el patrón no dice colores, no se pinta nada");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);

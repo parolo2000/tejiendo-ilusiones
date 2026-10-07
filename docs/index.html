@@ -356,9 +356,10 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
 .sofa-graf{display:none}
 .sofa-tira{display:flex;gap:.3rem;overflow-x:auto;padding:.15rem .1rem;scrollbar-width:none}
 .sofa-tira .pt{flex:none;display:grid;place-items:center;width:2.3rem;height:2.3rem;border-radius:.55rem;background:var(--surface);border:1px solid var(--line);color:var(--fg)}
+.sofa-tira .pt[style*="--lana"]{box-shadow:inset 0 -6px 0 var(--lana)}
 .sofa-tira .pt.hecho{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
 .sofa-tira .pt.siguiente{border:2px solid var(--accent);color:var(--accent)}
-.chart .marca.hecho{fill:var(--ok-soft)}
+.chart .marca.hecho{fill:var(--ok-soft);fill-opacity:.5;stroke:var(--ok);stroke-width:2}
 .chart .marca.siguiente{fill:none;stroke:var(--accent);stroke-width:2.5}
 .chart g.hecho{color:var(--ok)}
 .chart g.siguiente{color:var(--accent)}
@@ -962,7 +963,7 @@ function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false
       const cell = s("rect",{x, y, width:z, height:z});
       if(exp){ cell.setAttribute("fill", r%2?EXP.alt:EXP.cell); cell.setAttribute("stroke", EXP.line); } else cell.setAttribute("class", r%2?"cell alt":"cell");
       svg.append(cell);
-      if(col>=0) svg.append(s("rect",{x:x+1.5, y:y+1.5, width:z-3, height:z-3, rx:3, fill:LANAS[col][0], "fill-opacity":.5}));
+      if(col>=0) svg.append(s("rect",{x:x+1.5, y:y+1.5, width:z-3, height:z-3, rx:3, fill:LANAS[col][0], "fill-opacity":.75, stroke:"#000", "stroke-opacity":.18, "stroke-width":.8}));
       if(estadoCol && estadoCol[c]) svg.append(s("rect",{x:x+2, y:y+2, width:z-4, height:z-4, rx:4, class:"marca "+estadoCol[c]}));
       if(pk(v)){ const sy = simbolo(pk(v), x, y, z, exp?EXP.ink:undefined); if(colorHL && esHL(r)) sy.classList.add("ahora"); if(estadoCol && estadoCol[c]) sy.classList.add(estadoCol[c]); svg.append(sy); }
     }
@@ -1040,7 +1041,7 @@ function celdaRedonda(v, px, py, rot, zz, parent, ink, ahora=false){
   const gg = s("g",{transform:`translate(${px.toFixed(1)} ${py.toFixed(1)}) rotate(${rot.toFixed(1)})`});
   if(ahora) gg.setAttribute("class","ahora");
   const c = pcol(v);
-  if(c>=0) gg.append(s("circle",{cx:0, cy:0, r:zz*.48, fill:LANAS[c][0], "fill-opacity":.55}));
+  if(c>=0) gg.append(s("circle",{cx:0, cy:0, r:zz*.48, fill:LANAS[c][0], "fill-opacity":.75, stroke:"#000", "stroke-opacity":.18, "stroke-width":.8}));
   if(pk(v)) gg.append(simbolo(pk(v), -zz/2, -zz/2, zz, ink));
   parent.append(gg);
 }
@@ -1055,7 +1056,7 @@ function parteDe(p, i){
   let fin = pasos.findIndex((t,k)=>k>m && esParte(t)); if(fin<0) fin = pasos.length;
   return {ini:m+1, fin, marca:m};
 }
-function subPatron(p, parte){ return {...p, id:p.id+"#"+parte.ini, pasos:p.pasos.slice(parte.ini, parte.fin), grafico:undefined}; }
+function subPatron(p, parte){ return {...p, id:p.id+"#"+parte.ini, pasos:p.pasos.slice(parte.ini, parte.fin), grafico:undefined, lanaInicial: parte.marca>=0 ? lanaEnPaso(p, parte.marca) : null}; }
 // La lana con la que se teje en el paso i: la de su parte o el último «Cambia a la lana …»
 function lanaEnPaso(p, i){
   for(let k=Math.min(i, p.pasos.length-1); k>=0; k--){
@@ -1070,11 +1071,49 @@ function graficoDePatron(p){
   if(p.grafico){ const g = state.graficos.find(x=>x.id===p.grafico); if(g) return g; }
   const parte = parteDe(p, 0);
   if(parte) return parte.fin>parte.ini ? graficoDePatron(subPatron(p, parte)) : null;
-  if(miniCache[p.id] && miniCache[p.id].src===p.pasos.join("\n")) return miniCache[p.id].g;
+  const src = p.pasos.join("\n")+"|"+(p.lanaInicial ? p.lanaInicial.nombre : "");
+  if(miniCache[p.id] && miniCache[p.id].src===src) return miniCache[p.id].g;
   const g = {cols:10, celdas:[], vista:"filas"};
   const ok = graficoDesdeTexto(g, p.pasos.join("\n"), true);
-  miniCache[p.id] = {src:p.pasos.join("\n"), g: ok ? g : null};
+  if(ok) colorearGrafico(g, p.pasos, p.lanaInicial);
+  miniCache[p.id] = {src, g: ok ? g : null};
   return ok ? g : null;
+}
+// ---------- Puntos del color de su lana ----------
+// Del nombre de un color («gris», «anaranjado», «blanca») al color de lana del gráfico
+const LANA_DE = {rojo:0, fucsia:6, rosa:6, naranja:1, amarillo:2, verde:3, turquesa:12, celeste:12, azul:4, lila:5, "marrón":7, beige:13, crudo:13, gris:8, negro:10, blanco:9};
+function lanaIndice(nombre){ const c = COLORES_LANA.find(([rx])=>rx.test(nombre||"")); return c && LANA_DE[c[1]]!=null ? LANA_DE[c[1]] : -1; }
+// Trozos de una vuelta por color: «2 cad, 3 pa, con blanco: 10 pa, con gris: 3 pa» → gris 5, blanco 10, gris 3
+function trozosDeColor(t, actual){
+  const rx = /\bcon\s+(?:la\s+lana\s+|lana\s+|el\s+)?([\p{L}]{3,15})\s*:?/giu;
+  const cortes = [...t.matchAll(rx)].filter(m=>lanaIndice(m[1])>=0);
+  if(!cortes.length) return null;
+  const trozos = []; let desde = 0, col = actual;
+  for(const m of cortes){ trozos.push({col, txt:t.slice(desde, m.index)}); col = lanaIndice(m[1]); desde = m.index + m[0].length; }
+  trozos.push({col, txt:t.slice(desde)});
+  return trozos.map(x=>({col:x.col, n:((lineaAFilas("Vuelta 1: "+x.txt.replace(/^[^:]*vueltas?\s*\d+[^:]*:/i, ""))[0])||[]).filter(v=>pk(v)).length}));
+}
+// Pinta cada punto del gráfico con la lana con la que se teje. Solo si el patrón dice colores (partes con
+// «con gris», «Cambia a la lana …» o «con blanco: …» dentro de una vuelta); si no, el gráfico queda como estaba.
+function colorearGrafico(g, pasos, inicial){
+  let actual = inicial ? lanaIndice(inicial.nombre) : -1;
+  if(actual<0 && !pasos.some(t=>esCambioLana(t) || trozosDeColor(t, -1))) return;
+  const porLinea = pasos.map(t=>lineaAFilas(t).length), total = porLinea.reduce((a,b)=>a+b,0);
+  let fila = g.celdas.length===total+1 && soloAnillo(g.celdas[0]) ? 1 : 0; // anillo del centro puesto por el gráfico
+  if(fila) g.celdas[0] = g.celdas[0].map(v=>pk(v) && actual>=0 ? pk(v)+"@"+actual : v);
+  const pintar = (row, cols) => row.map((v,i)=>pk(v) && cols[i]>=0 ? pk(v)+"@"+cols[i] : v);
+  pasos.forEach((t,k)=>{
+    if(esCambioLana(t)){ const m = t.match(/^cambia a la lana (.+?)\.?$/i); const c = m ? lanaIndice(m[1]) : -1; if(c>=0) actual = c; return; }
+    const trozos = trozosDeColor(t, actual);
+    for(let r=0; r<porLinea[k]; r++){
+      const row = g.celdas[fila++]; if(!row) return;
+      const conPunto = row.map((v,i)=>pk(v)?i:-1).filter(i=>i>=0);
+      const cols = Array(row.length).fill(actual);
+      if(trozos && trozos.reduce((a,x)=>a+x.n,0)===conPunto.length){ let j=0; for(const x of trozos) for(let q=0;q<x.n;q++) cols[conPunto[j++]] = x.col; }
+      g.celdas[fila-1] = pintar(row, cols);
+    }
+    if(trozos) actual = trozos[trozos.length-1].col;
+  });
 }
 function miniatura(g, color){
   const box = h("div",{class:"thumb"});
@@ -2035,7 +2074,8 @@ VISTAS.sofa = V => {
     const marcar = info.modo==="puntos" && filaGraf ? {fila:ge.ahora[0], hechos} : null;
     // Tira de puntos de la vuelta
     const ks = fila.map(pk).filter(Boolean);
-    tiraSofa.replaceChildren(...ks.map((k,i)=>h("span",{class:"pt"+(info.modo==="puntos" ? (i<hechos?" hecho":i===hechos?" siguiente":"") : "")}, iconoSimbolo(k, 26))));
+    const colsFila = fila.filter(v=>pk(v)).map(pcol);
+    tiraSofa.replaceChildren(...ks.map((k,i)=>h("span",{class:"pt"+(info.modo==="puntos" ? (i<hechos?" hecho":i===hechos?" siguiente":"") : ""), style: colsFila[i]>=0 ? "--lana:"+LANAS[colsFila[i]][0] : ""}, iconoSimbolo(k, 26))));
     // Gráfico entero (solo se ve con la pantalla tumbada o ancha)
     dibujo.hidden = !ks.length && !ge.grafOk;
     dibujo.classList.toggle("con-graf", ge.grafOk);

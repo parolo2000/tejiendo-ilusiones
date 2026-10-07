@@ -232,3 +232,14 @@ Capturas en `tests/capturas/`.
 - Motor: «en el primer pa», «en el último punto»… son un sitio, no un punto (antes salía 1 de más).
 - Las notas del patrón respetan los saltos de línea.
 - Tests: 1 nuevo. 51/51.
+
+## 2026-10-07 · Puntos del color de su lana
+
+- En los gráficos sacados del texto, cada punto se pinta con la lana con la que se teje: la de su parte
+  («Parte: CUERPO · con gris»), la de un «Cambia a la lana …» y los cambios dentro de una vuelta
+  («3 pa, con blanco: 10 pa, con gris: 5 pa»). Si un trozo no cuadra con los puntos, la vuelta va entera del color
+  de antes. Si el patrón no habla de colores, el gráfico no cambia. (`colorearGrafico`, `trozosDeColor`,
+  `lanaIndice`; usa los colores de lana que ya tenían los gráficos, sin cambio de datos.)
+- El color se ve más (más opaco y con borde, para que el blanco no desaparezca) y lo hecho en el modo sofá se
+  marca con un borde verde sin tapar el color. En la tira del móvil, cada punto lleva una raya de su color.
+- Tests: 1 nuevo. 52/52.
