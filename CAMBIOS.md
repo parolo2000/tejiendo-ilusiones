@@ -189,3 +189,11 @@ Capturas en `tests/capturas/`.
   esté en claro. En Automáticos manda el móvil.
 - Tests: ahora todos abren la app desde un servidor local (con `file://` Chromium a veces perdía localStorage al
   recargar y alguna prueba fallaba sin motivo). 3 nuevos. 46/46.
+
+## 2026-10-07 · Accesibilidad revisada
+
+- Revisión con axe-core (gratis, solo para revisar; no va dentro de la app) de las 16 pantallas, en claro y en
+  oscuro: sin problemas de contraste. Arreglado lo que salió: idioma «es» en la página (lectores de pantalla y voz),
+  la lista de pasos del patrón y las tablas de Abreviaturas y Herramientas, que ahora se pueden mover con teclado.
+- Un patrón recibido por enlace no se guarda dos veces aunque se toque «Guardar» otra vez.
+- Tests: 46/46.

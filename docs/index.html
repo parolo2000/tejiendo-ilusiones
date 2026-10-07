@@ -1514,7 +1514,7 @@ VISTAS.recibido = V => {
       repetido
         ? h("div",{class:"stack", style:"gap:.6rem"}, h("p",{class:"note"},"Ya lo tienes en tus patrones."), h("button",{class:"primary big", onclick:()=>{ patronRecibido=null; go({name:"patron", id:repetido.id}, true); }},"Abrirlo"))
         : h("div",{class:"row"},
-            h("button",{class:"primary big", onclick:()=>{ const n = guardarRecibido(p); toast("Guardado en tus patrones"); go({name:"patron", id:n.id}, true); }},"Guardar en mis patrones"),
+            h("button",{class:"primary big", onclick:()=>{ const ya = mismoPatron(p), n = guardarRecibido(p); toast(ya ? "Ya lo tenías guardado" : "Guardado en tus patrones"); go({name:"patron", id:n.id}, true); }},"Guardar en mis patrones"),
             h("button",{class:"teal big", onclick:()=>{ const n = guardarRecibido(p); tejer(n.id); }},"Guardar y tejer")),
       h("button",{class:"ghost", onclick:()=>{ patronRecibido=null; go({name:"inicio"}, true); }},"No, gracias")),
     h("div",{class:"section"},
@@ -1523,7 +1523,10 @@ VISTAS.recibido = V => {
       p.notas ? h("div",{class:"note", style:"white-space:pre-line"}, h("strong",{},"Notas: "), p.notas) : null)
   );
 };
+// Si abre dos veces el mismo enlace, no se guarda dos veces
+const mismoPatron = p => state.patrones.find(x=>x.titulo===p.titulo && JSON.stringify(x.pasos)===JSON.stringify(p.pasos));
 function guardarRecibido(p){
+  const ya = mismoPatron(p); if(ya){ patronRecibido = null; return ya; }
   const n = {id:"m-"+Date.now(), ...p, color:COLORES[state.patrones.length % COLORES.length]};
   if(!n.descripcion) n.descripcion = "Me lo han mandado.";
   state.patrones.unshift(n); save(); patronRecibido = null;
@@ -1576,7 +1579,7 @@ VISTAS.patron = V => {
     ),
     h("div",{class:"section"},
       h("div",{class:"sechead"}, h("h2",{},"Instrucciones"), h("span",{class:"muted", style:"font-size:.85rem"},"Toca un paso para ir a él")),
-      h("ol",{class:"steps"}, p.pasos.map((t,i)=>h("li",{class:"tap "+(pr ? (i<pr.paso?"done":(i===pr.paso && empezado?"now":"")) : ""), tabindex:"0", role:"button",
+      h("ol",{class:"steps", role:"group", "aria-label":"Pasos"}, p.pasos.map((t,i)=>h("li",{class:"tap "+(pr ? (i<pr.paso?"done":(i===pr.paso && empezado?"now":"")) : ""), tabindex:"0", role:"button",
         onclick:()=>{ const q=prog(p.id); q.paso=i; q.puntos=0; q.rep=0; delete q.fin; save(); tejer(p.id); },
         onkeydown:e=>{ if(e.key==="Enter") e.currentTarget.click(); }}, h("b",{},String(i+1)), h("span",{},t))))
     ),
@@ -2744,7 +2747,7 @@ VISTAS.ayuda = V => {
       h("div",{class:"panel"}, h("dl",{class:"leyenda"}, SIMBOLOS.flatMap(x=>[h("dt",{},iconoSimbolo(x.k,30)), h("dd",{},x.n)]))),
       h("h2",{},"El mismo punto en otros países"),
       h("p",{class:"muted"},"Los patrones de Latinoamérica y en inglés usan otros nombres. Al escribir un patrón para dibujarlo, la app entiende todos."),
-      h("div",{class:"panel tablewrap"}, h("table",{}, h("thead",{}, h("tr",{}, h("th",{},"España"), h("th",{},"Latinoamérica"), h("th",{},"Inglés (EE. UU.)"))), h("tbody",{}, TERMINOS.map(r=>h("tr",{}, r.map(c=>h("td",{},c))))))),
+      h("div",{class:"panel tablewrap", tabindex:"0", role:"region", "aria-label":"Nombres de los puntos en cada sitio"}, h("table",{}, h("thead",{}, h("tr",{}, h("th",{},"España"), h("th",{},"Latinoamérica"), h("th",{},"Inglés (EE. UU.)"))), h("tbody",{}, TERMINOS.map(r=>h("tr",{}, r.map(c=>h("td",{},c))))))),
       h("p",{class:"muted"},"Ojo: en patrones ingleses del Reino Unido, \"dc\" es punto bajo y \"tr\" es punto alto."),
       h("div",{class:"note"},"Consejo: si al final de una vuelta no te salen los puntos que pone entre paréntesis, usa el contador de puntos mientras la repites. La app te avisa cuando cuadra.")
     )
@@ -2818,7 +2821,7 @@ VISTAS.herramientas = V => {
     secRep, secMu,
     h("div",{class:"section"},
       h("h2",{},"Ganchillos y lanas"),
-      h("div",{class:"panel tablewrap"}, h("table",{}, h("thead",{}, h("tr",{}, h("th",{},"Ganchillo"), h("th",{},"Tamaño en EE. UU."), h("th",{},"Para"))),
+      h("div",{class:"panel tablewrap", tabindex:"0", role:"region", "aria-label":"Tamaños de ganchillo"}, h("table",{}, h("thead",{}, h("tr",{}, h("th",{},"Ganchillo"), h("th",{},"Tamaño en EE. UU."), h("th",{},"Para"))),
         h("tbody",{}, AGUJAS.map(r=>h("tr",{}, r.map(c=>h("td",{},c))))))),
       h("p",{class:"muted"},"La etiqueta de la lana casi siempre dice qué ganchillo usar. Si tejes apretado, sube medio número.")
     )
@@ -2827,6 +2830,7 @@ VISTAS.herramientas = V => {
 };
 
 applyScale();
+document.documentElement.lang = document.documentElement.lang || "es"; // lectores de pantalla y voz en español
 render();
 abrirEnlaceRecibido();
 pedirAlmacenamientoFijo();

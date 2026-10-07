@@ -563,6 +563,7 @@ Fasten off and weave in ends.`;
     await page.goto(url);
     await page.waitForFunction(() => view.name === "recibido");
     assert.match(await page.locator(".note").first().textContent(), /Ya lo tienes/);
+    assert.equal(await page.evaluate(() => { const n = guardarRecibido({ titulo: "Posavasos de Carmen <b>", pasos: ["Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 2 pb en cada punto (12)"] }); return state.patrones.length; }), antes + 1, "guardarlo otra vez tampoco");
     // un enlace roto avisa y deja la app normal
     await page.goto(url.replace(/#patron=.*/, "#patron=1xyz"));
     await page.waitForTimeout(300);
