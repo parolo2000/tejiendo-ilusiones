@@ -74,6 +74,8 @@ button:disabled{opacity:.4;cursor:default}
 button svg{flex:none}
 .row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
 [hidden]{display:none!important}
+.pasos-instalar{margin:0;padding-left:1.3rem;display:flex;flex-direction:column;gap:.35rem}
+.pasos-instalar a{color:var(--accent);font-weight:700;word-break:break-all}
 /* Mis labores: foto a la izquierda y los datos a la derecha, igual que la tarjeta de seguir tejiendo */
 .labor{display:grid;grid-template-columns:7.5rem 1fr;gap:1rem;align-items:start;background:var(--surface);border:2px solid var(--line);border-radius:1.1rem;padding:.9rem;box-shadow:var(--shadow)}
 .labor .thumb{aspect-ratio:1;border-radius:.8rem;overflow:hidden;background:var(--sunk)}
@@ -378,7 +380,7 @@ const KEY = "rincon-ganchillo-v1", FKEY = "rg-foto-";
 // v1: formato original (sin campo v). v2: preferencias del modo sofá y repeticiones por paso.
 // v3: cuaderno de labores (lo terminado, para quién y cuándo).
 const VERSION_DATOS = 3;
-const PREFS = {tejer:"sofa", sonido:true, vibrar:true, auto:true};
+const PREFS = {tejer:"sofa", sonido:true, vibrar:true, auto:true, avisoApp:true};
 const MIGRACIONES = {
   2: st => { for(const pr of Object.values(st.progreso||{})) if(pr && typeof pr==="object") pr.rep = pr.rep||0; },
   // Lo que ya estaba terminado pasa al cuaderno, sin tocar el progreso ni las fotos (la labor apunta a la foto del patrón)
@@ -413,6 +415,10 @@ function normalizarEstado(){
   state.libre.vueltas = state.libre.vueltas||0; state.libre.puntos = state.libre.puntos||0;
   state.prefs = {...PREFS, ...state.prefs};
   state.graficos.forEach(g=>{ if(!Array.isArray(g.celdas) || !g.celdas.length) g.celdas=[Array(10).fill("")]; g.cols = g.cols || g.celdas[0].length || 10; });
+  // El color va a un estilo: solo se acepta un color de verdad (una copia de seguridad la puede haber tocado cualquiera)
+  const colorOk = c => typeof c==="string" && /^#[0-9a-f]{3,8}$/i.test(c);
+  state.patrones.forEach((p,i)=>{ if(p && p.color!=null && !colorOk(p.color)) p.color = COLORES[i % COLORES.length]; });
+  state.lanas.forEach(l=>{ if(l && l.color!=null && !colorOk(l.color)) l.color = "#8A9594"; });
   migrar(state);
 }
 normalizarEstado();
@@ -570,7 +576,7 @@ addEventListener("popstate", e => {
 });
 marcar(view, true);
 const TABS = [["inicio","Inicio","casa"],["patrones","Patrones","libro"],["labores","Labores","corazon"],["mas","Más","mas"]];
-const TAB_DE = {importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas"};
+const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas"};
 function pintarTabs(){
   const actual = TAB_DE[view.name] || view.name;
   document.getElementById("tabs").replaceChildren(...TABS.map(([k,l,ic])=>h("button",{class:actual===k?"on":"", "aria-current":actual===k?"page":null, onclick:()=>go({name:k})}, icono(ic,26), l)));
@@ -694,9 +700,10 @@ function segmentoAPuntos(seg, total){
            .replace(/\ben cada (cad|pb|pa|punto)\w*/g, " en cada punto ");
   while((m=rx.exec(seg))){
     const n = m[1]?+m[1]:1; let k = m[2]==="anillo magico" ? "am" : m[2];
-    const resto = seg.slice(m.index+m[0].length, m.index+m[0].length+30);
+    const resto = seg.slice(m.index+m[0].length, m.index+m[0].length+45);
     const dosEnUno = n===2 && !["aum","aumpa","cad","dism","pd"].includes(k);
-    if(/^\s*en cada (punto|pb|pa)/.test(resto) && total){
+    // «1 pb en la 2ª cad y en cada cad»: un punto en cada uno desde ahí, igual que «en cada punto»
+    if(/^\s*(en ese sitio\s+y\s+)?en cada (punto|pb|pa)/.test(resto) && total){
       if(dosEnUno){ for(let i=0;i<Math.round(total/2);i++) out.push(k==="pa"?"aumpa":"aum"); }
       else { const ya = out.reduce((x,q)=>x+anchoDe(q),0), cada = (k==="aum"||k==="aumpa")?Math.round(total/2):Math.max(1,total-ya); for(let i=0;i<cada;i++) out.push(k); }
       continue;
@@ -1215,6 +1222,7 @@ VISTAS.inicio = V => {
   V.append(
     h("div",{class:"hero"}, h("p",{class:"eyebrow"}, saludo), h("h1",{}, ult ? "¿Seguimos?" : "¿Qué tejemos hoy?")),
     ult ? h("div",{class:"section"}, tarjetaContinuar(ult)) : null,
+    !window.TI_LOCAL && state.prefs.avisoApp ? avisoInstalar() : null,
     h("div",{class:"section"},
       h("div",{class:"tiles"},
         grande("pink","libro","Mis patrones", ()=>go({name:"patrones"})),
@@ -1234,6 +1242,18 @@ VISTAS.inicio = V => {
       ))
   );
 };
+// Solo en la app de claude.ai: invita a instalar la versión del móvil, que funciona sin internet
+function avisoInstalar(){
+  const caja = h("div",{class:"section"}, h("div",{class:"note stack", style:"gap:.6rem"},
+    h("h2",{style:"margin:0"},"Ponla en tu móvil como una app"),
+    h("p",{},"Así se abre con un toque desde la pantalla de inicio y funciona sin internet. Para llevarte tus patrones:"),
+    h("ol",{class:"pasos-instalar"},
+      h("li",{}, "Guarda una copia: ", h("button",{class:"ghost", style:"display:inline;padding:0;min-height:0;text-decoration:underline;text-align:left", onclick:()=>go({name:"copia"})},"Más → Copia de seguridad")),
+      h("li",{}, "Abre en el móvil ", h("a",{href:APP_URL, target:"_blank", rel:"noopener"}, APP_URL.replace("https://",""))),
+      h("li",{}, "Instálala desde el menú del navegador y, dentro, recupera la copia.")),
+    h("button",{class:"ghost", style:"align-self:flex-start", onclick:()=>{ state.prefs.avisoApp=false; save(); caja.remove(); }},"No volver a mostrar")));
+  return caja;
+}
 function tarjetaContinuar(p){
   const pr = state.progreso[p.id], n = p.pasos.length, pct = Math.round(Math.min(pr.paso,n)/n*100);
   return h("button",{class:"continue", onclick:()=>tejer(p.id)},
@@ -1284,6 +1304,118 @@ function tarjeta(p){
   );
 }
 
+// ---------- «Teje este patrón»: mandar un patrón con un enlace ----------
+// El patrón va dentro del enlace, después de «#», así que no pasa por ningún servidor (ni siquiera por GitHub):
+// solo lo ven quien lo manda y quien lo abre. Al abrirlo se enseña antes de guardarlo; nunca se guarda solo.
+const APP_URL = "https://parolo2000.github.io/tejiendo-ilusiones/";
+const ENLACE_MAX = 60000; // caracteres del enlace; un patrón normal ocupa unos pocos miles
+const b64url = bytes => { let t=""; for(const b of bytes) t+=String.fromCharCode(b); return btoa(t).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); };
+const desdeB64url = str => { const t = atob(str.replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(t, c=>c.charCodeAt(0)); };
+async function comprimirTexto(texto){
+  const datos = new TextEncoder().encode(texto);
+  if(typeof CompressionStream!=="function") return "0"+b64url(datos);
+  const comp = await new Response(new Blob([datos]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer();
+  return "1"+b64url(new Uint8Array(comp));
+}
+async function descomprimirTexto(cod){
+  const datos = desdeB64url(cod.slice(1));
+  if(cod[0]==="0") return new TextDecoder().decode(datos);
+  if(cod[0]!=="1" || typeof DecompressionStream!=="function") throw new Error("formato");
+  // Se corta a 200 KB descomprimidos: un enlace no puede convertirse en algo enorme
+  const lector = new Blob([datos]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader();
+  const trozos = []; let total = 0;
+  for(;;){ const {done, value} = await lector.read(); if(done) break; total += value.length; if(total>200000){ lector.cancel(); throw new Error("grande"); } trozos.push(value); }
+  return new TextDecoder().decode(await new Blob(trozos).arrayBuffer());
+}
+async function enlaceDePatron(p){
+  const datos = {v:1, t:p.titulo, p:p.pasos, g:p.ganchillo||"", h:p.hilo||"", n:p.nivel||"", d:p.descripcion||"", o:p.notas||""};
+  const base = window.TI_LOCAL ? location.origin+location.pathname : APP_URL;
+  return base+"#patron="+await comprimirTexto(JSON.stringify(datos));
+}
+// Solo se aceptan textos y con límites: lo que venga en un enlace puede haberlo escrito cualquiera
+function validarPatronRecibido(d){
+  const txt = (v, max) => typeof v==="string" ? v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,"").trim().slice(0, max) : "";
+  if(!d || typeof d!=="object" || !Array.isArray(d.p)) return null;
+  const pasos = d.p.slice(0, 400).map(x=>txt(x, 1500)).filter(Boolean);
+  const titulo = txt(d.t, 120);
+  if(!titulo || !pasos.length) return null;
+  return {titulo, pasos, ganchillo:txt(d.g, 40), hilo:txt(d.h, 120), nivel:txt(d.n, 40), descripcion:txt(d.d, 600), notas:txt(d.o, 3000)};
+}
+async function leerEnlace(hash){
+  const m = /^#patron=([A-Za-z0-9_-]+)$/.exec(hash||"");
+  if(!m || m[1].length > ENLACE_MAX) return null;
+  try{ return validarPatronRecibido(JSON.parse(await descomprimirTexto(m[1]))); }catch(e){ return null; }
+}
+async function enviarPatron(p){
+  let url;
+  try{ url = await enlaceDePatron(p); }catch(e){ toast("No he podido preparar el enlace."); return; }
+  if(url.length > ENLACE_MAX){ toast("Este patrón es demasiado largo para mandarlo con un enlace."); return; }
+  const texto = "Te mando el patrón «"+p.titulo+"». Ábrelo para tejerlo vuelta a vuelta:";
+  if(navigator.share){
+    try{ await navigator.share({title:p.titulo, text:texto, url}); return; }
+    catch(e){ if(e && e.name==="AbortError") return; }
+  }
+  mostrarEnlace(p, url, texto);
+}
+function mostrarEnlace(p, url, texto){
+  const campo = h("textarea",{readonly:true, id:"enlace-patron", style:"min-height:6rem;font-size:.9rem", "aria-label":"Enlace del patrón"}, texto+"\n"+url);
+  const aviso = h("p",{class:"muted", "aria-live":"polite"});
+  const copiar = h("button",{class:"primary big", onclick:()=>{
+    const ok = ()=>{ aviso.textContent = "Copiado. Pégalo en WhatsApp o en un correo."; };
+    const aMano = ()=>{ campo.focus(); campo.select(); aviso.textContent = "Mantén el dedo sobre el texto y elige Copiar."; };
+    try{ navigator.clipboard.writeText(campo.value).then(ok, aMano); }catch(e){ aMano(); }
+  }}, "Copiar el enlace");
+  const ov = h("div",{class:"overlay", role:"dialog", "aria-label":"Enviar el patrón", onclick:e=>{ if(e.target===ov) cerrarV(); }},
+    h("div",{class:"box"},
+      h("h2",{},"Enviar «"+p.titulo+"»"),
+      h("p",{class:"muted"},"Copia este mensaje y mándaselo a quien quieras. Al abrir el enlace podrá ver el patrón y guardarlo en su app."),
+      campo, copiar, aviso,
+      h("button",{onclick:cerrarV},"Cerrar")));
+  abrirVentana(ov, ()=>ov.remove());
+}
+let patronRecibido = null;
+VISTAS.recibido = V => {
+  const p = patronRecibido;
+  if(!p) return go({name:"inicio"}, true);
+  const repetido = state.patrones.find(x=>x.titulo===p.titulo && JSON.stringify(x.pasos)===JSON.stringify(p.pasos));
+  V.append(
+    h("div",{class:"page-title"}, h("p",{class:"eyebrow"},"Te han mandado un patrón"), h("h1",{}, p.titulo), p.descripcion ? h("p",{class:"muted"}, p.descripcion) : null),
+    h("div",{class:"section"},
+      h("div",{class:"facts"},
+        h("div",{class:"fact"}, h("span",{},"Dificultad"), h("b",{}, p.nivel||"—")),
+        h("div",{class:"fact"}, h("span",{},"Ganchillo"), h("b",{}, p.ganchillo||"—")),
+        h("div",{class:"fact"}, h("span",{},"Hilo"), h("b",{}, p.hilo||"—")),
+        h("div",{class:"fact"}, h("span",{},"Pasos"), h("b",{}, String(p.pasos.length)))),
+      repetido
+        ? h("div",{class:"stack", style:"gap:.6rem"}, h("p",{class:"note"},"Ya lo tienes en tus patrones."), h("button",{class:"primary big", onclick:()=>{ patronRecibido=null; go({name:"patron", id:repetido.id}, true); }},"Abrirlo"))
+        : h("div",{class:"row"},
+            h("button",{class:"primary big", onclick:()=>{ const n = guardarRecibido(p); toast("Guardado en tus patrones"); go({name:"patron", id:n.id}, true); }},"Guardar en mis patrones"),
+            h("button",{class:"teal big", onclick:()=>{ const n = guardarRecibido(p); tejer(n.id); }},"Guardar y tejer")),
+      h("button",{class:"ghost", onclick:()=>{ patronRecibido=null; go({name:"inicio"}, true); }},"No, gracias")),
+    h("div",{class:"section"},
+      h("h2",{},"Instrucciones"),
+      h("ol",{class:"steps"}, p.pasos.map((t,i)=>h("li",{}, h("b",{},String(i+1)), h("span",{},t)))),
+      p.notas ? h("div",{class:"note", style:"white-space:pre-line"}, h("strong",{},"Notas: "), p.notas) : null)
+  );
+};
+function guardarRecibido(p){
+  const n = {id:"m-"+Date.now(), ...p, color:COLORES[state.patrones.length % COLORES.length]};
+  if(!n.descripcion) n.descripcion = "Me lo han mandado.";
+  state.patrones.unshift(n); save(); patronRecibido = null;
+  return n;
+}
+async function abrirEnlaceRecibido(){
+  if(!/^#patron=/.test(location.hash)) return;
+  const p = await leerEnlace(location.hash);
+  try{ history.replaceState(history.state, "", location.pathname+location.search); }catch(e){}
+  if(!p){
+    if(view.name==="recibido"){ patronRecibido = null; go({name:"inicio"}, true); }
+    toast("Este enlace de patrón no se puede abrir. Pide que te lo manden otra vez."); return;
+  }
+  patronRecibido = p; go({name:"recibido"});
+}
+addEventListener("hashchange", abrirEnlaceRecibido);
+
 VISTAS.patron = V => {
   const p = buscar(view.id); if(!p) return go({name:"patrones"});
   const pr = state.progreso[p.id];
@@ -1308,6 +1440,7 @@ VISTAS.patron = V => {
         h("button",{class:"primary big", onclick:()=>est==="terminado" ? go({name:"tejer", id:p.id}) : tejer(p.id)}, est==="terminado" ? "Ver otra vez paso a paso" : empezado ? "Seguir tejiendo · paso "+(Math.min(pr.paso,p.pasos.length-1)+1) : "Empezar a tejer"),
         h("div",{class:"row"},
           h("button",{onclick:verGrafico}, icono("rejilla",20), "Ver como gráfico"),
+          h("button",{onclick:()=>enviarPatron(p)}, icono("corazon",20), "Enviar a una amiga"),
           esMio(p) ? h("button",{onclick:()=>go({name:"editar", id:p.id})}, icono("lapiz",20), "Cambiar")
                    : h("button",{onclick:()=>{ const c=copiar(p); go({name:"editar", id:c.id}); toast("Copia creada. Cámbiala a tu gusto."); }}, icono("lapiz",20), "Copiar y cambiar")
         ),
@@ -2478,6 +2611,7 @@ VISTAS.herramientas = V => {
 
 applyScale();
 render();
+abrirEnlaceRecibido();
 </script>
 
 <script>

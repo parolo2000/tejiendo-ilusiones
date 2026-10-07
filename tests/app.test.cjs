@@ -65,7 +65,7 @@ const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rinc
     assert.equal(st.progreso["m-1"].notas, "voy por aquí");
     assert.equal(st.progreso["m-1"].puntos, 7);
     assert.equal(st.progreso["m-1"].rep, 0);
-    assert.deepEqual(st.prefs, { tejer: "sofa", sonido: true, vibrar: true, auto: true });
+    assert.deepEqual(st.prefs, { tejer: "sofa", sonido: true, vibrar: true, auto: true, avisoApp: true });
     const copia = await page.evaluate(() => localStorage.getItem("rincon-ganchillo-v1-copia-v1"));
     assert.deepEqual(JSON.parse(copia), LEGADO);
     // Al volver a abrir no se migra otra vez ni se toca la copia
@@ -79,6 +79,9 @@ const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rinc
     const page = await nuevaPagina(browser);
     const st = await page.evaluate(d => { state = Object.assign({ patrones: [], progreso: {}, graficos: [], lanas: [], conFoto: {}, libre: { vueltas: 0, puntos: 0 }, escala: 1 }, d); normalizarEstado(); return state; }, LEGADO);
     assert.equal(st.v, 3); assert.equal(st.progreso["m-1"].rep, 0); assert.equal(st.prefs.auto, true);
+    // una copia tocada a mano no puede meter estilos raros por el color
+    const limpio = await page.evaluate(d => { const c = JSON.parse(JSON.stringify(d)); c.patrones[0].color = "red;position:fixed;inset:0"; c.lanas[0].color = "url(x)"; state = Object.assign({ patrones: [], progreso: {}, graficos: [], lanas: [], conFoto: {}, libre: { vueltas: 0, puntos: 0 }, escala: 1 }, c); normalizarEstado(); return [state.patrones[0].color, state.lanas[0].color]; }, LEGADO);
+    assert.match(limpio[0], /^#[0-9A-F]{6}$/i); assert.equal(limpio[1], "#8A9594");
     assert.deepEqual(st.labores, [], "sin nada terminado, el cuaderno empieza vacío");
     await page.context().close();
   });
@@ -281,6 +284,12 @@ Fasten off and weave in ends.`;
       igual: BASE.every(p => { const i = importarTexto(p.titulo + "\n" + p.pasos.join("\n")); return !i.ingles && JSON.stringify(i.pasos) === JSON.stringify(p.pasos) && i.titulo === p.titulo; }),
     }));
     assert.deepEqual(r.base, []); assert.equal(r.igual, true);
+    await page.context().close();
+  });
+  await prueba("«1 pb en la 2ª cad y en cada cad» cuenta todos los puntos de la vuelta", async () => {
+    const page = await nuevaPagina(browser);
+    const r = await page.evaluate(() => ["Vuelta 1: 1 pb en la 2ª cad y en cada cad. (29)", "Vuelta 1: 1 pb en la 2ª cad y en cada cad hasta el final (19)"].map(revisarLinea));
+    assert.deepEqual(r.map(x => [x.estado, x.n]), [["cuadra", 29], ["cuadra", 19]]);
     await page.context().close();
   });
   await prueba("pantalla: pegar, revisar, guardar y tejer en modo sofá", async () => {
@@ -492,6 +501,81 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  console.log("Enviar un patrón con un enlace");
+  await prueba("el enlace lleva el patrón entero y se lee igual, con tildes y todo", async () => {
+    const page = await paginaWeb();
+    const r = await page.evaluate(async () => {
+      const p = buscar("b-gorro");
+      const url = await enlaceDePatron(p);
+      const leido = await leerEnlace(new URL(url).hash);
+      return { url, leido, titulo: p.titulo, pasos: p.pasos };
+    });
+    assert.ok(r.url.startsWith("https://parolo2000.github.io/tejiendo-ilusiones/#patron="), "desde claude.ai el enlace lleva a la app instalable");
+    assert.match(r.url, /#patron=1[A-Za-z0-9_-]+$/);
+    assert.ok(r.url.length < 3000, "comprimido ocupa poco: " + r.url.length);
+    assert.equal(r.leido.titulo, r.titulo);
+    assert.deepEqual(r.leido.pasos, r.pasos);
+    await page.context().close();
+  });
+  await prueba("un enlace manipulado no guarda nada raro ni se rompe", async () => {
+    const page = await paginaWeb();
+    const r = await page.evaluate(async () => {
+      const cod = async d => "#patron=" + await comprimirTexto(JSON.stringify(d));
+      return {
+        sinPasos: await leerEnlace(await cod({ t: "Hola", p: [] })),
+        tipos: await leerEnlace(await cod({ t: { x: 1 }, p: ["Vuelta 1: 6 pb"] })),
+        basura: await leerEnlace("#patron=1%%%"),
+        noJson: await leerEnlace("#patron=0" + btoa("no es json")),
+        largo: await leerEnlace("#patron=1" + "A".repeat(70000)),
+        script: await leerEnlace(await cod({ t: "<img src=x onerror=alert(1)>", p: ["<script>alert(1)</script>", 5, null], color: "red;background:url(x)" })),
+      };
+    });
+    assert.equal(r.sinPasos, null); assert.equal(r.tipos, null); assert.equal(r.basura, null); assert.equal(r.noJson, null); assert.equal(r.largo, null);
+    assert.equal(r.script.titulo, "<img src=x onerror=alert(1)>", "se guarda como texto, no como HTML");
+    assert.deepEqual(r.script.pasos, ["<script>alert(1)</script>"], "solo textos");
+    assert.equal(r.script.color, undefined, "no se acepta nada que no sea del patrón");
+    await page.context().close();
+  });
+  await prueba("abrir un enlace: se enseña, se guarda solo si se quiere y se puede tejer", async () => {
+    const page = await paginaWeb({}, LEGADO);
+    const url = WEB + (await page.evaluate(() => enlaceDePatron({ titulo: "Posavasos de Carmen <b>", pasos: ["Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 2 pb en cada punto (12)"], ganchillo: "3 mm", notas: "Con algodón" }))).replace(/^[^#]*/, "");
+    const antes = (await estado(page)).patrones.length;
+    await page.goto(url);
+    await page.waitForFunction(() => view.name === "recibido");
+    assert.equal(await page.locator("h1").textContent(), "Posavasos de Carmen <b>");
+    assert.equal(await page.evaluate(() => location.hash), "", "el enlace se limpia de la barra");
+    assert.equal((await estado(page)).patrones.length, antes, "no se guarda nada sin pedirlo");
+    await page.screenshot({ path: path.join(CAPTURAS, "patron-recibido.png"), fullPage: true });
+    await page.getByRole("button", { name: "Guardar y tejer" }).tap();
+    assert.equal(await page.evaluate(() => view.name), "sofa");
+    const st = await estado(page);
+    assert.equal(st.patrones.length, antes + 1);
+    assert.equal(st.patrones[0].titulo, "Posavasos de Carmen <b>");
+    assert.equal(st.patrones[0].ganchillo, "3 mm");
+    // abrir el mismo enlace otra vez no lo duplica
+    await page.goto(url);
+    await page.waitForFunction(() => view.name === "recibido");
+    assert.match(await page.locator(".note").first().textContent(), /Ya lo tienes/);
+    // un enlace roto avisa y deja la app normal
+    await page.goto(url.replace(/#patron=.*/, "#patron=1xyz"));
+    await page.waitForTimeout(300);
+    assert.notEqual(await page.evaluate(() => view.name), "recibido");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("enviar un patrón: sin el botón de compartir del móvil, enseña el enlace para copiarlo", async () => {
+    const page = await paginaWeb({}, LEGADO);
+    await page.evaluate(() => go({ name: "patron", id: "b-gorro" }));
+    await page.getByRole("button", { name: "Enviar a una amiga" }).tap();
+    await page.waitForSelector("#enlace-patron");
+    assert.match(await page.locator("#enlace-patron").inputValue(), /Gorro[\s\S]*#patron=/);
+    await page.screenshot({ path: path.join(CAPTURAS, "enviar-patron.png") });
+    await page.getByRole("button", { name: "Cerrar" }).tap();
+    assert.equal(await page.locator(".overlay").count(), 0);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Botón atrás del móvil");
   await prueba("atrás vuelve a la pantalla anterior y no cierra la app", async () => {
     const page = await paginaWeb({}, LEGADO);
@@ -561,6 +645,7 @@ Fasten off and weave in ends.`;
       await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
       await page.goto(RAIZ_WEB);
       assert.equal(await page.evaluate(() => window.TI_LOCAL), true);
+      assert.doesNotMatch(await page.locator("main").textContent(), /Ponla en tu móvil/, "la instalada no invita a instalarse");
       await page.waitForFunction(() => navigator.serviceWorker.controller || navigator.serviceWorker.ready, null, { timeout: 30000 });
       await page.evaluate(() => navigator.serviceWorker.ready);
       // Un patrón nuevo guardado antes de quedarse sin conexión
@@ -589,6 +674,18 @@ Fasten off and weave in ends.`;
     });
     servidorWeb.close();
   }
+
+  await prueba("en claude.ai invita a instalar la app y se puede quitar el aviso", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    assert.match(await page.locator("main").textContent(), /Ponla en tu móvil como una app/);
+    assert.equal(await page.locator(".pasos-instalar a").getAttribute("href"), "https://parolo2000.github.io/tejiendo-ilusiones/");
+    await page.screenshot({ path: path.join(CAPTURAS, "aviso-instalar.png"), fullPage: true });
+    await page.getByRole("button", { name: "No volver a mostrar" }).tap();
+    await page.reload();
+    assert.doesNotMatch(await page.locator("main").textContent(), /Ponla en tu móvil/);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
 
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {

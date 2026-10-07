@@ -122,3 +122,20 @@ Capturas en `tests/capturas/`.
 - Tests: 1 nuevo (tamaño, color de fondo, PNG, y que desde la pantalla se ve y se cierra con atrás). 28/28.
 - Pendiente de la fase 5: el enlace «teje este patrón», que necesita que la app esté alojada en una dirección
   propia (ver PUBLICAR.md).
+
+## 2026-10-07 · Alojamiento, enlace «teje este patrón» y correcciones
+
+- Alojada en GitHub Pages: repositorio `parolo2000/tejiendo-ilusiones`, carpeta `docs/` (antes `web/`), en
+  https://parolo2000.github.io/tejiendo-ilusiones/.
+- Enviar un patrón con un enlace («Enviar a una amiga» en cada patrón). El patrón va comprimido detrás de `#`,
+  así que no pasa por ningún servidor. Al abrirlo se enseña la pantalla «Te han mandado un patrón» y solo se
+  guarda si se pulsa Guardar; no se duplica si ya está. Todo lo que llega se valida: solo textos, con límites de
+  tamaño (también al descomprimir), y se pinta como texto, nunca como HTML.
+- Motor: «1 pb en la 2ª cad y en cada cad» contaba 1 punto; ahora cuenta todos (29 en la manta). La salida del
+  motor de los patrones incluidos no cambia (`motor-referencia.json` igual).
+- En la app de claude.ai, aviso en Inicio para instalar la versión del móvil y cómo llevarse los patrones con la
+  copia de seguridad. Se puede quitar («No volver a mostrar», preferencia `avisoApp`).
+- Seguridad: los colores de patrones y lanas se validan al cargar (una copia de seguridad tocada a mano no puede
+  meter estilos).
+- Prueba del doble toque del modo sofá más robusta (fallaba a veces por tiempos).
+- Tests: 34/34.
