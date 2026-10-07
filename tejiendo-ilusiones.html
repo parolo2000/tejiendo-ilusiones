@@ -879,9 +879,9 @@ function segmentoAPuntos(seg, total){
 function lineaAFilas(linea){
   let t = normalizar(linea);
   let veces = 1;
-  const rango = t.match(/vueltas?\s*(\d+)\s*(?:a|al|-|y)\s*(\d+)/);
+  const rango = t.match(/(?:vueltas?|filas?|hileras?)\s*(\d+)\s*(?:a|al|-|y)\s*(\d+)/);
   if(rango) veces = Math.max(1, Math.min(60, +rango[2]-(+rango[1])+1));
-  t = t.replace(/^\s*(vueltas?|v|fila|filas)\s*[\d\s,ay\-al]*[:.]/,"");
+  t = t.replace(/^\s*(vueltas?|v|filas?|hileras?)\s*[\d\s,ay\-al]*[:.]/,"");
   const totales = [...t.matchAll(/\((\d+)[^)]*\)/g)].map(x=>+x[1]);
   const total = totales.length ? totales[totales.length-1] : 0;
   t = t.replace(/\([^)]*\)/g," ");
@@ -1196,7 +1196,7 @@ function trozosDeColor(t, actual){
   const trozos = []; let desde = 0, col = actual;
   for(const m of cortes){ trozos.push({col, txt:t.slice(desde, m.index)}); col = lanaIndice(m[1]); desde = m.index + m[0].length; }
   trozos.push({col, txt:t.slice(desde)});
-  return trozos.map(x=>({col:x.col, n:((lineaAFilas("Vuelta 1: "+x.txt.replace(/^[^:]*vueltas?\s*\d+[^:]*:/i, ""))[0])||[]).filter(v=>pk(v)).length}));
+  return trozos.map(x=>({col:x.col, n:((lineaAFilas("Vuelta 1: "+x.txt.replace(/^[^:]*(?:vueltas?|filas?|hileras?)\s*\d+[^:]*:/i, ""))[0])||[]).filter(v=>pk(v)).length}));
 }
 // Pinta cada punto del gráfico con la lana con la que se teje. Solo si el patrón dice colores (partes con
 // «con gris», «Cambia a la lana …» o «con blanco: …» dentro de una vuelta); si no, el gráfico queda como estaba.
@@ -2079,12 +2079,14 @@ function infoPaso(texto){
   const medida = /^(cm|mm|m|g|gr|gramos|metros)$/.test(palabra);
   const objetivo = medida ? 0 : objetivoDe(texto);
   const modo = objetivo>0 ? "puntos" : /\bhasta\b/.test(normalizar(texto)) ? "hasta" : "accion";
-  const ini = texto.match(/^\s*(?:vueltas?|v|rnd|round|row|fila|filas|r)\s*(\d+)/i) || texto.match(/^\s*(\d+)\s*[ªº°]\s*vueltas?/i);
+  const ini = texto.match(/^\s*(?:vueltas?|v|rnd|round|row|filas?|hileras?|r)\s*(\d+)/i) || texto.match(/^\s*(\d+)\s*[ªº°]\s*(?:vueltas?|filas?|hileras?)/i);
   return {
     modo, objetivo,
     reps: modo==="puntos" ? Math.max(1, lineaAFilas(texto).length) : 1,
     vuelta: ini ? +ini[1] : 0,
-    unidad: UNIDADES.includes(palabra) ? (palabra==="cad" ? "cadenetas" : palabra) : "puntos"
+    unidad: UNIDADES.includes(palabra) ? (palabra==="cad" ? "cadenetas" : palabra) : "puntos",
+    // Los patrones planos dicen «Fila 1» en vez de «Vuelta 1»: se le habla con su misma palabra
+    fila: /^\s*(?:\d+\s*[ªº°]\s*)?(?:filas?|hileras?|rows?)\b/i.test(texto)
   };
 }
 // Un toque en la mitad de abajo. Cambia pr y dice qué ha pasado: "punto" | "vuelta" | "paso" | "fin"
@@ -2127,7 +2129,7 @@ function sofaPasoAnterior(pr, pasos){
 // Lo que tiene de especial un paso, para avisar antes de llegar: color, parte nueva, punto que no ha salido aún…
 function ojoDelPaso(pasos, i){
   const t = pasos[i]; if(t==null) return null;
-  const v = infoPaso(t).vuelta, en = v ? "En la vuelta "+v : "En el siguiente paso";
+  const iv = infoPaso(t), v = iv.vuelta, en = v ? "En la "+(iv.fila ? "fila " : "vuelta ")+v : "En el siguiente paso";
   if(esParte(t)) return "Después empieza otra parte: "+t.replace(/^parte:\s*/i, "").replace(/\s*·\s*/, ", ");
   if(esCambioLana(t)) return "Después cambias a la lana "+t.replace(/^cambia a la lana /i, "").replace(/\.$/, "");
   const cols = coloresDelPaso(t); if(cols.length) return en+" se cambia de color: "+yLista(cols.map(c=>c.nombre));
@@ -2279,10 +2281,11 @@ VISTAS.sofa = V => {
   function pintar(){
     const info = infoPaso(p.pasos[pr.paso]);
     tit.textContent = "Paso "+(pr.paso+1)+" de "+n;
+    const V1 = info.fila ? "Fila" : "Vuelta";
     const vNum = info.vuelta ? info.vuelta + (info.modo==="puntos" ? pr.rep : 0) : 0;
     eyebrow.textContent = info.modo==="hasta" ? "Repite hasta que esté"
-      : info.reps>1 ? (vNum ? "Vuelta "+vNum+" · " : "")+"repetición "+(pr.rep+1)+" de "+info.reps
-      : vNum ? "Vuelta "+vNum : (info.modo==="accion" ? "Ahora" : "Esta vuelta");
+      : info.reps>1 ? (vNum ? V1+" "+vNum+" · " : "")+"repetición "+(pr.rep+1)+" de "+info.reps
+      : vNum ? V1+" "+vNum : (info.modo==="accion" ? "Ahora" : "Esta "+V1.toLowerCase());
     const parte = esParte(p.pasos[pr.paso]);
     const pz = piezasDe(p.pasos, pr.paso);
     if(parte) eyebrow.textContent = "Nueva parte: se empieza otra vez por la vuelta 1"+(pz && pz.veces>1 ? " · hay que hacer "+pz.veces : "");
@@ -2309,12 +2312,12 @@ VISTAS.sofa = V => {
       meta.textContent = pr.puntos>=info.objetivo ? "✓ ¡Cuadra! "+info.objetivo+" "+info.unidad : "de "+info.objetivo+" "+info.unidad+" · faltan "+(info.objetivo-pr.puntos);
       pista.textContent = "Toca aquí para sumar 1";
       big.setAttribute("aria-label","Sumar 1. Llevas "+pr.puntos+" de "+info.objetivo+" "+info.unidad);
-      btnLista.replaceChildren(info.reps>1 && pr.rep+1<info.reps ? "Vuelta hecha →" : "Paso hecho →");
+      btnLista.replaceChildren(info.reps>1 && pr.rep+1<info.reps ? V1+" hecha →" : "Paso hecho →");
       btnLista.onclick = ()=>accion(()=>sofaVueltaHecha(pr, p.pasos));
     } else if(info.modo==="hasta"){
       num.textContent = String(pr.rep);
-      meta.textContent = pr.rep===1 ? "vuelta hecha" : "vueltas hechas";
-      pista.textContent = "Toca aquí al terminar cada vuelta";
+      meta.textContent = pr.rep===1 ? V1.toLowerCase()+" hecha" : V1.toLowerCase()+"s hechas";
+      pista.textContent = "Toca aquí al terminar cada "+V1.toLowerCase();
       big.setAttribute("aria-label","Sumar 1 vuelta. Llevas "+pr.rep);
       btnLista.replaceChildren("Ya está →");
       btnLista.onclick = ()=>accion(()=>sofaSiguientePaso(pr, n, p.pasos));
@@ -2361,7 +2364,7 @@ VISTAS.sofa = V => {
     const ev = fn();
     save();
     if(ev==="punto"){ const c = cambioDeColor(); if(c) avisarCambio(c); else { if(!flash.classList.contains("cambio")) flash.hidden=true; vibrar(12); } num.classList.remove("bump"); void num.offsetWidth; num.classList.add("bump"); }
-    else if(ev==="vuelta"){ vibrar([40,60,40]); pitar([[660,0,.12],[880,.13,.2]]); avisar("✓ Vuelta hecha"); }
+    else if(ev==="vuelta"){ vibrar([40,60,40]); pitar([[660,0,.12],[880,.13,.2]]); avisar("✓ "+(infoPaso(p.pasos[pr.paso]).fila ? "Fila" : "Vuelta")+" hecha"); }
     else if(ev==="pieza"){ const pz = piezasDe(p.pasos, pr.paso); vibrar([80,60,80,60,160]); pitar([[660,0,.12],[880,.13,.12],[1046,.26,.25]]); avisar("✓ Pieza "+pr.pieza+" hecha · ahora la "+(ORDINAL[pr.pieza]||(pr.pieza+1)+"ª")+(pz ? " de "+pz.veces : ""), 3500); }
     else if(ev==="paso"){ vibrar([40,60,40,60,80]); pitar([[660,0,.12],[880,.13,.12],[1046,.26,.25]]); avisar("✓ Paso hecho · vamos con el "+(pr.paso+1)); }
     else if(ev==="fin"){ vibrar([80,60,80,60,240]); pitar([[523,0,.15],[659,.16,.15],[784,.32,.15],[1046,.48,.4]]); toast("¡Patrón terminado!"); go({name:"tejer", id:p.id}); return; }
@@ -2535,7 +2538,7 @@ const PALABRAS_EN = {the:"", a:"", an:"", into:"en", in:"en", to:"hasta", space:
 const RX_PUNTO_EN = /\b(sl ?st|sc2tog|dc2tog|invdec|hdc|htr|dtr|trc|sc|dc|tr|ss|ch|inc|dec)\b/gi;
 function esIngles(texto){
   const en = (texto.match(/\b(sc|dc|hdc|htr|ch|rnds?|rounds?|stitch(es)?|sts|sl ?st|magic ring|repeat|each|around|fasten off)\b/gi)||[]).length;
-  const es = (texto.match(/\b(pb|pa|mpa|cad|vueltas?|puntos?|cadenetas?|aumentos?|anillo)\b/gi)||[]).length;
+  const es = (texto.match(/\b(pb|pa|mpa|cad|vueltas?|filas?|puntos?|cadenetas?|aumentos?|anillo)\b/gi)||[]).length;
   return en >= 2 && en > es;
 }
 function esUK(texto){ return /\b(htr|dtr|uk terms?|british)\b/i.test(texto) || (/\bdc\b/i.test(texto) && /\btr\b/i.test(texto) && !/\bsc\b/i.test(texto)); }
@@ -2551,8 +2554,11 @@ function traducirIngles(linea, uk){
        .replace(/\b(ch|sc|dc|hdc|htr|tr|dtr)\s+(\d+)\b(?!\s*(?:sts?|stitches|times))/gi, "$2 $1")       // ch 3 → 3 ch
        .replace(/[\[(]\s*(\d+)\s*(?:sts?|stitches|puntos)?\s*[\])]/gi, "($1)")                            // [12] / (12 sts)
        .replace(/\s[-–—=]\s*(\d+)\s*(?:sts?|stitches)\.?\s*$/i, " ($1) ");                                  // – 12 sts
-  t = t.replace(/\b(rnds|rounds|rows)\s*(\d+)\s*(?:-|–|to|and|&)\s*(\d+)/gi, "Vueltas $2 al $3")
-       .replace(/\b(rnd|round|row|r)\s*(\d+)/gi, "Vuelta $2")
+  // «Row» es fila (labor plana) y «Round» es vuelta (en redondo)
+  t = t.replace(/\b(rows)\s*(\d+)\s*(?:-|–|to|and|&)\s*(\d+)/gi, "Filas $2 al $3")
+       .replace(/\b(rnds|rounds)\s*(\d+)\s*(?:-|–|to|and|&)\s*(\d+)/gi, "Vueltas $2 al $3")
+       .replace(/\b(row)\s*(\d+)/gi, "Fila $2")
+       .replace(/\b(rnd|round|r)\s*(\d+)/gi, "Vuelta $2")
        .replace(/\b(join|close)( the round)? with (a )?(sl ?st|ss)\b/gi, "cierra con pd")
        .replace(/\b(magic (ring|circle|loop)|mr)\b/gi, "anillo mágico")
        .replace(/\b(fasten off|fo)\b/gi, "corta el hilo")
@@ -2563,6 +2569,9 @@ function traducirIngles(linea, uk){
        .replace(/\b(back loop only|blo)\b/gi, "por la hebra de atrás")
        .replace(/\b(front loop only|flo)\b/gi, "por la hebra de delante")
        .replace(/\bin (each|every) (st|stitch|sc|dc|ch|ch-sp)\b/gi, "en cada punto")
+       .replace(/\b(?:in )?(?:the )?(\d+)(?:st|nd|rd|th) (ch|chain) from (the )?hook\b/gi, "en la $1ª cad")
+       .replace(/\bin (each|every) (ch|chain)\b/gi, "en cada cad")
+       .replace(/\s+across\b/gi, "")
        .replace(/\bin (the )?same (st|stitch)\b/gi, "en el mismo punto")
        .replace(/\bin (the )?next (st|stitch)\b/gi, "en el siguiente")
        .replace(/\b(sk|skip)\b/gi, "salta");
@@ -2573,16 +2582,18 @@ function traducirIngles(linea, uk){
   t = t.replace(/\s+/g, " ").trim();
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
-const RX_VUELTA = /^(?:vueltas?|v|rnds?|rounds?|rows?|r|filas?)\s*\d+/i;
+const RX_VUELTA = /^(?:vueltas?|v|rnds?|rounds?|rows?|r|filas?|hileras?)\s*\d+/i;
 
 // ---------- Vueltas con ordinal, partes y colores ----------
 // «1ª vuelta:», «16ª vuelta», «1era vuelta», «5ª a 10ª vuelta», «de la 5ª a la 10ª vuelta» → «Vuelta 1:», «Vueltas 5 a 10:»
+// «Fila» se queda como «Fila» (los patrones planos la usan); «hilera» es lo mismo que fila
+const PALABRA_VUELTA = w => /^vuelta/i.test(w) ? "Vuelta" : "Fila";
 function normalizarVuelta(l){
   const O = "\\s*(?:[ªº°]|era|ra|da|ta|na|ma|va|o|a)?\\.?";
   return l
-    .replace(new RegExp("^\\s*(?:de\\s+la\\s+)?(\\d+)"+O+"\\s*(?:a\\s+la|a|al|-|–|y)\\s*(\\d+)"+O+"\\s*vueltas?\\s*[:.)-]?\\s*", "i"), "Vueltas $1 a $2: ")
-    .replace(new RegExp("^\\s*(\\d+)"+O+"\\s*vuelta\\s*[:.)-]?\\s*", "i"), "Vuelta $1: ")
-    .replace(/^\s*vuelta\s*(\d+)\s*[ªº°]\s*/i, "Vuelta $1 ");
+    .replace(new RegExp("^\\s*(?:de\\s+la\\s+)?(\\d+)"+O+"\\s*(?:a\\s+la|a|al|-|–|y)\\s*(\\d+)"+O+"\\s*(vuelta|fila|hilera)s?\\s*[:.)-]?\\s*", "i"), (m,a,b,w)=>PALABRA_VUELTA(w)+"s "+a+" a "+b+": ")
+    .replace(new RegExp("^\\s*(\\d+)"+O+"\\s*(vuelta|fila|hilera)\\s*[:.)-]?\\s*", "i"), (m,a,w)=>PALABRA_VUELTA(w)+" "+a+": ")
+    .replace(/^\s*(vuelta|fila|hilera)\s*(\d+)\s*[ªº°]\s*/i, (m,w,a)=>PALABRA_VUELTA(w)+" "+a+" ");
 }
 // Líneas de leyenda («Pto = punto», «pb = punto bajo»): van a las notas, no son pasos
 const esLeyenda = l => /^\s*[\p{L}.\s]{1,20}\s*=\s*\p{L}/u.test(l);
@@ -2677,8 +2688,8 @@ function lanaDelTexto(lineas){
 function limpiarPegado(texto){
   let t = (texto||"").replace(/\r/g, "").replace(/ /g, " ").replace(/[•●▪◦]\s*/g, "").replace(/[ \t]+/g, " ");
   // Separa las vueltas que vienen pegadas en un mismo párrafo
-  t = t.replace(/([^\n])\s+(?=(?:vueltas?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*\d+\s*)?[:.)])/gi, "$1\n")
-       .replace(/([^\n])\s+(?=\d+\s*[ªº°]\s*vueltas?\s*:)/gi, "$1\n");
+  t = t.replace(/([^\n])\s+(?=(?:vueltas?|filas?|hileras?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*\d+\s*)?[:.)])/gi, "$1\n")
+       .replace(/([^\n])(?<!\b(?:a|al|la|y)|[-–])\s+(?=\d+\s*[ªº°]\s*(?:vueltas?|filas?|hileras?)\s*:)/gi, "$1\n"); // no corta «de la 11ª a la 14ª fila»
   const lineas = [];
   for(let l of t.split("\n")){
     l = l.trim();
@@ -2700,7 +2711,7 @@ function revisarLinea(t){
   if(!info.objetivo || info.unidad!=="puntos") return {estado:"ok", n};
   if(n===info.objetivo) return {estado:"cuadra", n, obj:info.objetivo};
   // Las cadenetas de subida a veces cuentan como punto y a veces no: una diferencia pequeña no es un error
-  if(/^[^a-z]*(vueltas?\s*[\d\sa]+:)?\s*\d+\s*cad/i.test(t) && Math.abs(n-info.objetivo)<=2) return {estado:"ok", n:info.objetivo};
+  if(/^[^a-z]*((?:vueltas?|filas?|hileras?)\s*[\d\sa-]+:)?\s*\d+\s*cad/i.test(t) && Math.abs(n-info.objetivo)<=2) return {estado:"ok", n:info.objetivo};
   return {estado:"distinto", n, obj:info.objetivo};
 }
 // Una vuelta que no cuadra: busca el arreglo más probable cambiando un solo número. Primero las veces que se
@@ -2708,7 +2719,7 @@ function revisarLinea(t){
 const CONFUNDIDOS = {"0":"8","1":"74","2":"7","3":"85","4":"1","5":"63","6":"58","7":"12","8":"6309","9":"8"};
 function sugerirArreglo(t){
   const rev = revisarLinea(t); if(rev.estado!=="distinto") return null;
-  const cab = (t.match(/^\s*vueltas?\s*\d+(?:\s*(?:a|al|-)\s*\d+)?\s*:?/i)||[""])[0].length;
+  const cab = (t.match(/^\s*(?:vueltas?|filas?|hileras?)\s*\d+(?:\s*(?:a|al|-)\s*\d+)?\s*:?/i)||[""])[0].length;
   const total = [...t.matchAll(/\((\d+)[^)]*\)/g)].pop();
   const nums = [...t.matchAll(/\d+/g)].filter(m=>m.index>=cab && !(total && m.index>total.index && m.index<total.index+total[0].length));
   const cuadra = t2 => revisarLinea(t2).estado==="cuadra";
@@ -2755,7 +2766,10 @@ function importarTexto(texto, uk, soloVueltas=false){
   }
   // «Solo las vueltas»: se quedan las líneas que empiezan por «Vuelta N»; lo demás va a las notas, no se pierde
   const queda = l => RX_VUELTA.test(l) || esParte(l) || esCambioLana(l);
-  if(soloVueltas && pasos.some(l=>RX_VUELTA.test(l))){ apartadas = pasos.filter(l=>!queda(l)); pasos = pasos.filter(queda); }
+  // Lo que va justo antes de la primera vuelta y monta la labor («Monta 21 cad», «Haz un anillo mágico») también se queda
+  const primeraV = pasos.findIndex(l=>RX_VUELTA.test(l));
+  const montaje = (l, i) => i<primeraV && i>=primeraV-2 && /\b(cad|cadenetas?|anillo|monta|montar|base)\b/i.test(l) && lineaAFilas(l).length>0;
+  if(soloVueltas && primeraV>=0){ const q = (l,i)=>queda(l) || montaje(l,i); apartadas = pasos.filter((l,i)=>!q(l,i)); pasos = pasos.filter(q); }
   // La primera lana: la de los materiales o, si no, la de la primera parte
   const primeraLana = (()=>{ for(const l of lineas){ const c = lineaDeColor(l); if(c) return c; } return null; })();
   const tituloLinea = conTitulo ? originales[0] : antes.find(l => l.length<=60 && !/\d\s*mm|:/.test(l));
@@ -2857,7 +2871,7 @@ async function leerImagenes(imgs, avisar){
 function arreglarLectura(t){
   return t.replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"')
     .replace(/\(\s*([\dlIOo|]{1,4})\s*\)/g, (m, n) => /\d/.test(n) ? "("+n.replace(/[lI|]/g,"1").replace(/[Oo]/g,"0")+")" : m)
-    .replace(/\b(vueltas?|rnds?|rounds?|rows?|filas?)\s+([lI|])(?=\s*[:.)\-–])/gi, "$1 1")
+    .replace(/\b(vueltas?|rnds?|rounds?|rows?|filas?|hileras?)\s+([lI|])(?=\s*[:.)\-–])/gi, "$1 1")
     .replace(/[ \t]+\n/g, "\n");
 }
 const AYUDA_FOTO = "Otra forma: en muchos móviles puedes abrir la foto, mantener el dedo sobre el texto, copiarlo y pegarlo aquí.";

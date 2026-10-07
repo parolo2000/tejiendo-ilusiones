@@ -286,3 +286,13 @@ Capturas en `tests/capturas/`.
   deshacer, primero las del color del patrón. Una lana a 0 sale «Agotada» (`ovillosDe`).
 - Las ventanas ya no aplastan su contenido cuando no cabe (`.overlay .box > *{flex-shrink:0}`).
 - Tests: 4 nuevos. 63/63.
+
+## 2026-10-07 · Patrones con «fila» en vez de «vuelta»
+
+- «Fila 1», «Filas 4 a 6», «Filas 7-9», «10ª fila», «De la 11ª a la 14ª fila» y «Hilera 15» se leen como vueltas:
+  se separan aunque vengan pegadas, cuentan sus repeticiones, cuadran y salen en el gráfico. El texto conserva
+  «Fila» (`PALABRA_VUELTA`), y el modo sofá también dice «Fila 4», «Fila hecha» (`infoPaso().fila`).
+- Ya no se corta «de la 11ª a la 14ª vuelta/fila» en dos líneas al pegar.
+- Con «Solo las vueltas», la cadeneta de base o el anillo de justo antes de la primera vuelta se queda en los pasos.
+- Inglés: «Row» → «Fila», «Round» → «Vuelta»; «sc in 2nd ch from hook», «in each ch» y «across» se traducen.
+- Tests: 1 nuevo. 64/64.

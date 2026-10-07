@@ -1296,6 +1296,29 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  await prueba("patrones que dicen «fila» en vez de «vuelta»: se leen, cuadran y el modo sofá dice «Fila»", async () => {
+    const page = await nuevaPagina(browser);
+    const TXT = ["Bufanda", "Materiales: lana gris", "Monta 21 cad.", "Fila 1: 1 pb en la 2ª cad y en cada cad, gira (20)",
+      "Fila 2: 1 cad, 20 pb, gira (20) Fila 3: 2 cad, 20 pa, gira (20)", "Filas 4 a 6: 1 cad, 20 pb, gira (20)", "Filas 7-9: 1 cad, 20 pb (20)",
+      "10ª fila: 1 cad, 20 pb (20)", "De la 11ª a la 14ª fila: 1 cad, 20 pb (20)", "Hilera 15: 1 cad, 20 pb (20)", "Corta el hilo."].join("\n");
+    const r = await page.evaluate(t => { const r = importarTexto(t, null, true); return { pasos: r.pasos, rev: r.revision.map(x => x.estado), reps: r.pasos.map(t => infoPaso(t).reps) }; }, TXT);
+    assert.deepEqual(r.pasos, ["Monta 21 cad.", "Fila 1: 1 pb en la 2ª cad y en cada cad, gira (20)", "Fila 2: 1 cad, 20 pb, gira (20)", "Fila 3: 2 cad, 20 pa, gira (20)",
+      "Filas 4 a 6: 1 cad, 20 pb, gira (20)", "Filas 7-9: 1 cad, 20 pb (20)", "Fila 10: 1 cad, 20 pb (20)", "Filas 11 a 14: 1 cad, 20 pb (20)", "Hilera 15: 1 cad, 20 pb (20)"],
+      "la cadeneta de base se queda aunque solo se cojan las filas");
+    assert.ok(r.rev.slice(1).every(e => e === "cuadra"), JSON.stringify(r.rev));
+    assert.deepEqual(r.reps.slice(4, 8), [3, 3, 1, 4], "«Filas 4 a 6» son 3 filas");
+    // En inglés, «Row» pasa a «Fila» y «Round» sigue siendo «Vuelta»
+    const en = await page.evaluate(() => importarTexto("Scarf\nCh 21.\nRow 1: sc in 2nd ch from hook and in each ch across, turn (20)\nRows 2-10: ch 1, sc in each st across, turn (20)\nFasten off.", null, true));
+    assert.deepEqual(en.pasos.slice(1), ["Fila 1: pb en la 2ª cad y en cada punto, gira (20)", "Filas 2 al 10: 1 cad, pb en cada punto, gira (20)"]);
+    assert.ok(en.revision.slice(1).every(x => x.estado === "cuadra"));
+    await page.evaluate(p => { state.patrones.unshift({ id: "m-fila", titulo: "Bufanda", color: "#8A9594", pasos: p }); Object.assign(prog("m-fila"), { paso: 4 }); save(); go({ name: "sofa", id: "m-fila" }); }, r.pasos);
+    await page.waitForTimeout(200);
+    assert.match(await page.locator(".sofa-eye .eyebrow").textContent(), /^Fila 4 · repetición 1 de 3/);
+    assert.equal(await page.locator(".sofa-acc .sofa-sec").textContent(), "Fila hecha →");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);
