@@ -266,6 +266,10 @@ th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.
 .hero-par .photo-btn{right:.4rem;bottom:.6rem;left:.4rem;justify-content:center;font-size:.8rem;padding-inline:.4rem}
 .sofa-lana{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;font-size:.85rem;font-weight:700;color:var(--muted);flex:none}
 .lana-chip{display:inline-flex;align-items:center;gap:.35rem;font-size:.85rem;text-transform:lowercase}
+.arreglo{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .6rem;margin-top:.35rem}
+.arreglo small{font-size:.88rem}
+.arreglo button{min-height:2.6rem;padding:.3rem .9rem}
+.lana-chip.falta{box-shadow:inset 0 0 0 1.5px var(--danger);color:var(--danger)}
 .lana-chip i{width:.95rem;height:.95rem;border-radius:50%;border:1px solid var(--line);background:var(--sunk)}
 ol.steps li.parte{grid-template-columns:1fr;background:var(--thread-soft);font-family:var(--display);font-size:1.1rem;margin-top:.6rem}
 ol.steps li.parte b{display:none}
@@ -344,6 +348,8 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
 .sofa-t{font-variant-numeric:tabular-nums}
 .sofa-flash{position:absolute;inset:.2rem 16px .7rem;border-radius:1.1rem;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;text-align:center;font-family:var(--display);font-size:1.7rem;padding:1rem;z-index:2}
 .sofa-flash[hidden]{display:none}
+.sofa-flash.cambio{background:var(--accent-soft);color:var(--fg);display:flex;flex-direction:column;justify-content:center;gap:.5rem}
+.sofa-flash .dot-lana{width:3rem;height:3rem;border-radius:50%;border:2px solid var(--line);flex:none}
 .sofa-big{margin:0 12px calc(12px + env(safe-area-inset-bottom,0px));border-radius:1.6rem;border:0;background:var(--thread);color:var(--thread-ink);flex-direction:column;gap:.2rem;touch-action:manipulation;user-select:none;-webkit-user-select:none;box-shadow:var(--shadow);transition:background .2s ease}
 .sofa-big:active{filter:brightness(1.1)}
 .sofa-big.cuadra{background:var(--ok)}
@@ -462,7 +468,7 @@ const MIGRACIONES = {
     st.labores.sort((a,b)=>b.fin-a.fin);
   }
 };
-let state = {patrones:[], progreso:{}, graficos:[], lanas:[], labores:[], apuntes:{}, diario:{}, conFoto:{}, libre:{vueltas:0,puntos:0}, escala:1, t:0, prefs:{...PREFS}, v:VERSION_DATOS};
+let state = {patrones:[], progreso:{}, graficos:[], lanas:[], labores:[], apuntes:{}, diario:{}, conFoto:{}, libre:{vueltas:0,puntos:0}, contadores:[], escala:1, t:0, prefs:{...PREFS}, v:VERSION_DATOS};
 try{
   const raw = localStorage.getItem(KEY), g = JSON.parse(raw||"null");
   if(g && typeof g==="object"){
@@ -492,10 +498,14 @@ function contarSeguido(ahora=Date.now()){
 }
 // Un segundo más tejiendo: en el patrón y en el día de hoy
 function unSegundo(pr){ pr.tiempo++; const d=diaClave(Date.now()); state.diario[d]=(state.diario[d]||0)+1; }
+const MAX_CONTADORES = 12;
 function normalizarEstado(){
   for(const k of ["patrones","graficos","lanas","labores"]) if(!Array.isArray(state[k])) state[k]=[];
   for(const k of ["progreso","conFoto","libre","prefs","apuntes","diario"]) if(!state[k] || typeof state[k]!=="object") state[k]={};
   state.libre.vueltas = state.libre.vueltas||0; state.libre.puntos = state.libre.puntos||0;
+  // Contadores con nombre (además del principal, que sigue en state.libre)
+  if(!Array.isArray(state.contadores)) state.contadores = [];
+  state.contadores = state.contadores.filter(c=>c && typeof c==="object").slice(0, MAX_CONTADORES).map((c,i)=>({id:String(c.id||"c-"+i), nombre:String(c.nombre||"").slice(0,40), vueltas:Math.max(0,+c.vueltas||0), puntos:Math.max(0,+c.puntos||0)}));
   state.prefs = {...PREFS, ...state.prefs};
   // Tiempo tejido por día (para «Tu semana»): solo se guarda el último año
   const limite = diaClave(Date.now()-400*864e5);
@@ -1089,6 +1099,46 @@ function graficoDePatron(p){
 const LANA_DE = {rojo:0, fucsia:6, rosa:6, naranja:1, amarillo:2, verde:3, turquesa:12, celeste:12, azul:4, lila:5, "marrón":7, beige:13, crudo:13, gris:8, negro:10, blanco:9};
 function lanaIndice(nombre){ const c = COLORES_LANA.find(([rx])=>rx.test(nombre||"")); return c && LANA_DE[c[1]]!=null ? LANA_DE[c[1]] : -1; }
 // Trozos de una vuelta por color: «2 cad, 3 pa, con blanco: 10 pa, con gris: 3 pa» → gris 5, blanco 10, gris 3
+// ---------- Lanas que pide un patrón y las que hay en casa ----------
+// Todos los colores que nombra un texto, en orden: «gris, blanca y anaranjada» → gris, blanco, naranja
+function coloresEnTexto(t){
+  return COLORES_LANA.map(c=>({c, m:(t||"").match(c[0])})).filter(x=>x.m).sort((a,b)=>a.m.index-b.m.index).map(x=>x.c);
+}
+function lanasDelPatron(p){
+  const out = [], poner = c => { if(c && !out.some(x=>x[1]===c[1])) out.push(c); };
+  coloresEnTexto(p.hilo).forEach(poner);
+  for(const t of p.pasos){
+    const m = esParte(t) ? t.match(/· con (.+)$/) : esCambioLana(t) ? t.match(/^cambia a la lana (.+?)\.?$/i) : null;
+    if(m) coloresEnTexto(m[1]).slice(0,1).forEach(poner);
+    for(const x of coloresDelPaso(t)) coloresEnTexto(x.nombre).slice(0,1).forEach(poner);
+  }
+  return out.map(([, nombre, hex])=>({nombre, hex}));
+}
+const rgb = hex => { const n = parseInt(String(hex||"").replace("#","").slice(0,6), 16); return [n>>16&255, n>>8&255, n&255]; };
+function lanaMasParecida(hex){
+  const [r,g,b] = rgb(hex); let mejor = -1, d = Infinity;
+  LANAS.forEach(([c],i)=>{ const [R,G,B] = rgb(c), x = (r-R)**2+(g-G)**2+(b-B)**2; if(x<d){ d=x; mejor=i; } });
+  return mejor;
+}
+// ¿Hay en «Mis lanas» una de ese color? Por el nombre («Algodón gris») o, si no lo dice, por el color elegido
+function tengoLana(nombre){
+  return state.lanas.some(l => { const porNombre = coloresEnTexto(l.nombre); return porNombre.length ? porNombre.some(x=>x[1]===nombre || LANA_DE[x[1]]===LANA_DE[nombre]) : l.color && lanaMasParecida(l.color)===LANA_DE[nombre]; });
+}
+const yLista = xs => xs.length<2 ? xs.join("") : xs.slice(0,-1).join(", ")+" y "+xs[xs.length-1];
+function cajaLanas(p){
+  const pide = lanasDelPatron(p); if(!pide.length) return null;
+  const faltan = pide.filter(c=>!tengoLana(c.nombre));
+  const sinCesta = !state.lanas.length;
+  return h("div",{class:"panel lanas-patron stack", style:"gap:.55rem"},
+    h("div",{class:"eyebrow"},"Lanas que necesitas"),
+    h("div",{class:"row", style:"gap:.4rem"}, pide.map(c=>{ const tiene = !faltan.includes(c);
+      return h("span",{class:"chip lana-chip"+(sinCesta ? "" : tiene ? " ok" : " falta")}, h("i",{style:"background:"+c.hex}), c.nombre, sinCesta ? null : h("span",{"aria-hidden":"true"}, tiene ? " ✓" : " ✗")); })),
+    h("p",{}, sinCesta ? "Necesitas "+yLista(pide.map(c=>c.nombre))+". Apunta en «Mis lanas» lo que tienes en casa y te digo si te falta alguna."
+      : !faltan.length ? "Las tienes todas en «Mis lanas»."
+      : "Necesitas "+yLista(pide.map(c=>c.nombre))+". No tienes "+yLista(faltan.map(c=>c.nombre))+"."),
+    sinCesta ? h("button",{onclick:()=>go({name:"lanas"})},"Ir a Mis lanas")
+      : faltan.length ? h("div",{class:"row", style:"gap:.4rem"}, faltan.map(c=>h("button",{onclick:()=>go({name:"lana", nombre:"Lana "+c.nombre, color:LANAS[LANA_DE[c.nombre]] ? LANAS[LANA_DE[c.nombre]][0] : c.hex, vuelta:{name:"patron", id:p.id}})}, "＋ Ya tengo "+c.nombre))) : null);
+}
 function trozosDeColor(t, actual){
   const rx = /\bcon\s+(?:la\s+lana\s+|lana\s+|el\s+)?([\p{L}]{3,15})\s*:?/giu;
   const cortes = [...t.matchAll(rx)].filter(m=>lanaIndice(m[1])>=0);
@@ -1720,6 +1770,7 @@ VISTAS.patron = V => {
           esMio(p) ? h("button",{onclick:()=>go({name:"editar", id:p.id})}, icono("lapiz",20), "Cambiar")
                    : h("button",{onclick:()=>{ const c=copiar(p); go({name:"editar", id:c.id}); toast("Copia creada. Cámbiala a tu gusto."); }}, icono("lapiz",20), "Copiar y cambiar")
         ),
+        cajaLanas(p),
         p.notas ? h("div",{class:"note", style:"white-space:pre-line"}, h("strong",{},"Notas: "), p.notas) : null,
         pr && pr.notas ? h("div",{class:"note", style:"background:var(--accent-soft)"}, h("strong",{},"Mis apuntes: "), pr.notas) : null
       )
@@ -1884,11 +1935,15 @@ VISTAS.tejer = V => {
   const tEl = h("span",{class:"t"}, tiempoTxt(pr.tiempo));
   const tBtn = h("button",{class: corriendo[p.id] ? "" : "teal", onclick:()=>{ corriendo[p.id]=!corriendo[p.id]; render(); }}, icono(corriendo[p.id]?"pausa":"play",18), corriendo[p.id] ? "Pausar" : "Empezar");
   if(corriendo[p.id]){ let k=0; timerInt = setInterval(()=>{ if(document.visibilityState!=="visible") return; unSegundo(pr); tEl.textContent=tiempoTxt(pr.tiempo); if(++k%20===0) save(); }, 1000); }
-  const pasar = d => { pr.paso += d; pr.puntos=0; pr.rep=0; pr.marca=0; if(pr.paso>=n){ pr.fin=Date.now(); corriendo[p.id]=false; toast("¡Patrón terminado!"); } save(); render(); window.scrollTo({top:0}); };
+  const pzT = terminado ? null : piezasDe(p.pasos, pr.paso);
+  const otraPieza = pzT && pzT.veces>1 && pr.paso>=pzT.ini && pr.paso+1>=pzT.fin && (pr.pieza||0)+1<pzT.veces;
+  const pasar = d => { const ev = d>0 ? sofaSiguientePaso(pr, n, p.pasos) : sofaPasoAnterior(pr, p.pasos); pr.marca=0;
+    if(ev==="pieza") toast("Pieza "+pr.pieza+" hecha · ahora la "+(ORDINAL[pr.pieza]||(pr.pieza+1)+"ª"));
+    if(pr.paso>=n){ pr.fin=Date.now(); corriendo[p.id]=false; toast("¡Patrón terminado!"); } save(); render(); window.scrollTo({top:0}); };
   V.append(
     volver("Ver el patrón", {name:"patron", id:p.id}),
     h("div",{class:"stack", style:"margin-top:.2rem"},
-      h("div",{class:"row", style:"justify-content:space-between"}, h("h2",{},p.titulo), terminado ? null : h("span",{class:"chip go", style:"font-size:.95rem"},"Paso "+(pr.paso+1)+" de "+n)),
+      h("div",{class:"row", style:"justify-content:space-between"}, h("h2",{},p.titulo), terminado ? null : h("span",{class:"chip go", style:"font-size:.95rem"},"Paso "+(pr.paso+1)+" de "+n+(pzT && pzT.veces>1 && pr.paso>=pzT.ini ? " · pieza "+((pr.pieza||0)+1)+" de "+pzT.veces : ""))),
       h("div",{class:"prog"}, h("i",{style:"width:"+Math.round(Math.min(pr.paso,n)/n*100)+"%"})),
       terminado ? null : h("button",{class:"teal big block", onclick:()=>{ state.prefs.tejer="sofa"; save(); go({name:"sofa", id:p.id}); }}, icono("sofa",24), "Modo sofá: un toque, un punto"),
       grafOk ? h("div",{class:"panel", style:"padding:.7rem"}, h("div",{class:"eyebrow"}, rotulo), grafWrap) : null,
@@ -1905,7 +1960,7 @@ VISTAS.tejer = V => {
           ),
       terminado ? null : h("div",{class:"stepnav"},
         h("button",{class:"big", disabled:pr.paso===0, onclick:()=>pasar(-1)},"← Atrás"),
-        h("button",{class:"primary big", onclick:()=>pasar(1)}, pr.paso+1===n ? "Terminar ✓" : "Hecho, siguiente →")
+        h("button",{class:"primary big", onclick:()=>pasar(1)}, otraPieza ? "Hecho, a por la "+ORDINAL[(pr.pieza||0)+1]+" pieza →" : pr.paso+1===n ? "Terminar ✓" : "Hecho, siguiente →")
       ),
       h("div",{class:"counters"},
         contadorUI("Puntos de esta vuelta", ()=>pr.puntos, v=>pr.puntos=v, objetivo),
@@ -1945,7 +2000,7 @@ function infoPaso(texto){
 // Un toque en la mitad de abajo. Cambia pr y dice qué ha pasado: "punto" | "vuelta" | "paso" | "fin"
 function sofaTocar(pr, pasos, prefs){
   const info = infoPaso(pasos[pr.paso]);
-  if(info.modo==="accion") return sofaSiguientePaso(pr, pasos.length);
+  if(info.modo==="accion") return sofaSiguientePaso(pr, pasos.length, pasos);
   if(info.modo==="hasta"){ pr.vueltas=(pr.vueltas||0)+1; pr.rep=(pr.rep||0)+1; return "vuelta"; }
   pr.puntos=(pr.puntos||0)+1;
   if(pr.puntos < info.objetivo || !prefs.auto) return "punto";
@@ -1956,14 +2011,31 @@ function sofaVueltaHecha(pr, pasos){
   const info = infoPaso(pasos[pr.paso]);
   pr.vueltas=(pr.vueltas||0)+1; pr.puntos=0;
   if((pr.rep||0)+1 < info.reps){ pr.rep=(pr.rep||0)+1; return "vuelta"; }
-  return sofaSiguientePaso(pr, pasos.length);
+  return sofaSiguientePaso(pr, pasos.length, pasos);
 }
-function sofaSiguientePaso(pr, n){
+// Una parte que se teje varias veces («PIES (hacer 2)»): al acabar la primera pieza se vuelve a su vuelta 1
+function piezasDe(pasos, i){
+  const parte = parteDe({pasos}, i);
+  return parte && parte.marca>=0 ? {...parte, veces:vecesDe(pasos[parte.marca])} : null;
+}
+function sofaSiguientePaso(pr, n, pasos){
+  const pz = pasos && piezasDe(pasos, pr.paso);
+  if(pz && pz.veces>1 && pr.paso>=pz.ini && pr.paso+1>=pz.fin && (pr.pieza||0)+1<pz.veces){
+    pr.pieza=(pr.pieza||0)+1; pr.paso=pz.ini; pr.puntos=0; pr.rep=0; return "pieza";
+  }
   pr.paso=Math.min(n, pr.paso+1); pr.puntos=0; pr.rep=0;
+  if(pasos && esParte(pasos[pr.paso])) pr.pieza=0;
   if(pr.paso>=n){ pr.fin=Date.now(); return "fin"; }
   return "paso";
 }
-const sofaFoto = pr => ({paso:pr.paso, puntos:pr.puntos||0, vueltas:pr.vueltas||0, rep:pr.rep||0, fin:pr.fin});
+function sofaPasoAnterior(pr, pasos){
+  const pz = piezasDe(pasos, pr.paso);
+  if(pz && pr.pieza>0 && pr.paso===pz.ini){ pr.pieza--; pr.paso=pz.fin-1; }
+  else pr.paso=Math.max(0, pr.paso-1);
+  pr.puntos=0; pr.rep=0; delete pr.fin;
+}
+const ORDINAL = ["primera","segunda","tercera","cuarta","quinta","sexta","séptima","octava","novena","décima"];
+const sofaFoto = pr => ({paso:pr.paso, puntos:pr.puntos||0, vueltas:pr.vueltas||0, rep:pr.rep||0, pieza:pr.pieza||0, fin:pr.fin});
 function sofaVolver(pr, f){ Object.assign(pr, f); if(f.fin==null) delete pr.fin; }
 
 // ---------- Modo sofá: la pantalla ----------
@@ -2037,7 +2109,26 @@ VISTAS.sofa = V => {
   const btnLista = h("button",{class:"sofa-sec"});
 
   let ultTap = 0, ultActividad = Date.now(), flashT;
-  function avisar(msg){ flash.textContent=msg; flash.hidden=false; clearTimeout(flashT); flashT=setTimeout(()=>flash.hidden=true, 1400); }
+  function avisar(msg, ms){ flash.classList.remove("cambio"); flash.textContent=msg; flash.hidden=false; clearTimeout(flashT); flashT=setTimeout(()=>flash.hidden=true, ms||1400); }
+  // Cambio de color dentro de la vuelta: avisa justo en el punto en que hay que coger la otra lana
+  let ultCambio = "";
+  function cambioDeColor(){
+    const info = infoPaso(p.pasos[pr.paso]); if(info.modo!=="puntos") return null;
+    const ge = graficoEnCurso(p, pr, pr.rep);
+    const fila = ge.grafOk && ge.ahora.length ? ge.graf.celdas[ge.ahora[0]] : null; if(!fila) return null;
+    const cols = fila.filter(v=>pk(v)).map(pcol), hechos = simbolosHechos(fila, pr.puntos, info.objetivo);
+    if(!(hechos>0 && hechos<cols.length && cols[hechos]>=0 && cols[hechos]!==cols[hechos-1])) return null;
+    const clave = pr.paso+":"+pr.rep+":"+(pr.pieza||0)+":"+hechos;
+    if(clave===ultCambio) return null;
+    ultCambio = clave; return LANAS[cols[hechos]];
+  }
+  function avisarCambio([hex, nombre]){
+    flash.classList.add("cambio"); flash.hidden=false; clearTimeout(flashT);
+    flash.replaceChildren(h("i",{class:"dot-lana", style:"background:"+hex}), h("span",{},"Ahora cambia a la lana "+nombre));
+    flashT=setTimeout(()=>{ flash.hidden=true; flash.classList.remove("cambio"); }, 3500);
+    vibrar([200,100,200]); pitar([[523,0,.15],[784,.17,.25]]);
+    if(state.prefs.leer) leerEnVoz("Ahora cambia a la lana "+nombre);
+  }
   function ajustarTexto(){
     // Letra lo más grande posible sin que haga falta bajar por la pantalla
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
@@ -2054,7 +2145,9 @@ VISTAS.sofa = V => {
       : info.reps>1 ? (vNum ? "Vuelta "+vNum+" · " : "")+"repetición "+(pr.rep+1)+" de "+info.reps
       : vNum ? "Vuelta "+vNum : (info.modo==="accion" ? "Ahora" : "Esta vuelta");
     const parte = esParte(p.pasos[pr.paso]);
-    if(parte) eyebrow.textContent = "Nueva parte: se empieza otra vez por la vuelta 1";
+    const pz = piezasDe(p.pasos, pr.paso);
+    if(parte) eyebrow.textContent = "Nueva parte: se empieza otra vez por la vuelta 1"+(pz && pz.veces>1 ? " · hay que hacer "+pz.veces : "");
+    else if(pz && pz.veces>1) eyebrow.textContent = "Pieza "+((pr.pieza||0)+1)+" de "+pz.veces+" · "+eyebrow.textContent;
     txt.textContent = parte ? p.pasos[pr.paso].replace(/^parte:\s*/i, "") : p.pasos[pr.paso];
     // La lana de ahora y los colores que pide este paso («con blanco: …»)
     const actual = lanaEnPaso(p, pr.paso), pide = coloresDelPaso(p.pasos[pr.paso]).filter(c=>!actual || c.nombre!==actual.nombre.toLowerCase());
@@ -2063,7 +2156,8 @@ VISTAS.sofa = V => {
     lana.replaceChildren(...(actual ? [h("span",{},"Lana"), muestra(actual)] : []), ...(pide.length ? [h("span",{}, actual ? "y en esta vuelta" : "En esta vuelta"), ...pide.map(muestra)] : []));
     const clave = p.id+":"+pr.paso+":"+pr.rep;
     if(state.prefs.leer && sofaLeido!==clave){ sofaLeido = clave; leerEnVoz(p.pasos[pr.paso]); }
-    despues.textContent = pr.paso+1<n ? "Después: "+p.pasos[pr.paso+1] : "Es el último paso.";
+    const otraPz = pz && pz.veces>1 && pr.paso>=pz.ini && pr.paso+1>=pz.fin && (pr.pieza||0)+1<pz.veces;
+    despues.textContent = otraPz ? "Después: la "+ORDINAL[(pr.pieza||0)+1]+" pieza, otra vez desde «"+p.pasos[pz.ini]+"»" : pr.paso+1<n ? "Después: "+p.pasos[pr.paso+1] : "Es el último paso.";
     const nota = apunteDe(p.id, pr.paso); apunte.hidden = !nota; apunte.textContent = nota ? "Tu apunte: "+nota : "";
     barra.style.width = Math.round(pr.paso/n*100)+"%";
     big.classList.toggle("accion", info.modo==="accion");
@@ -2081,14 +2175,15 @@ VISTAS.sofa = V => {
       pista.textContent = "Toca aquí al terminar cada vuelta";
       big.setAttribute("aria-label","Sumar 1 vuelta. Llevas "+pr.rep);
       btnLista.replaceChildren("Ya está →");
-      btnLista.onclick = ()=>accion(()=>sofaSiguientePaso(pr, n));
+      btnLista.onclick = ()=>accion(()=>sofaSiguientePaso(pr, n, p.pasos));
     } else {
       num.textContent = "✓";
-      meta.textContent = esParte(p.pasos[pr.paso]) ? "Empezar esta parte" : pr.paso+1<n ? "Hecho, siguiente paso" : "Hecho, ¡terminar!";
+      const otra = pz && pz.veces>1 && pr.paso>=pz.ini && pr.paso+1>=pz.fin && (pr.pieza||0)+1<pz.veces;
+      meta.textContent = esParte(p.pasos[pr.paso]) ? "Empezar esta parte" : otra ? "Hecho, a por la otra pieza" : pr.paso+1<n ? "Hecho, siguiente paso" : "Hecho, ¡terminar!";
       pista.textContent = "Toca aquí cuando lo tengas";
       big.setAttribute("aria-label", meta.textContent);
       btnLista.replaceChildren("Saltar →");
-      btnLista.onclick = ()=>accion(()=>sofaSiguientePaso(pr, n));
+      btnLista.onclick = ()=>accion(()=>sofaSiguientePaso(pr, n, p.pasos));
     }
     btnDeshacer.disabled = !sofaHist.length;
     tEl.textContent = tiempoTxt(pr.tiempo);
@@ -2123,8 +2218,9 @@ VISTAS.sofa = V => {
     ultActividad = Date.now();
     const ev = fn();
     save();
-    if(ev==="punto"){ flash.hidden=true; vibrar(12); num.classList.remove("bump"); void num.offsetWidth; num.classList.add("bump"); }
+    if(ev==="punto"){ const c = cambioDeColor(); if(c) avisarCambio(c); else { if(!flash.classList.contains("cambio")) flash.hidden=true; vibrar(12); } num.classList.remove("bump"); void num.offsetWidth; num.classList.add("bump"); }
     else if(ev==="vuelta"){ vibrar([40,60,40]); pitar([[660,0,.12],[880,.13,.2]]); avisar("✓ Vuelta hecha"); }
+    else if(ev==="pieza"){ const pz = piezasDe(p.pasos, pr.paso); vibrar([80,60,80,60,160]); pitar([[660,0,.12],[880,.13,.12],[1046,.26,.25]]); avisar("✓ Pieza "+pr.pieza+" hecha · ahora la "+(ORDINAL[pr.pieza]||(pr.pieza+1)+"ª")+(pz ? " de "+pz.veces : ""), 3500); }
     else if(ev==="paso"){ vibrar([40,60,40,60,80]); pitar([[660,0,.12],[880,.13,.12],[1046,.26,.25]]); avisar("✓ Paso hecho · vamos con el "+(pr.paso+1)); }
     else if(ev==="fin"){ vibrar([80,60,80,60,240]); pitar([[523,0,.15],[659,.16,.15],[784,.32,.15],[1046,.48,.4]]); toast("¡Patrón terminado!"); go({name:"tejer", id:p.id}); return; }
     pintar();
@@ -2164,7 +2260,7 @@ VISTAS.sofa = V => {
           interruptor("descanso","Avisarme cada hora para descansar las manos")),
         pr.paso<p.pasos.length ? enlacesVideo(p.pasos[pr.paso]) : null,
         h("div",{class:"stack", style:"gap:.6rem"},
-          pr.paso>0 ? h("button",{class:"big", onclick:()=>{ cerrarV(); accion(()=>{ pr.paso--; pr.puntos=0; pr.rep=0; return "atras"; }); }},"← Volver al paso anterior") : null,
+          pr.paso>0 ? h("button",{class:"big", onclick:()=>{ cerrarV(); accion(()=>{ sofaPasoAnterior(pr, p.pasos); return "atras"; }); }},"← Volver al paso anterior") : null,
           h("button",{class:"big", onclick:()=>{ cerrarV(); state.prefs.tejer="completa"; save(); go({name:"tejer", id:p.id}); }}, icono("rejilla",22), "Vista completa: gráfico y apuntes"),
           h("button",{class:"primary big", onclick:cerrar},"Seguir tejiendo")),
         h("p",{class:"muted", style:"font-size:.85rem"},"Con un pedal o teclado bluetooth: espacio o flecha derecha suma, flecha izquierda deshace.")));
@@ -2190,14 +2286,38 @@ VISTAS.sofa = V => {
   save();
 };
 
+// Varios contadores con nombre («Manga izquierda», «Manga derecha»): el principal es el de siempre (state.libre)
+let contadorSel = "libre";
 VISTAS.contador = V => {
-  const l = state.libre;
+  const todos = [{id:"libre", c:state.libre}, ...state.contadores.map(c=>({id:c.id, c}))];
+  if(!todos.some(x=>x.id===contadorSel)) contadorSel = "libre";
+  const sel = todos.find(x=>x.id===contadorSel), l = sel.c, principal = sel.id==="libre";
+  const nombreDe = x => x.c.nombre || (x.id==="libre" ? "Principal" : "Sin nombre");
+  const nuevo = ()=>{
+    const c = {id:"c-"+Date.now(), nombre:"Contador "+(state.contadores.length+2), vueltas:0, puntos:0};
+    state.contadores.push(c); contadorSel = c.id; save(); render();
+    const inp = document.getElementById("co-nombre"); if(inp){ inp.focus(); inp.select(); }
+  };
+  const borrar = ()=>{
+    const pos = state.contadores.indexOf(l);
+    state.contadores = state.contadores.filter(x=>x!==l); contadorSel = "libre"; save(); render();
+    toast("Contador borrado", ()=>{ state.contadores.splice(pos, 0, l); contadorSel = l.id; save(); render(); });
+  };
   V.append(
     volver("Más", {name:"mas"}),
-    h("div",{class:"page-title"}, h("h1",{},"Contador"), h("p",{class:"muted"},"Para cuando tejes sin patrón. Se guarda solo y la pantalla no se apaga.")),
-    h("div",{class:"section"}, h("div",{class:"counters"},
-      contadorUI("Vueltas", ()=>l.vueltas, v=>l.vueltas=v),
-      contadorUI("Puntos", ()=>l.puntos, v=>l.puntos=v)))
+    h("div",{class:"page-title"}, h("h1",{},"Contador"), h("p",{class:"muted"},"Para cuando tejes sin patrón. Se guarda solo y la pantalla no se apaga. Puedes tener varios, cada uno con su nombre.")),
+    h("div",{class:"section stack", style:"gap:.8rem"},
+      h("div",{class:"row", role:"group", "aria-label":"Contadores", style:"gap:.4rem"},
+        ...todos.map(x=>h("button",{class:"chip-parte"+(x.id===contadorSel?" sel":""), "aria-pressed":String(x.id===contadorSel), onclick:()=>{ contadorSel = x.id; render(); }}, nombreDe(x), h("small",{}, " · "+x.c.vueltas))),
+        state.contadores.length<MAX_CONTADORES ? h("button",{class:"chip-parte", id:"co-nuevo", onclick:nuevo},"＋ Otro contador") : null),
+      h("div",{class:"row", style:"gap:.6rem;align-items:flex-end"},
+        h("label",{class:"f", style:"flex:1;min-width:12rem"},"Nombre de este contador",
+          h("input",{type:"text", id:"co-nombre", maxlength:"40", value:l.nombre||"", placeholder: principal ? "Principal" : "Ej.: Manga izquierda",
+            onchange:e=>{ l.nombre = e.target.value.trim().slice(0,40); if(!l.nombre && principal) delete l.nombre; save(); render(); }})),
+        principal ? null : confirmBtn("Borrar","¿Borrar? Toca otra vez","danger",borrar)),
+      h("div",{class:"counters"},
+        contadorUI("Vueltas", ()=>l.vueltas, v=>l.vueltas=v),
+        contadorUI("Puntos", ()=>l.puntos, v=>l.puntos=v)))
   );
 };
 
@@ -2320,15 +2440,18 @@ function normalizarVuelta(l){
 // Líneas de leyenda («Pto = punto», «pb = punto bajo»): van a las notas, no son pasos
 const esLeyenda = l => /^\s*[\p{L}.\s]{1,20}\s*=\s*\p{L}/u.test(l);
 // Cabecera de una parte del muñeco: «CUERPO», «PIES (hacer 2)», «Alas (hacer 2)», «Cabeza:»
+// «(hacer 2)», «(2 piezas)», «(make 2)», «(x2)», «(2 детали)»: cuántas veces se teje esa parte
+const RX_VECES = /\((?:hacer|haz|tejer|teje|make|связать)\s*(\d+)(?:\s*(?:veces|piezas|times|pieces|шт\.?))?\)|\((\d+)\s*(?:piezas|veces|pieces|times|детали|деталей|шт\.?)\)|\(\s*[xх×]\s*(\d+)\s*\)/iu;
+function vecesDe(t){ const m = (t||"").match(RX_VECES); return m ? Math.max(1, Math.min(20, +(m[1]||m[2]||m[3]))) : 1; }
 const NO_PARTES = /^(materiales?|abreviaturas?|notas?|necesitas|medidas?|tama[ñn]o|montaje|instrucciones|leyenda|puntos? (usados|utilizados))\b/i;
 function cabeceraParte(l){
   const t = l.trim().replace(/[:.]$/, "");
-  if(t.length > 40 || /\d+\s*\)?\s*$/.test(t.replace(/\(hacer \d+\)|\(\d+ (piezas|veces)\)/i, "")) && !/\(hacer \d+\)/i.test(t)) return null;
+  if(t.length > 40 || /\d+\s*\)?\s*$/.test(t.replace(RX_VECES, "")) && !RX_VECES.test(t)) return null;
   if(NO_PARTES.test(t) || RX_VUELTA.test(t) || lineaAFilas(t).length) return null;
   const letras = t.replace(/\(.*?\)/g, "").replace(/[^\p{L}]/gu, "");
   if(letras.length < 3) return null;
   const mayus = letras === letras.toUpperCase();
-  return mayus || /\(hacer \d+\)/i.test(t) ? t.replace(/\s+/g, " ") : null;
+  return mayus || RX_VECES.test(t) ? t.replace(/\s+/g, " ") : null;
 }
 // «Con gris», «Con lana blanca», «Color: rosa» → el color
 function lineaDeColor(l){
@@ -2432,6 +2555,29 @@ function revisarLinea(t){
   // Las cadenetas de subida a veces cuentan como punto y a veces no: una diferencia pequeña no es un error
   if(/^[^a-z]*(vueltas?\s*[\d\sa]+:)?\s*\d+\s*cad/i.test(t) && Math.abs(n-info.objetivo)<=2) return {estado:"ok", n:info.objetivo};
   return {estado:"distinto", n, obj:info.objetivo};
+}
+// Una vuelta que no cuadra: busca el arreglo más probable cambiando un solo número. Primero las veces que se
+// repite algo («x 5» por «x 6»), luego números que la foto suele confundir (6 y 8, 1 y 7…), luego el total.
+const CONFUNDIDOS = {"0":"8","1":"74","2":"7","3":"85","4":"1","5":"63","6":"58","7":"12","8":"6309","9":"8"};
+function sugerirArreglo(t){
+  const rev = revisarLinea(t); if(rev.estado!=="distinto") return null;
+  const cab = (t.match(/^\s*vueltas?\s*\d+(?:\s*(?:a|al|-)\s*\d+)?\s*:?/i)||[""])[0].length;
+  const total = [...t.matchAll(/\((\d+)[^)]*\)/g)].pop();
+  const nums = [...t.matchAll(/\d+/g)].filter(m=>m.index>=cab && !(total && m.index>total.index && m.index<total.index+total[0].length));
+  const cuadra = t2 => revisarLinea(t2).estado==="cuadra";
+  const cambiar = (m, v) => t.slice(0, m.index)+v+t.slice(m.index+m[0].length);
+  const contexto = (m, v) => { const sig = (t.slice(m.index+m[0].length).match(/^\s*(veces|[a-zñ]+)/i)||[""])[0], ant = (t.slice(0, m.index).match(/\b(x|repetir)\s*$/i)||[""])[0];
+    return {antes: ant+m[0]+sig, despues: ant+v+sig}; };
+  const esRepeticion = m => /\b(x|repetir)\s*$/i.test(t.slice(0, m.index)) || /^\s*veces\b/i.test(t.slice(m.index+m[0].length));
+  for(const m of nums.filter(esRepeticion)) for(let v=1; v<=40; v++) if(String(v)!==m[0] && cuadra(cambiar(m, v))) return {texto:cambiar(m, v), ...contexto(m, v)};
+  for(const m of nums){
+    for(let d=0; d<m[0].length; d++) for(const c of CONFUNDIDOS[m[0][d]]||""){
+      const v = m[0].slice(0,d)+c+m[0].slice(d+1);
+      if(cuadra(cambiar(m, v))) return {texto:cambiar(m, v), ...contexto(m, v)};
+    }
+  }
+  if(total && rev.n>0) return {texto:t.slice(0, total.index)+"("+rev.n+")"+t.slice(total.index+total[0].length), antes:"("+rev.obj+")", despues:"("+rev.n+")", total:true};
+  return null;
 }
 function importarTexto(texto, uk, soloVueltas=false){
   const rus = esRuso(texto);
@@ -2548,7 +2694,7 @@ async function leerImagenes(imgs, avisar){
   let actual = 0;
   // Si el lector no llega a arrancar (sin red, móvil muy antiguo) no se queda esperando para siempre
   let plazo; const tarde = new Promise((_, mal)=>{ plazo = setTimeout(()=>mal(new Error("no-arranca")), 120000); });
-  const worker = await Promise.race([tarde, window.Tesseract.createWorker(["spa","eng"], 1, {
+  const worker = await Promise.race([tarde, window.Tesseract.createWorker(["spa","eng","rus"], 1, {
     workerPath: OCR_DIR+"worker.min.js", corePath: OCR_DIR, langPath: OCR_DIR, workerBlobURL: false,
     logger: m => { if(m.status==="recognizing text") avisar("Leyendo"+(imgs.length>1?" la página "+(actual+1)+" de "+imgs.length:" la foto")+"…", (actual+m.progress)/imgs.length);
                    else if(/load|initializ/.test(m.status||"")) avisar("Preparando la lectura (solo tarda la primera vez)…", null); },
@@ -2569,7 +2715,7 @@ function arreglarLectura(t){
 }
 const AYUDA_FOTO = "Otra forma: en muchos móviles puedes abrir la foto, mantener el dedo sobre el texto, copiarlo y pegarlo aquí.";
 
-let importarBorrador = "", importarUK = null, importarSoloVueltas = true;
+let importarBorrador = "", importarUK = null, importarSoloVueltas = true, importarArreglos = {};
 VISTAS.importar = V => {
   const area = h("textarea",{id:"im-texto", style:"min-height:12rem", placeholder:"Rnd 1: 6 sc in magic ring (6)\nRnd 2: 2 sc in each st (12)\n\no en español:\nVuelta 1: 6 pb en el anillo (6)", oninput:e=>{ importarBorrador=e.target.value; }}, importarBorrador);
   const res = h("div",{class:"stack", "aria-live":"polite"});
@@ -2584,6 +2730,8 @@ VISTAS.importar = V => {
     importarBorrador = area.value;
     if(!area.value.trim()){ res.replaceChildren(h("div",{class:"empty"}, h("p",{},"Pega aquí el patrón: copia el texto de la web o del PDF y mantén el dedo en el recuadro para pegarlo."))); return; }
     const r = importarTexto(area.value, importarUK, importarSoloVueltas);
+    // Los arreglos que ha aceptado con «Aplicar» se mantienen mientras revisa
+    r.pasos = r.pasos.map(t=>importarArreglos[t]||t); r.revision = r.pasos.map(revisarLinea);
     if(!r.pasos.length){ res.replaceChildren(h("div",{class:"empty"}, h("h3",{},"No he encontrado instrucciones"), h("p",{class:"muted"},"¿Has pegado el patrón entero? Busca las líneas que empiezan por «Vuelta» o «Round»."))); return; }
     const nombre = h("input",{type:"text", id:"im-nombre", value:r.titulo, placeholder:"Ponle un nombre"});
     const gan = h("input",{type:"text", id:"im-gan", value:r.ganchillo, placeholder:"Ej.: 4 mm"});
@@ -2596,7 +2744,7 @@ VISTAS.importar = V => {
       const titulo = nombre.value.trim();
       if(!titulo){ err.textContent="Ponle un nombre al patrón."; err.hidden=false; nombre.focus(); return; }
       const p = {id:"m-"+Date.now(), titulo, descripcion:"Importado"+(r.ingles?" del inglés":r.ruso?" del ruso":"")+".", nivel:"", hilo:hilo.value.trim(), ganchillo:gan.value.trim(), notas:r.notas, pasos:r.pasos, color:r.colorLana ? r.colorLana.hex : COLORES[state.patrones.length % COLORES.length], original:area.value};
-      state.patrones.unshift(p); save(); importarBorrador=""; importarUK=null; importarSoloVueltas=true;
+      state.patrones.unshift(p); save(); importarBorrador=""; importarUK=null; importarSoloVueltas=true; importarArreglos={};
       toast("Patrón guardado");
       if(yTejer) tejer(p.id); else go({name:"patron", id:p.id});
     };
@@ -2613,7 +2761,12 @@ VISTAS.importar = V => {
       h("label",{class:"f"}, "Lana", r.colorLana ? h("small",{class:"color-lana"}, h("i",{style:"background:"+r.colorLana.hex}), "Color de la lana: "+r.colorLana.nombre+". La ficha del patrón irá de este color.") : null, hilo),
       h("ol",{class:"steps importados"}, r.pasos.map((t,i)=>{ const [cls,msg] = ESTADOS[r.revision[i].estado](r.revision[i]);
         if(esParte(t)) return h("li",{class:"parte"}, h("b",{},String(i+1)), h("span",{}, t.replace(/^parte:\s*/i, ""), h("small",{class:"rev"}, "Parte nueva: empieza otra vez por la vuelta 1")));
-        return h("li",{}, h("b",{},String(i+1)), h("span",{}, t, h("small",{class:"rev "+cls}, msg))); })),
+        const arr = r.revision[i].estado==="distinto" ? sugerirArreglo(t) : null;
+        const original = Object.keys(importarArreglos).find(k=>importarArreglos[k]===t);
+        return h("li",{}, h("b",{},String(i+1)), h("span",{}, t, h("small",{class:"rev "+cls}, msg),
+          arr ? h("span",{class:"arreglo"}, h("small",{}, arr.total ? "¿Será que el total es "+arr.despues+"?" : "¿Quizás «"+arr.despues+"» en vez de «"+arr.antes+"»?"),
+            h("button",{class:"teal", onclick:()=>{ importarArreglos[original||t] = arr.texto; leer(); toast("Arreglado"); }},"Aplicar")) : null,
+          original ? h("span",{class:"arreglo"}, h("small",{class:"rev ok"},"Arreglada por ti"), h("button",{class:"ghost", onclick:()=>{ delete importarArreglos[original]; leer(); }},"Deshacer")) : null)); })),
       r.notas ? h("details",{class:"panel"}, h("summary",{},"Materiales y notas"), h("p",{style:"white-space:pre-line"}, r.notas)) : null,
       err,
       h("div",{class:"row"},
@@ -2954,7 +3107,7 @@ VISTAS.lanas = V => {
 };
 VISTAS.lana = V => {
   const ex = view.id ? state.lanas.find(l=>l.id===view.id) : null;
-  const l = ex ? {...ex} : {nombre:"", marca:"", color:"#C0392B", grosor:"Media (worsted, aran)", gramos:100, ovillos:1, metros:"", ganchillo:"", notas:""};
+  const l = ex ? {...ex} : {nombre:view.nombre||"", marca:"", color:view.color||"#C0392B", grosor:"Media (worsted, aran)", gramos:100, ovillos:1, metros:"", ganchillo:"", notas:""};
   const inp = (id,label,val,ph,type="text")=>h("label",{class:"f"},label, h("input",{type, id, value:val==null?"":String(val), placeholder:ph||"", inputmode: type==="number"?"numeric":null}));
   const f = {
     nombre: inp("la-nombre","Nombre o composición",l.nombre,"Ej.: Algodón 100 %"),
@@ -2976,10 +3129,10 @@ VISTAS.lana = V => {
   function guardar(){
     const obj = {...(ex||{}), id: ex?ex.id:"l-"+Date.now(), nombre:val(f.nombre), marca:val(f.marca), gramos:+val(f.gramos)||0, ovillos:+val(f.ovillos)||1, metros:+val(f.metros)||"", ganchillo:val(f.ganchillo), grosor:f.grosor.value, notas:f.notas.value.trim(), color};
     if(ex) state.lanas = state.lanas.map(x=>x.id===obj.id?obj:x); else state.lanas.unshift(obj);
-    save(); toast("Lana guardada"); go({name:"lanas"});
+    save(); toast("Lana guardada"); go(view.vuelta || {name:"lanas"});
   }
   V.append(
-    volver("Mis lanas", {name:"lanas"}),
+    volver(view.vuelta ? "Patrón" : "Mis lanas", view.vuelta || {name:"lanas"}),
     h("div",{class:"stack", style:"margin-top:.4rem"},
       h("h1",{}, ex ? "Cambiar lana" : "Añadir una lana"),
       h("div",{class:"f"},"Color", sw),

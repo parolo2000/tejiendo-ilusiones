@@ -401,6 +401,23 @@ Fasten off and weave in ends.`;
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });
+  await prueba("foto de un patrón en ruso: la lee y la pasa a español", async () => {
+    const fx2 = await browser.newPage();
+    await fx2.setViewportSize({ width: 700, height: 360 });
+    await fx2.setContent(`<body style="margin:0;background:#f3efe6"><div style="font:30px Carlito,Arial;line-height:1.5;padding:40px;color:#222">
+Цыплёнок<br>1 ряд: 6 сбн в КА (6)<br>2 ряд: 6 пр (12)<br>3 ряд: (сбн, пр) х 6 (18)<br>Закрепить нить.</div></body>`);
+    const fotoRu = await fx2.screenshot({ type: "png" }); await fx2.close();
+    const page = await paginaWeb();
+    await page.evaluate(() => go({ name: "importar" }));
+    await subir(page, "#im-foto", "foto-ru.png", "image/png", fotoRu);
+    await esperarLectura(page);
+    const r = await page.evaluate(() => importarTexto(document.querySelector("#im-texto").value));
+    assert.equal(r.ruso, true, "leído: " + await page.locator("#im-texto").inputValue());
+    assert.deepEqual(r.pasos.slice(0, 2), ["Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 6 aum (12)"], "leído: " + JSON.stringify(r.pasos));
+    assert.equal(r.revision.filter(x => x.estado === "cuadra").length, 3);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
   await prueba("PDF escaneado (sin texto): lo lee como una foto", async () => {
     const page = await paginaWeb();
     await page.evaluate(() => go({ name: "importar" }));
@@ -1084,6 +1101,120 @@ Fasten off and weave in ends.`;
     assert.deepEqual(g, { vista: "redondo", nombre: "Pingüino · PIES (hacer 2)", naranja: true });
     await page.getByRole("button", { name: "← Patrón" }).tap();
     assert.equal(await page.evaluate(() => view.name), "patron");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("partes que se hacen 2 veces: al acabar el primer pie vuelve a la vuelta 1 del segundo", async () => {
+    const page = await nuevaPagina(browser);
+    assert.equal(await page.evaluate(() => [vecesDe("PIES (hacer 2)"), vecesDe("LEGS (make 2)"), vecesDe("Alas (2 piezas)"), vecesDe("НОЖКИ (2 детали)"), vecesDe("CUERPO")].join()), "2,2,2,2,1");
+    assert.ok(await page.evaluate(() => !!cabeceraParte("LEGS (make 2)")));
+    await page.evaluate(() => { state.patrones.unshift({ id: "m-pie", titulo: "Pollito", color: "#E1B12C", pasos: ["Parte: CUERPO · con amarillo", "Vuelta 1: 6 pb en anillo mágico (6)",
+      "Parte: PIES (hacer 2) · con naranja", "Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 6 aum (12)"] }); Object.assign(prog("m-pie"), { paso: 4 }); save(); go({ name: "sofa", id: "m-pie" }); });
+    await page.waitForTimeout(200);
+    assert.match(await page.locator(".sofa-eye .eyebrow").textContent(), /^Pieza 1 de 2/);
+    assert.match(await page.locator(".sofa-desp").textContent(), /segunda pieza/);
+    for (let i = 0; i < 12; i++) { await page.locator(".sofa-big").tap(); await page.waitForTimeout(160); }
+    assert.match(await page.locator(".sofa-flash").textContent(), /Pieza 1 hecha · ahora la segunda de 2/);
+    await page.waitForTimeout(100);
+    assert.match(await page.locator(".sofa-eye .eyebrow").textContent(), /^Pieza 2 de 2/);
+    assert.match(await page.locator(".sofa-txt").textContent(), /^Vuelta 1: 6 pb/);
+    await page.screenshot({ path: path.join(CAPTURAS, "sofa-segunda-pieza.png") });
+    // Deshacer vuelve al final del primer pie; y al acabar el segundo, se termina
+    await page.getByRole("button", { name: "Deshacer el último toque" }).tap();
+    assert.deepEqual(await page.evaluate(() => [prog("m-pie").paso, prog("m-pie").pieza]), [4, 0]);
+    const fin = await page.evaluate(() => { const pr = { paso: 4, pieza: 1, puntos: 0, rep: 0 }; return sofaVueltaHecha(pr, buscar("m-pie").pasos); });
+    assert.equal(fin, "fin");
+    const atras = await page.evaluate(() => { const pr = { paso: 3, pieza: 1 }; sofaPasoAnterior(pr, buscar("m-pie").pasos); return [pr.paso, pr.pieza]; });
+    assert.deepEqual(atras, [4, 0], "atrás desde la vuelta 1 del segundo pie va al final del primero");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("modo sofá: avisa justo en el punto en que se cambia de color", async () => {
+    const page = await nuevaPagina(browser);
+    await page.evaluate(() => { state.patrones.unshift({ id: "m-cc", titulo: "Pingüino", color: "#8A9594", pasos: ["Parte: CUERPO · con gris", "Vuelta 1: 18 cad, 1 pd en la primera cad (18)",
+      "Vuelta 2: 2 cad, 3 pa, con blanco: 10 pa, con gris: 5 pa, 1 pd en el primer pa (18)"] }); Object.assign(prog("m-cc"), { paso: 2 }); save(); go({ name: "sofa", id: "m-cc" }); });
+    await page.waitForTimeout(200);
+    const avisos = [];
+    for (let i = 1; i <= 18; i++) {
+      await page.locator(".sofa-big").tap(); await page.waitForTimeout(140);
+      const f = page.locator(".sofa-flash.cambio:not([hidden])");
+      if (await f.count()) { const t = await f.textContent(); if (!avisos.length || avisos[avisos.length - 1][1] !== t) avisos.push([i, t]); }
+      if (i === 4 && avisos.length) await page.screenshot({ path: path.join(CAPTURAS, "sofa-cambio-color.png") });
+    }
+    assert.deepEqual(avisos.map(a => a[1]), ["Ahora cambia a la lana blanca", "Ahora cambia a la lana gris"], JSON.stringify(avisos));
+    assert.equal(avisos[1][0] - avisos[0][0], 10, "10 pa blancos entre un aviso y otro");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("lanas que pide el patrón frente a «Mis lanas»: dice cuál falta y se puede apuntar", async () => {
+    const page = await nuevaPagina(browser);
+    await page.evaluate(() => {
+      state.lanas = [{ id: "l-g", nombre: "Algodón gris", color: "#8A9594", gramos: 50, ovillos: 1 }, { id: "l-b", nombre: "Algodón", color: "#F2EEE6", gramos: 50, ovillos: 1 }];
+      state.patrones.unshift({ id: "m-lan", titulo: "Pingüino", hilo: "lana gris, blanca y anaranjada", color: "#8A9594", pasos: ["Parte: CUERPO · con gris", "Vuelta 1: 2 cad, 3 pa, con blanco: 10 pa (13)", "Parte: PIES (hacer 2) · con anaranjado", "Vuelta 1: 6 pb en anillo mágico (6)"] });
+      save(); go({ name: "patron", id: "m-lan" });
+    });
+    assert.match(await page.locator(".lanas-patron").textContent(), /Necesitas gris, blanco y naranja\. No tienes naranja\./);
+    assert.equal(await page.locator(".lanas-patron .lana-chip.falta").count(), 1);
+    await page.locator(".lanas-patron").screenshot({ path: path.join(CAPTURAS, "patron-lanas.png") });
+    await page.getByRole("button", { name: "＋ Ya tengo naranja" }).tap();
+    assert.equal(await page.locator("#la-nombre input, input#la-nombre").first().inputValue(), "Lana naranja");
+    await page.getByRole("button", { name: "Guardar", exact: true }).tap();
+    assert.equal(await page.evaluate(() => view.name), "patron");
+    assert.match(await page.locator(".lanas-patron").textContent(), /Las tienes todas/);
+    // Sin lanas apuntadas, solo dice cuáles hacen falta
+    await page.evaluate(() => { state.lanas = []; render(); });
+    assert.match(await page.locator(".lanas-patron").textContent(), /Necesitas gris, blanco y naranja\. Apunta/);
+    assert.equal(await page.evaluate(() => { const p = { id: "x", pasos: ["Vuelta 1: 6 pb (6)"] }; return lanasDelPatron(p).length; }), 0, "sin colores no sale nada");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("importar: una vuelta que no cuadra trae el arreglo probable y se aplica con un toque", async () => {
+    const page = await nuevaPagina(browser);
+    const s = await page.evaluate(() => [sugerirArreglo("Vuelta 3: *1 pb, 1 aum* x 5 (18)"), sugerirArreglo("Vuelta 4: *2 pb, 1 aum* repetir 6 veces (34)"), sugerirArreglo("Vuelta 2: 6 pb (12)"), sugerirArreglo("Vuelta 2: 6 aum (12)")]);
+    assert.equal(s[0].texto, "Vuelta 3: *1 pb, 1 aum* x 6 (18)");
+    assert.ok(s[1].total && s[1].texto === "Vuelta 4: *2 pb, 1 aum* repetir 6 veces (24)", JSON.stringify(s[1]));
+    assert.ok(s[2], "siempre hay algo que proponer"); assert.equal(s[3], null, "si cuadra, nada");
+    await page.evaluate(() => go({ name: "importar" }));
+    await page.locator("#im-texto").fill("Vuelta 1: 6 pb en anillo mágico (6)\nVuelta 2: 6 aum (12)\nVuelta 3: *1 pb, 1 aum* x 5 (18)");
+    await page.getByRole("button", { name: "Leer el patrón" }).tap();
+    assert.match(await page.locator(".arreglo").textContent(), /¿Quizás «x 6» en vez de «x 5»\?/);
+    await page.screenshot({ path: path.join(CAPTURAS, "importar-arreglo.png"), fullPage: true });
+    await page.locator(".arreglo button", { hasText: "Aplicar" }).tap();
+    assert.equal(await page.locator("ol.importados .rev.ok", { hasText: "Cuadra" }).count(), 3);
+    assert.match(await page.locator(".arreglo").textContent(), /Arreglada por ti/);
+    await page.locator("#im-nombre").fill("Bola");
+    await page.getByRole("button", { name: "Guardar patrón" }).tap();
+    assert.equal(await page.evaluate(() => state.patrones[0].pasos[2]), "Vuelta 3: *1 pb, 1 aum* x 6 (18)");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("contadores con nombre: varios, cada uno con lo suyo, y se guardan", async () => {
+    const page = await nuevaPagina(browser, {}, LEGADO);
+    await page.evaluate(() => go({ name: "contador" }));
+    await page.getByRole("button", { name: "＋ Otro contador" }).tap();
+    await page.locator("#co-nombre").fill("Manga izquierda"); await page.locator("#co-nombre").press("Enter"); await page.locator("#co-nombre").blur();
+    await page.getByRole("button", { name: "Sumar 1 a Vueltas" }).tap();
+    await page.getByRole("button", { name: "Sumar 1 a Vueltas" }).tap();
+    await page.screenshot({ path: path.join(CAPTURAS, "contadores-nombre.png") });
+    await page.locator(".chip-parte", { hasText: "Principal" }).tap();
+    assert.equal(await page.locator(".counter .num").first().textContent(), "4", "el principal sigue igual");
+    await recargar(page);
+    const st = await estado(page);
+    assert.deepEqual(st.libre, LEGADO.libre);
+    assert.equal(st.contadores.length, 1);
+    assert.equal(st.contadores[0].nombre, "Manga izquierda"); assert.equal(st.contadores[0].vueltas, 2);
+    // Borrar se puede deshacer
+    await page.evaluate(() => go({ name: "contador" }));
+    await page.locator(".chip-parte", { hasText: "Manga izquierda" }).tap();
+    await page.getByRole("button", { name: "Borrar" }).tap(); await page.getByRole("button", { name: "¿Borrar? Toca otra vez" }).tap();
+    assert.equal(await page.evaluate(() => state.contadores.length), 0);
+    await page.getByRole("button", { name: "Deshacer" }).tap();
+    assert.equal(await page.evaluate(() => state.contadores[0].vueltas), 2);
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });

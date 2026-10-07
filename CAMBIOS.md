@@ -252,3 +252,21 @@ Capturas en `tests/capturas/`.
 - «Ver el gráfico» abre el gráfico de esa parte, con sus colores (se guarda con `de` y `parte`), y desde ahí
   «← Patrón» vuelve al patrón.
 - Tests: 1 nuevo. 53/53.
+
+## 2026-10-07 · Seis mejoras: ruso en fotos, piezas dobles, lanas, aviso de color, arreglos y contadores
+
+- Fotos y PDF escaneados en ruso: `ocr/rus.traineddata.gz` (tessdata 4.0.0_best_int, @tesseract.js-data/rus 1.0.0)
+  y el lector arranca con `["spa","eng","rus"]`. Todo sigue en el móvil.
+- Partes que se tejen varias veces («PIES (hacer 2)», «(2 piezas)», «(make 2)», «(2 детали)»): `vecesDe`,
+  `piezasDe`, `sofaPasoAnterior`. Al acabar la primera pieza se vuelve a la vuelta 1 de la parte
+  (`progreso[id].pieza`, sin migración), con «Pieza 1 de 2» en el modo sofá y en la vista completa.
+- Lanas que pide el patrón (`lanasDelPatron`: hilo, partes, «Cambia a la lana», «con blanco:») frente a «Mis
+  lanas» (`tengoLana`: por el nombre o por el color más parecido). Dice cuál falta y «＋ Ya tengo …» la apunta
+  con nombre y color puestos, y vuelve al patrón.
+- Modo sofá: en el punto exacto en que cambia el color dentro de la vuelta sale «Ahora cambia a la lana blanca»
+  con su color, vibración y sonido (y en voz alta si lo tiene puesto).
+- Importar: en las vueltas que no cuadran, `sugerirArreglo` propone el cambio más probable de un número (veces que
+  se repite, números que la foto confunde o el total) con «Aplicar» y «Deshacer» (`importarArreglos`).
+- Contador: varios con nombre (`state.contadores`, hasta 12; el principal sigue en `state.libre`). Se crean,
+  renombran y borran con deshacer.
+- Tests: 6 nuevos. 59/59.
