@@ -229,6 +229,7 @@ th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.
 .canvasprev{width:100%;height:auto;image-rendering:pixelated;border-radius:.8rem;background:var(--sunk);display:block}
 .overlay{position:fixed;inset:0;z-index:30;background:rgba(10,15,13,.75);display:flex;align-items:center;justify-content:center;padding:16px}
 .overlay .box{background:var(--surface);border-radius:1rem;padding:1rem;max-width:40rem;width:100%;max-height:90vh;overflow:auto;display:flex;flex-direction:column;gap:.8rem}
+.overlay .box > *{flex-shrink:0}
 .overlay img{width:100%;height:auto;border-radius:.6rem}
 .yarnrow{display:grid;grid-template-columns:3rem 1fr auto;gap:.8rem;align-items:center;background:var(--surface);border-radius:1rem;padding:.7rem .9rem;box-shadow:var(--shadow);cursor:pointer;text-align:left;color:var(--fg);font-weight:400;border:2px solid transparent}
 .yarnrow:hover{border-color:var(--thread)}
@@ -266,6 +267,18 @@ th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.
 .hero-par .photo-btn{right:.4rem;bottom:.6rem;left:.4rem;justify-content:center;font-size:.8rem;padding-inline:.4rem}
 .sofa-lana{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;font-size:.85rem;font-weight:700;color:var(--muted);flex:none}
 .lana-chip{display:inline-flex;align-items:center;gap:.35rem;font-size:.85rem;text-transform:lowercase}
+.avances{display:flex;flex-direction:column;gap:.4rem}
+.tira-avances{display:flex;gap:.6rem;overflow-x:auto;padding-bottom:.3rem}
+.avance{flex:none;display:flex;flex-direction:column;gap:.2rem;padding:0;background:none;border:0;box-shadow:none;min-height:0;color:var(--fg)}
+.avance img{width:5.5rem;height:5.5rem;object-fit:cover;border-radius:.8rem;border:1px solid var(--line)}
+.avance small{font-size:.8rem;font-weight:700}
+.fila-gasto{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .6rem}
+.fila-gasto .ball{width:2.2rem;height:2.2rem;flex:none}
+.fila-gasto .grow{flex:1 1 7rem;min-width:0;line-height:1.25}
+.fila-gasto .ctrl{display:flex;align-items:center;gap:.5rem;margin-left:auto}
+.fila-gasto .grow small{display:block}
+.fila-gasto button{width:2.9rem;min-width:0;min-height:2.9rem;padding:0;font-size:1.3rem;justify-content:center}
+.n-gasto{min-width:1.6rem;text-align:center;font-size:1.2rem}
 .arreglo{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .6rem;margin-top:.35rem}
 .arreglo small{font-size:.88rem}
 .arreglo button{min-height:2.6rem;padding:.3rem .9rem}
@@ -342,6 +355,8 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
 .sofa-txt{flex:1 1 auto;min-height:0;overflow:auto;font-size:1.6rem;line-height:1.35;overflow-wrap:anywhere}
 .sofa-apunte{margin:0;font-size:.95rem;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:.6rem;padding:.35rem .6rem;flex:none}
 .apunte input{font-weight:400}
+.sofa-ojo{font-size:.9rem;font-weight:700;color:var(--fg);background:var(--surface);border-left:4px solid var(--gold);border-radius:.7rem;padding:.35rem .7rem;flex:none;line-height:1.3}
+.sofa-ojo[hidden]{display:none}
 .sofa-desp{font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none}
 .sofa-acc{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;align-items:center;flex:none}
 .sofa-acc button{min-height:3rem;font-size:.92rem;padding-inline:.5rem;white-space:nowrap;overflow:hidden}
@@ -468,7 +483,7 @@ const MIGRACIONES = {
     st.labores.sort((a,b)=>b.fin-a.fin);
   }
 };
-let state = {patrones:[], progreso:{}, graficos:[], lanas:[], labores:[], apuntes:{}, diario:{}, conFoto:{}, libre:{vueltas:0,puntos:0}, contadores:[], escala:1, t:0, prefs:{...PREFS}, v:VERSION_DATOS};
+let state = {patrones:[], progreso:{}, graficos:[], lanas:[], labores:[], apuntes:{}, diario:{}, conFoto:{}, libre:{vueltas:0,puntos:0}, contadores:[], avances:{}, escala:1, t:0, prefs:{...PREFS}, v:VERSION_DATOS};
 try{
   const raw = localStorage.getItem(KEY), g = JSON.parse(raw||"null");
   if(g && typeof g==="object"){
@@ -498,10 +513,15 @@ function contarSeguido(ahora=Date.now()){
 }
 // Un segundo más tejiendo: en el patrón y en el día de hoy
 function unSegundo(pr){ pr.tiempo++; const d=diaClave(Date.now()); state.diario[d]=(state.diario[d]||0)+1; }
-const MAX_CONTADORES = 12;
+const MAX_CONTADORES = 12, MAX_AVANCES = 12;
 function normalizarEstado(){
   for(const k of ["patrones","graficos","lanas","labores"]) if(!Array.isArray(state[k])) state[k]=[];
-  for(const k of ["progreso","conFoto","libre","prefs","apuntes","diario"]) if(!state[k] || typeof state[k]!=="object") state[k]={};
+  for(const k of ["progreso","conFoto","libre","prefs","apuntes","diario","avances"]) if(!state[k] || typeof state[k]!=="object" || Array.isArray(state[k])) state[k]={};
+  // Fotos del avance: {patrón: [{k, t, paso}]}; la imagen va aparte, como las demás fotos
+  for(const [id, xs] of Object.entries(state.avances)){
+    state.avances[id] = Array.isArray(xs) ? xs.filter(x=>x && typeof x.k==="string" && x.k.startsWith("av-")).map(x=>({k:x.k, t:+x.t||0, paso:Math.max(0,+x.paso||0)})).slice(-MAX_AVANCES) : [];
+    if(!state.avances[id].length) delete state.avances[id];
+  }
   state.libre.vueltas = state.libre.vueltas||0; state.libre.puntos = state.libre.puntos||0;
   // Contadores con nombre (además del principal, que sigue en state.libre)
   if(!Array.isArray(state.contadores)) state.contadores = [];
@@ -590,6 +610,49 @@ function elegirFoto(id, alTerminar){
   const inp = h("input",{type:"file", accept:"image/*", style:"display:none"});
   inp.onchange = async ()=>{ const f=inp.files[0]; inp.remove(); if(!f) return; try{ await fotoSet(id, await comprimir(f)); toast("Foto guardada"); alTerminar&&alTerminar(); }catch(e){ toast("No he podido abrir esa foto. Prueba con otra."); } };
   document.body.append(inp); inp.click();
+}
+
+// Fotos del avance de una labor: pequeñas (caben muchas) y con la fecha y el paso en que iba
+function anadirAvance(p, alTerminar){
+  const xs = state.avances[p.id] || [];
+  if(xs.length>=MAX_AVANCES){ toast("Ya tienes "+MAX_AVANCES+" fotos de este patrón. Quita alguna para poner otra."); return; }
+  const inp = h("input",{type:"file", accept:"image/*", style:"display:none"});
+  inp.onchange = async ()=>{
+    const f = inp.files[0]; inp.remove(); if(!f) return;
+    try{
+      const k = "av-"+p.id+"-"+Date.now(), data = await comprimir(f, 520);
+      await fotoSet(k, data);
+      let ok = false; try{ ok = localStorage.getItem(FKEY+k)===data; }catch(e){}
+      if(!ok){ fotoSet(k, null); return; }
+      const pr = state.progreso[p.id];
+      state.avances[p.id] = [...(state.avances[p.id]||[]), {k, t:Date.now(), paso: pr ? pr.paso : 0}];
+      save(); toast("Foto del avance guardada"); alTerminar && alTerminar();
+    }catch(e){ toast("No he podido abrir esa foto. Prueba con otra."); }
+  };
+  document.body.append(inp); inp.click();
+}
+function quitarAvance(p, x){
+  state.avances[p.id] = (state.avances[p.id]||[]).filter(y=>y.k!==x.k);
+  if(!state.avances[p.id].length) delete state.avances[p.id];
+  fotoSet(x.k, null);
+}
+const fechaCorta = t => new Date(t).toLocaleDateString("es-ES", {day:"numeric", month:"short"});
+function galeriaAvance(p){
+  const xs = (state.avances[p.id]||[]).filter(x=>fotoGet(x.k)); if(!xs.length) return null;
+  const ver = x => {
+    const ov = h("div",{class:"overlay", role:"dialog", "aria-label":"Foto del avance", onclick:e=>{ if(e.target===ov) cerrarV(); }},
+      h("div",{class:"box stack"},
+        h("img",{src:fotoGet(x.k), alt:"Avance del "+fechaCorta(x.t), style:"width:100%;border-radius:1rem"}),
+        h("p",{class:"muted"}, fechaCorta(x.t)+" · iba por el paso "+(x.paso+1)),
+        h("div",{class:"row"},
+          h("button",{class:"primary big", onclick:cerrarV},"Cerrar"),
+          confirmBtn("Quitar esta foto","¿Quitar? Toca otra vez","danger",()=>{ quitarAvance(p, x); cerrarV(); }))));
+    abrirVentana(ov, ()=>{ ov.remove(); render(); });
+  };
+  return h("div",{class:"avances"},
+    h("div",{class:"eyebrow"},"Así va creciendo"),
+    h("div",{class:"tira-avances"}, xs.map(x=>h("button",{class:"avance", "aria-label":"Ver la foto del "+fechaCorta(x.t), onclick:()=>ver(x)},
+      h("img",{src:fotoGet(x.k), alt:""}), h("small",{}, fechaCorta(x.t))))));
 }
 
 // ---------- Utilidades ----------
@@ -1763,6 +1826,7 @@ VISTAS.patron = V => {
           h("div",{class:"fact"}, h("span",{},"Pasos"), h("b",{},String(p.pasos.length)))
         ),
         h("button",{class:"primary big", onclick:()=>est==="terminado" ? go({name:"tejer", id:p.id}) : tejer(p.id)}, est==="terminado" ? "Ver otra vez paso a paso" : empezado ? "Seguir tejiendo · paso "+(Math.min(pr.paso,p.pasos.length-1)+1) : "Empezar a tejer"),
+        empezado && cuantoFalta(p, pr) ? h("p",{class:"muted falta"}, cuantoFalta(p, pr)) : null,
         h("div",{class:"row"},
           h("button",{onclick:verGrafico}, icono("rejilla",20), "Ver como gráfico"),
           h("button",{onclick:()=>enviarPatron(p)}, icono("corazon",20), "Enviar a una amiga"),
@@ -1770,6 +1834,7 @@ VISTAS.patron = V => {
           esMio(p) ? h("button",{onclick:()=>go({name:"editar", id:p.id})}, icono("lapiz",20), "Cambiar")
                    : h("button",{onclick:()=>{ const c=copiar(p); go({name:"editar", id:c.id}); toast("Copia creada. Cámbiala a tu gusto."); }}, icono("lapiz",20), "Copiar y cambiar")
         ),
+        galeriaAvance(p),
         cajaLanas(p),
         p.notas ? h("div",{class:"note", style:"white-space:pre-line"}, h("strong",{},"Notas: "), p.notas) : null,
         pr && pr.notas ? h("div",{class:"note", style:"background:var(--accent-soft)"}, h("strong",{},"Mis apuntes: "), pr.notas) : null
@@ -1816,6 +1881,39 @@ function copiar(p){
 }
 
 // Al terminar: foto, para quién y al cuaderno. Guardarlo es opcional; el patrón y la foto se quedan como están.
+// Ovillos que quedan de una lana (0 = agotada; sin número, 1 como siempre)
+const ovillosDe = l => l.ovillos==null || l.ovillos==="" ? 1 : Math.max(0, +l.ovillos||0);
+// Al terminar: quitar de «Mis lanas» los ovillos gastados. Primero las lanas del color que pide el patrón.
+function cajaGastar(p, pr){
+  if(!state.lanas.length || pr.lanaGastada) return null;
+  const pide = lanasDelPatron(p).map(c=>c.nombre);
+  const delPatron = l => pide.some(nombre=>{ const porNombre = coloresEnTexto(l.nombre); return porNombre.length ? porNombre.some(x=>LANA_DE[x[1]]===LANA_DE[nombre]) : l.color && lanaMasParecida(l.color)===LANA_DE[nombre]; });
+  const ls = state.lanas.filter(l=>ovillosDe(l)>0).sort((a,b)=>delPatron(b)-delPatron(a));
+  if(!ls.length) return null;
+  const gasto = {};
+  const caja = h("div",{class:"panel stack gastar", style:"gap:.6rem"});
+  function pintar(){
+    const n = Object.values(gasto).reduce((a,b)=>a+b,0);
+    caja.replaceChildren(
+      h("div",{class:"eyebrow"},"¿Has gastado lana de tu cesta?"),
+      h("p",{class:"muted"},"Marca los ovillos que has usado y los quito de «Mis lanas», para saber siempre lo que te queda."),
+      ...ls.slice(0, 8).map(l=>{ const g = gasto[l.id]||0, nombre = l.nombre||"Lana sin nombre";
+        return h("div",{class:"fila-gasto"},
+          h("span",{class:"ball", style:"background:"+(l.color||"#8A9594")}),
+          h("span",{class:"grow"}, h("b",{}, nombre), h("small",{class:"muted"}, "Tienes "+ovillosDe(l))),
+          h("span",{class:"ctrl"},
+            h("button",{"aria-label":"Un ovillo menos de "+nombre, disabled:!g, onclick:()=>{ gasto[l.id]=g-1; pintar(); }},"−"),
+            h("b",{class:"n-gasto", "aria-live":"polite"}, String(g)),
+            h("button",{"aria-label":"Un ovillo más de "+nombre, disabled:g>=ovillosDe(l), onclick:()=>{ gasto[l.id]=g+1; pintar(); }},"＋"))); }),
+      h("button",{class:"teal big", disabled:!n, onclick:()=>{
+        const antes = state.lanas.map(l=>({...l}));
+        state.lanas.forEach(l=>{ if(gasto[l.id]) l.ovillos = ovillosDe(l)-gasto[l.id]; });
+        pr.lanaGastada = Date.now(); save(); render();
+        toast("Quitado de Mis lanas", ()=>{ state.lanas = antes; delete pr.lanaGastada; save(); render(); });
+      }}, n ? "Quitar "+n+(n===1?" ovillo":" ovillos")+" de Mis lanas" : "Quitar de Mis lanas"));
+  }
+  pintar(); return caja;
+}
 function cajaTerminado(p, pr, n){
   const guardada = state.labores.find(l=>l.patron===p.id && l.fin===pr.fin);
   const caja = h("div",{class:"stepbox", style:"border-color:var(--ok)"});
@@ -1836,6 +1934,7 @@ function cajaTerminado(p, pr, n){
             h("button",{class:"big", onclick:()=>elegirFoto(p.id, pintar)}, icono("foto",22), foto ? "Cambiar la foto" : "Hacer una foto de mi labor"),
             h("label",{class:"f", for:"labor-para"},"¿Para quién es?", h("small",{},"Si es para ti, puedes dejarlo vacío."), quien),
             h("button",{class:"primary big", onclick:()=>{ guardarLabor(p, quien.value); toast("Guardada en tus labores"); go({name:"labores"}); }}, icono("corazon",22), "Guardar en mis labores")),
+      cajaGastar(p, pr),
       h("button",{class:"big", onclick:()=>{ pr.paso=n-1; delete pr.fin; save(); render(); }},"← Volver al último paso")
     ].filter(Boolean));
   }
@@ -1954,6 +2053,7 @@ VISTAS.tejer = V => {
             filasPaso.length>1 ? h("p",{class:"note"},"Esta vuelta se repite "+filasPaso.length+" veces. Usa el contador de vueltas.") : null,
             enlacesVideo(texto),
             pr.paso+1<n ? h("p",{class:"muted"},"Después: "+p.pasos[pr.paso+1]) : null,
+            ojoDelPaso(p.pasos, pr.paso+1) ? h("p",{class:"sofa-ojo"}, h("b",{},"Ojo: "), ojoDelPaso(p.pasos, pr.paso+1)) : null,
             h("label",{class:"f apunte"}, "Apunte para este paso", h("small",{},"Sale también en el modo sofá y la próxima vez que lo tejas."),
               h("input",{type:"text", id:"apunte-"+pr.paso, maxlength:"300", value:apunteDe(p.id, pr.paso), placeholder:"Ej.: aquí cambio a lana rosa",
                 onchange:e=>{ ponerApunte(p.id, pr.paso, e.target.value); toast("Apunte guardado"); }}))
@@ -1967,6 +2067,9 @@ VISTAS.tejer = V => {
         contadorUI("Vueltas", ()=>pr.vueltas, v=>pr.vueltas=v)
       ),
       h("div",{class:"timer"}, h("div",{}, h("div",{class:"eyebrow"},"Tiempo tejido"), tEl), tBtn),
+      cuantoFalta(p, pr) ? h("p",{class:"muted falta"}, cuantoFalta(p, pr)) : null,
+      terminado ? null : h("button",{class:"big", onclick:()=>anadirAvance(p, render)}, icono("foto",22), "Foto de cómo va"),
+      galeriaAvance(p),
       h("label",{class:"f"},"Mis apuntes", h("small",{},"Lo que quieras recordar: cambios, colores, por dónde ibas…"),
         h("textarea",{id:"notas-"+p.id, oninput:e=>{ pr.notas=e.target.value; clearTimeout(notaT); notaT=setTimeout(()=>{ save(); saved.textContent="Guardado ✓"; },600); }}, pr.notas||"")),
       saved
@@ -2034,6 +2137,54 @@ function sofaPasoAnterior(pr, pasos){
   else pr.paso=Math.max(0, pr.paso-1);
   pr.puntos=0; pr.rep=0; delete pr.fin;
 }
+// Lo que tiene de especial un paso, para avisar antes de llegar: color, parte nueva, punto que no ha salido aún…
+function ojoDelPaso(pasos, i){
+  const t = pasos[i]; if(t==null) return null;
+  const v = infoPaso(t).vuelta, en = v ? "En la vuelta "+v : "En el siguiente paso";
+  if(esParte(t)) return "Después empieza otra parte: "+t.replace(/^parte:\s*/i, "").replace(/\s*·\s*/, ", ");
+  if(esCambioLana(t)) return "Después cambias a la lana "+t.replace(/^cambia a la lana /i, "").replace(/\.$/, "");
+  const cols = coloresDelPaso(t); if(cols.length) return en+" se cambia de color: "+yLista(cols.map(c=>c.nombre));
+  if(/hebra de (atrás|delante)/i.test(t)) return en+" se teje por la hebra de "+t.match(/hebra de (atrás|delante)/i)[1];
+  if(/\brellen/i.test(t)) return en+" toca rellenar";
+  if(/\b(cose|coser|une|unir)\b/i.test(t)) return en+" toca coser o unir";
+  const antes = new Set(pasos.slice(0, i).flatMap(puntosDelPaso));
+  const basicos = ["cad","pd","am"], yaTeje = [...antes].some(k=>!basicos.includes(k));
+  const nuevos = yaTeje ? puntosDelPaso(t).filter(k=>!antes.has(k) && !basicos.includes(k)) : [];
+  if(nuevos.length) return en+" sale un punto nuevo: "+yLista(nuevos.map(k=>NOMBRE[k]||k));
+  return null;
+}
+// ---------- Cuánto te falta ----------
+// Puntos que quedan (con las piezas que se repiten) y, con su ritmo de verdad, el tiempo que queda
+function puntosDeUnPaso(t){ const info = infoPaso(t); return info.modo==="puntos" ? info.objetivo*info.reps : 0; }
+function puntosQueQuedan(pasos, pr){
+  const n = pasos.length; let total = 0, hasta = false;
+  for(let i=pr.paso||0; i<n; i++){
+    if(infoPaso(pasos[i]).modo==="hasta") hasta = true;
+    let x = puntosDeUnPaso(pasos[i]);
+    if(i===(pr.paso||0) && x){ const info = infoPaso(pasos[i]); x = Math.max(0, info.objetivo*(info.reps-(pr.rep||0)) - (pr.puntos||0)); }
+    total += x;
+  }
+  // Las piezas que faltan de cada parte que se hace varias veces
+  for(let i=0; i<n; i++) if(esParte(pasos[i])){
+    const pz = piezasDe(pasos, i+1); if(!pz || pz.marca!==i || pz.veces<2) continue;
+    const dentro = (pr.paso||0)>=pz.ini && (pr.paso||0)<pz.fin, antes = (pr.paso||0)<=pz.marca;
+    const extra = antes ? pz.veces-1 : dentro ? pz.veces-1-(pr.pieza||0) : 0;
+    if(extra>0) total += extra*pasos.slice(pz.ini, pz.fin).reduce((a,t)=>a+puntosDeUnPaso(t), 0);
+  }
+  return {puntos:total, hasta};
+}
+function cuantoFalta(p, pr){
+  if(!pr || pr.paso>=p.pasos.length) return null;
+  const queda = puntosQueQuedan(p.pasos, pr), todo = puntosQueQuedan(p.pasos, {paso:0}).puntos, hecho = todo - queda.puntos;
+  if(!queda.puntos) return null;
+  const fmt = n => n.toLocaleString("es-ES");
+  let tiempo = "";
+  if(hecho>=20 && (pr.tiempo||0)>=120){
+    const sg = Math.round(pr.tiempo/hecho*queda.puntos/300)*300, hh = Math.floor(sg/3600), mm = Math.round(sg%3600/60);
+    tiempo = sg<300 ? "menos de 5 minutos" : (hh ? "unas "+hh+" h"+(mm ? " "+mm+" min" : "") : "unos "+mm+" minutos");
+  }
+  return "Te quedan unos "+fmt(queda.puntos)+" puntos"+(tiempo ? ", "+tiempo+" a tu ritmo" : "")+(queda.hasta ? " (más lo de «hasta que mida»)" : "")+".";
+}
 const ORDINAL = ["primera","segunda","tercera","cuarta","quinta","sexta","séptima","octava","novena","décima"];
 const sofaFoto = pr => ({paso:pr.paso, puntos:pr.puntos||0, vueltas:pr.vueltas||0, rep:pr.rep||0, pieza:pr.pieza||0, fin:pr.fin});
 function sofaVolver(pr, f){ Object.assign(pr, f); if(f.fin==null) delete pr.fin; }
@@ -2091,6 +2242,7 @@ VISTAS.sofa = V => {
   const eyebrow = h("div",{class:"eyebrow"});
   const txt = h("div",{class:"sofa-txt"});
   const despues = h("p",{class:"sofa-desp muted"});
+  const ojo = h("p",{class:"sofa-ojo", role:"status", hidden:true});
   const apunte = h("p",{class:"sofa-apunte", hidden:true});
   const lana = h("div",{class:"sofa-lana", hidden:true});
   // El dibujo de la vuelta: con el móvil de pie, una tira con sus puntos; tumbado o en el ordenador, el gráfico
@@ -2157,6 +2309,9 @@ VISTAS.sofa = V => {
     const clave = p.id+":"+pr.paso+":"+pr.rep;
     if(state.prefs.leer && sofaLeido!==clave){ sofaLeido = clave; leerEnVoz(p.pasos[pr.paso]); }
     const otraPz = pz && pz.veces>1 && pr.paso>=pz.ini && pr.paso+1>=pz.fin && (pr.pieza||0)+1<pz.veces;
+    // Antes de una vuelta especial, se avisa durante la última repetición del paso de antes
+    const aviso = (info.modo!=="puntos" || pr.rep+1>=info.reps) && !otraPz ? ojoDelPaso(p.pasos, pr.paso+1) : null;
+    ojo.hidden = !aviso; ojo.replaceChildren(...(aviso ? [h("b",{},"Ojo: "), aviso] : []));
     despues.textContent = otraPz ? "Después: la "+ORDINAL[(pr.pieza||0)+1]+" pieza, otra vez desde «"+p.pasos[pz.ini]+"»" : pr.paso+1<n ? "Después: "+p.pasos[pr.paso+1] : "Es el último paso.";
     const nota = apunteDe(p.id, pr.paso); apunte.hidden = !nota; apunte.textContent = nota ? "Tu apunte: "+nota : "";
     barra.style.width = Math.round(pr.paso/n*100)+"%";
@@ -2252,6 +2407,7 @@ VISTAS.sofa = V => {
     const ov = h("div",{class:"overlay", role:"dialog", "aria-label":"Opciones del modo sofá", onclick:e=>{ if(e.target===ov) cerrarV(); }},
       h("div",{class:"box"},
         h("h2",{},"Opciones"),
+        cuantoFalta(p, pr) ? h("p",{class:"falta"}, cuantoFalta(p, pr)) : null,
         h("div",{class:"menu"},
           interruptor("auto","Pasar de vuelta sola al cuadrar"),
           interruptor("sonido","Sonido al terminar cada vuelta"),
@@ -2261,6 +2417,7 @@ VISTAS.sofa = V => {
         pr.paso<p.pasos.length ? enlacesVideo(p.pasos[pr.paso]) : null,
         h("div",{class:"stack", style:"gap:.6rem"},
           pr.paso>0 ? h("button",{class:"big", onclick:()=>{ cerrarV(); accion(()=>{ sofaPasoAnterior(pr, p.pasos); return "atras"; }); }},"← Volver al paso anterior") : null,
+          h("button",{class:"big", onclick:()=>{ cerrarV(); anadirAvance(p); }}, icono("foto",22), "Foto de cómo va"),
           h("button",{class:"big", onclick:()=>{ cerrarV(); state.prefs.tejer="completa"; save(); go({name:"tejer", id:p.id}); }}, icono("rejilla",22), "Vista completa: gráfico y apuntes"),
           h("button",{class:"primary big", onclick:cerrar},"Seguir tejiendo")),
         h("p",{class:"muted", style:"font-size:.85rem"},"Con un pedal o teclado bluetooth: espacio o flecha derecha suma, flecha izquierda deshace.")));
@@ -2278,7 +2435,7 @@ VISTAS.sofa = V => {
       lana,
       h("div",{class:"sofa-eye"}, eyebrow,
         puedeHablar() ? h("button",{class:"ghost sofa-voz", "aria-label":"Leer el paso en voz alta", onclick:()=>leerEnVoz(p.pasos[pr.paso])}, icono("altavoz",20), h("span",{},"Oír")) : null),
-      txt, dibujo, apunte, despues,
+      txt, dibujo, apunte, ojo, despues,
       h("div",{class:"sofa-acc"}, btnDeshacer, btnLista),
       flash),
     big));
@@ -2369,8 +2526,11 @@ VISTAS.editar = V => {
         h("button",{class:"primary big", onclick:guardar},"Guardar patrón"),
         existente ? confirmBtn("Borrar patrón","¿Borrar? Toca otra vez","danger",()=>{
           const pos = state.patrones.indexOf(existente), pr = state.progreso[existente.id], foto = fotoGet(existente.id);
-          state.patrones=state.patrones.filter(x=>x.id!==existente.id); delete state.progreso[existente.id]; fotoSet(existente.id,null); save();
-          toast("Patrón borrado", ()=>{ state.patrones.splice(Math.max(0,pos), 0, existente); if(pr) state.progreso[existente.id]=pr; if(foto) fotoSet(existente.id, foto); save(); go({name:"patron", id:existente.id}); });
+          const avs = (state.avances[existente.id]||[]).map(x=>({x, img:fotoGet(x.k)}));
+          state.patrones=state.patrones.filter(x=>x.id!==existente.id); delete state.progreso[existente.id]; fotoSet(existente.id,null);
+          avs.forEach(a=>fotoSet(a.x.k, null)); delete state.avances[existente.id]; save();
+          toast("Patrón borrado", ()=>{ state.patrones.splice(Math.max(0,pos), 0, existente); if(pr) state.progreso[existente.id]=pr; if(foto) fotoSet(existente.id, foto);
+            const vuelven = avs.filter(a=>a.img); vuelven.forEach(a=>fotoSet(a.x.k, a.img)); if(vuelven.length) state.avances[existente.id] = vuelven.map(a=>a.x); save(); go({name:"patron", id:existente.id}); });
           go({name:"patrones"}); }) : null
       )
     )
@@ -3091,7 +3251,7 @@ const GROSORES = ["Muy fina (lace)","Fina (bebé, calcetín)","Media fina (DK)",
 VISTAS.lanas = V => {
   const ls = state.lanas;
   V.append(volver("Más", {name:"mas"}));
-  const gramos = ls.reduce((a,l)=>a+(+l.gramos||0)*(+l.ovillos||1),0), ovillos = ls.reduce((a,l)=>a+(+l.ovillos||1),0);
+  const gramos = ls.reduce((a,l)=>a+(+l.gramos||0)*ovillosDe(l),0), ovillos = ls.reduce((a,l)=>a+ovillosDe(l),0);
   V.append(
     h("div",{class:"page-title"}, h("h1",{},"Mis lanas"), h("p",{class:"muted"},"Apunta lo que tienes en casa para saber qué puedes tejer sin ir a la tienda.")),
     h("div",{class:"section"},
@@ -3100,7 +3260,7 @@ VISTAS.lanas = V => {
       ls.length ? h("div",{class:"stack", style:"gap:.6rem"}, ls.map(l=>h("button",{class:"yarnrow", onclick:()=>go({name:"lana", id:l.id})},
           h("span",{class:"ball", style:"background:"+(l.color||"#8A9594")}),
           h("span",{style:"min-width:0"}, h("b",{style:"display:block"}, l.nombre||"Lana sin nombre"), h("span",{class:"muted", style:"font-size:.9rem"}, [l.marca, l.grosor, l.ganchillo?("ganchillo "+l.ganchillo):""].filter(Boolean).join(" · "))),
-          h("span",{class:"chip"}, (l.ovillos||1)+" × "+(l.gramos||"?")+" g"))))
+          ovillosDe(l) ? h("span",{class:"chip"}, ovillosDe(l)+" × "+(l.gramos||"?")+" g") : h("span",{class:"chip"},"Agotada"))))
         : h("div",{class:"empty"}, h("h3",{},"Tu cesta está vacía"), h("p",{class:"muted"},"Añade tus ovillos con su color, grosor y gramos. Te ayudará a elegir el siguiente proyecto."))
     )
   );
@@ -3127,7 +3287,7 @@ VISTAS.lana = V => {
   pintar();
   const val = el => el.querySelector("input").value.trim();
   function guardar(){
-    const obj = {...(ex||{}), id: ex?ex.id:"l-"+Date.now(), nombre:val(f.nombre), marca:val(f.marca), gramos:+val(f.gramos)||0, ovillos:+val(f.ovillos)||1, metros:+val(f.metros)||"", ganchillo:val(f.ganchillo), grosor:f.grosor.value, notas:f.notas.value.trim(), color};
+    const obj = {...(ex||{}), id: ex?ex.id:"l-"+Date.now(), nombre:val(f.nombre), marca:val(f.marca), gramos:+val(f.gramos)||0, ovillos: val(f.ovillos)==="" ? 1 : Math.max(0, Math.round(+val(f.ovillos)||0)), metros:+val(f.metros)||"", ganchillo:val(f.ganchillo), grosor:f.grosor.value, notas:f.notas.value.trim(), color};
     if(ex) state.lanas = state.lanas.map(x=>x.id===obj.id?obj:x); else state.lanas.unshift(obj);
     save(); toast("Lana guardada"); go(view.vuelta || {name:"lanas"});
   }

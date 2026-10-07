@@ -1219,6 +1219,83 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  await prueba("avisa antes de la vuelta difícil: color, hebra de atrás, punto nuevo", async () => {
+    const page = await nuevaPagina(browser);
+    const PASOS = ["Parte: CUERPO · con gris", "Vuelta 1: 18 cad, 1 pd en la primera cad (18)", "Vuelta 2: 2 cad, 3 pa, con blanco: 10 pa, con gris: 5 pa, 1 pd en el primer pa (18)",
+      "Vuelta 3: 18 pa por la hebra de atrás (18)", "Vuelta 4: 18 pad (18)", "Vuelta 5: 18 pa (18)"];
+    const ojos = await page.evaluate(P => [2, 3, 4, 5].map(i => ojoDelPaso(P, i)), PASOS);
+    assert.match(ojos[0], /En la vuelta 2 se cambia de color: blanco y gris/);
+    assert.match(ojos[1], /En la vuelta 3 se teje por la hebra de atrás/);
+    assert.match(ojos[2], /En la vuelta 4 sale un punto nuevo: punto alto doble/i);
+    assert.equal(ojos[3], null, "una vuelta normal no avisa");
+    await page.evaluate(P => { state.patrones.unshift({ id: "m-ojo", titulo: "Pingüino", color: "#8A9594", pasos: P }); Object.assign(prog("m-ojo"), { paso: 1 }); save(); go({ name: "sofa", id: "m-ojo" }); }, PASOS);
+    await page.waitForTimeout(200);
+    assert.ok(await page.locator(".sofa-ojo").isVisible());
+    assert.match(await page.locator(".sofa-ojo").textContent(), /Ojo: En la vuelta 2 se cambia de color/);
+    await page.screenshot({ path: path.join(CAPTURAS, "sofa-ojo.png") });
+    await page.evaluate(() => { prog("m-ojo").paso = 4; save(); render(); });
+    await page.waitForTimeout(150);
+    assert.ok(await page.locator(".sofa-ojo").isHidden());
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("cuánto te falta: puntos que quedan, piezas repetidas y tiempo a su ritmo", async () => {
+    const page = await nuevaPagina(browser);
+    const r = await page.evaluate(() => {
+      const p = { id: "m-f", titulo: "Bola", pasos: ["Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 6 aum (12)", "Vueltas 3 a 4: 12 pb (12)"] };
+      const pies = ["Parte: PIES (hacer 2) · con naranja", "Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 6 aum (12)"];
+      return [puntosQueQuedan(p.pasos, { paso: 0 }).puntos, puntosQueQuedan(p.pasos, { paso: 1, puntos: 2 }).puntos, cuantoFalta(p, { paso: 2, rep: 1, puntos: 0, tiempo: 600 }),
+        cuantoFalta(p, { paso: 1, puntos: 0, tiempo: 5 }), puntosQueQuedan(pies, { paso: 0 }).puntos, puntosQueQuedan(pies, { paso: 2, pieza: 1 }).puntos, puntosQueQuedan(pies, { paso: 1, pieza: 0 }).puntos];
+    });
+    assert.deepEqual(r, [42, 34, "Te quedan unos 12 puntos, unos 5 minutos a tu ritmo.", "Te quedan unos 36 puntos.", 36, 12, 36]);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("fotos de cómo va: se añaden desde la labor, se ven en el patrón y se pueden quitar", async () => {
+    const fx3 = await browser.newPage(); await fx3.setViewportSize({ width: 300, height: 300 });
+    await fx3.setContent('<body style="margin:0;background:#E07AA8"></body>'); const img = await fx3.screenshot({ type: "png" }); await fx3.close();
+    const page = await nuevaPagina(browser);
+    await page.evaluate(() => { state.prefs.tejer = "completa"; state.patrones.unshift({ id: "m-av", titulo: "Manta", color: "#8A9594", pasos: ["Haz 30 cad.", "Vuelta 1: 29 pb (29)"] }); Object.assign(prog("m-av"), { paso: 1 }); save(); go({ name: "tejer", id: "m-av" }); });
+    const [fc] = await Promise.all([page.waitForEvent("filechooser"), page.getByRole("button", { name: "Foto de cómo va" }).tap()]);
+    await fc.setFiles({ name: "avance.png", mimeType: "image/png", buffer: img });
+    await page.waitForFunction(() => document.querySelectorAll(".avance").length === 1);
+    assert.equal(await page.evaluate(() => state.avances["m-av"][0].paso), 1);
+    await page.evaluate(() => go({ name: "patron", id: "m-av" }));
+    assert.equal(await page.locator(".avance").count(), 1);
+    await page.locator(".avances").screenshot({ path: path.join(CAPTURAS, "patron-avances.png") });
+    await page.locator(".avance").tap();
+    await page.getByRole("button", { name: "Quitar esta foto" }).tap(); await page.getByRole("button", { name: "¿Quitar? Toca otra vez" }).tap();
+    assert.equal(await page.locator(".avance").count(), 0);
+    assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => k.includes("av-m-av")).length), 0, "la foto se borra del aparato");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
+  await prueba("al terminar: quitar de Mis lanas los ovillos gastados, primero los del color del patrón", async () => {
+    const page = await nuevaPagina(browser);
+    await page.evaluate(() => {
+      state.lanas = [{ id: "l-r", nombre: "Lana roja", color: "#C0392B", gramos: 50, ovillos: 2 }, { id: "l-g", nombre: "Algodón gris", color: "#8A9594", gramos: 50, ovillos: 3 }];
+      state.patrones.unshift({ id: "m-fin", titulo: "Pingüino", hilo: "lana gris", color: "#8A9594", pasos: ["Vuelta 1: 6 pb (6)"] });
+      Object.assign(prog("m-fin"), { paso: 1, fin: Date.now() }); save(); go({ name: "tejer", id: "m-fin" });
+    });
+    assert.match(await page.locator(".gastar .fila-gasto").first().textContent(), /Algodón gris/, "primero la del color del patrón");
+    await page.getByRole("button", { name: "Un ovillo más de Algodón gris" }).tap();
+    await page.getByRole("button", { name: "Un ovillo más de Algodón gris" }).tap();
+    await page.locator(".gastar").screenshot({ path: path.join(CAPTURAS, "terminar-gastar-lana.png") });
+    await page.getByRole("button", { name: "Quitar 2 ovillos de Mis lanas" }).tap();
+    assert.equal(await page.evaluate(() => state.lanas.find(l => l.id === "l-g").ovillos), 1);
+    assert.equal(await page.locator(".gastar").count(), 0, "ya no se vuelve a preguntar");
+    await page.getByRole("button", { name: "Deshacer" }).tap();
+    assert.equal(await page.evaluate(() => state.lanas.find(l => l.id === "l-g").ovillos), 3);
+    // Una lana gastada del todo sale como agotada, no como 1 ovillo
+    await page.evaluate(() => { state.lanas[0].ovillos = 0; save(); go({ name: "lanas" }); });
+    assert.match(await page.locator(".yarnrow").first().textContent(), /Agotada/);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);

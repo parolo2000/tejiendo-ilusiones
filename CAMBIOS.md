@@ -270,3 +270,19 @@ Capturas en `tests/capturas/`.
 - Contador: varios con nombre (`state.contadores`, hasta 12; el principal sigue en `state.libre`). Se crean,
   renombran y borran con deshacer.
 - Tests: 6 nuevos. 59/59.
+
+## 2026-10-07 · Por importancia: aviso antes de la vuelta difícil, cuánto falta, fotos del avance y gastar lana
+
+- Orden por valor × frecuencia × diferenciación × retención ÷ esfuerzo. Las calculadoras de aumentos y de muestra
+  ya estaban en Más; las carpetas quedan fuera (puntúan 6 y el buscador ya cubre eso).
+- Modo sofá y vista completa: «Ojo: en la vuelta 12 se cambia de color…» durante la última repetición del paso de
+  antes (`ojoDelPaso`: parte nueva, cambio de lana, colores dentro de la vuelta, hebra de atrás/delante, rellenar,
+  coser o unir, punto que no ha salido aún).
+- Cuánto te falta (`puntosQueQuedan`, `cuantoFalta`): puntos que quedan, contando las piezas repetidas, y el tiempo
+  a su ritmo real (con 20 puntos y 2 minutos tejidos). En el patrón, la vista completa y las opciones del sofá.
+- Fotos de cómo va (`state.avances`, hasta 12 por patrón, a 520 px): desde la vista completa o las opciones del
+  sofá. «Así va creciendo» en el patrón; se ven en grande y se quitan. Al borrar el patrón se borran, con deshacer.
+- Al terminar, «¿Has gastado lana de tu cesta?» (`cajaGastar`) quita de Mis lanas los ovillos usados, con
+  deshacer, primero las del color del patrón. Una lana a 0 sale «Agotada» (`ovillosDe`).
+- Las ventanas ya no aplastan su contenido cuando no cabe (`.overlay .box > *{flex-shrink:0}`).
+- Tests: 4 nuevos. 63/63.
