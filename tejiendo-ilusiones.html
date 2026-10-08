@@ -161,7 +161,7 @@ ol.steps .rev.aviso{color:var(--danger)}
 .counter .small button{flex:1;font-size:.9rem}
 .timer{display:flex;align-items:center;justify-content:space-between;gap:.8rem;background:var(--surface);border-radius:1rem;padding:.6rem .6rem .6rem 1rem;box-shadow:var(--shadow)}
 .timer .t{font-weight:700;font-size:1.35rem;font-variant-numeric:tabular-nums}
-textarea,input[type=text],input[type=number],select{font:inherit;width:100%;box-sizing:border-box;padding:.6rem .8rem;border:2px solid var(--line);border-radius:.7rem;background:var(--surface);color:var(--fg)}
+textarea,input[type=text],input[type=email],input[type=search],input[type=number],select{font:inherit;width:100%;box-sizing:border-box;padding:.6rem .8rem;border:2px solid var(--line);border-radius:.7rem;background:var(--surface);color:var(--fg)}
 textarea{min-height:6rem;resize:vertical;line-height:1.5}
 label.f,.f{display:flex;flex-direction:column;gap:.3rem;font-weight:700}
 label.f small,.f small{font-weight:400;color:var(--muted)}
@@ -3067,7 +3067,7 @@ VISTAS.importar = V => {
   const botones = [];
   const avisar = (msg, frac) => {
     if(estado.hidden){ estado.hidden = false; estado.scrollIntoView({behavior:"smooth", block:"center"}); }
-    estado.replaceChildren(h("p",{style:"font-weight:700"}, msg), frac==null ? null : h("div",{class:"prog"}, h("i",{style:"width:"+Math.round(frac*100)+"%"})));
+    estado.replaceChildren(...[h("p",{style:"font-weight:700"}, msg), frac==null ? null : h("div",{class:"prog"}, h("i",{style:"width:"+Math.round(frac*100)+"%"}))].filter(Boolean));
   };
   const fallo = (...partes) => { estado.hidden = false; estado.replaceChildren(...partes.map(t=>h("p",{},t))); estado.scrollIntoView({behavior:"smooth", block:"center"}); };
   async function traer(fn){
@@ -3736,15 +3736,16 @@ function panelEntrar(motivo){
       if(!acepto.checked){ aviso.textContent = "Marca la casilla de abajo para seguir."; return; }
       pedir.disabled = true; aviso.textContent = "Mandando el código…";
       try{ await pedirCodigo(c); paso2(c); }
-      catch(e){ pedir.disabled = false; aviso.textContent = e.estado===429 ? "Has pedido muchos códigos seguidos. Espera un poco y vuelve a probar." : avisoNube(e); }
+      catch(e){ pedir.disabled = false; aviso.textContent = e.estado===429 ? "Has pedido muchos códigos seguidos. Espera un poco y vuelve a probar."
+        : e.estado ? "No he podido mandar el correo. Prueba dentro de un rato." + (e.message ? " ("+e.message+")" : "") : avisoNube(e); }
     }},"Mandarme un código");
-    caja.replaceChildren(
+    caja.replaceChildren(...[
       h("h2",{},"Entra en tu cuenta"),
       motivo ? h("p",{}, motivo) : null,
       h("label",{for:"en-correo"},"Tu correo"), correo, pedir,
       NUBE.google ? h("button",{class:"big", onclick:()=>{ if(!acepto.checked){ aviso.textContent = "Marca la casilla de abajo para seguir."; return; } entrarConGoogle(); }},"Entrar con Google") : null,
       h("label",{class:"check"}, acepto, " Tengo 14 años o más y acepto ", h("a",{href:"#", onclick:e=>{ e.preventDefault(); go({name:"privacidad"}); }},"cómo se guardan mis datos"), "."),
-      aviso);
+      aviso].filter(Boolean));
   };
   const paso2 = correo=>{
     const codigo = h("input",{type:"text", id:"en-codigo", inputmode:"numeric", autocomplete:"one-time-code", maxlength:"10", placeholder:"123456", "aria-label":"Código del correo", style:"font-size:1.6rem;letter-spacing:.3em;text-align:center"});

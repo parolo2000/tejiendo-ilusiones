@@ -64,6 +64,9 @@ async function prueba(nombre, fn) {
   await prueba("sin cuenta la app funciona igual y en Inicio invita a entrar", async () => {
     assert.equal(await ana.locator(".invita").count(), 1);
     assert.equal(await ana.locator("nav.tabs button", { hasText: "Gente" }).count(), 1);
+    await ana.evaluate(() => go({ name: "comunidad" }));
+    assert.doesNotMatch(await ana.textContent(".panel"), /null/, "no sale «null» en la pantalla de entrar");
+    assert.ok((await ana.locator("#en-correo").boundingBox()).height >= 40, "la caja del correo es grande");
   });
   await prueba("entrar con el código del correo sube al instante lo que ya tenía en el móvil, con sus fotos", async () => {
     await ana.evaluate(async () => {
