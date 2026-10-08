@@ -424,6 +424,11 @@ body.en-sofa header.top, body.en-sofa nav.tabs, body.sin-cuenta nav.tabs{display
 .row.clave input{flex:1;min-width:0}
 label.check{display:flex;gap:.6rem;align-items:flex-start;font-weight:400}
 label.check input{width:1.5rem;height:1.5rem;flex:none;margin-top:.1rem}
+nav.tabs button.con-aviso::after{content:"";position:absolute;top:.45rem;left:calc(50% + .55rem);width:.7rem;height:.7rem;border-radius:50%;background:var(--accent);border:2px solid var(--surface)}
+.aviso.nuevo{border-color:var(--accent);background:var(--accent-soft)}
+.aviso b{font-weight:800}
+label.orden{display:flex;align-items:center;gap:.6rem;font-weight:700}
+label.orden select{width:auto;flex:1}
 nav.tabs button{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:min(.85rem,13px)}
 </style>
 
@@ -734,6 +739,8 @@ const ICONOS = {
   deshacer:"M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
   ajustes:"M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6",
   imprimir:"M7 9V3h10v6M7 17H4v-8h16v8h-3M7 14h10v7H7z",
+  marcador:"M6 3h12v18l-6-4-6 4z",
+  campana:"M6 16v-5a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0",
   gente:"M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.6 3.2-6 6.5-6s6 2.4 6.5 6M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14.4c2 .8 3.2 2.9 3.5 5.6"
 };
 function icono(n, z=24){ const v=s("svg",{width:z, height:z, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", "stroke-width":n==="mas"?3.4:1.9, "stroke-linecap":"round", "stroke-linejoin":"round", "aria-hidden":"true"}); v.append(s("path",{d:ICONOS[n]})); if(n==="play"||n==="pausa") v.firstChild.setAttribute("fill","currentColor"); return v; }
@@ -758,11 +765,12 @@ addEventListener("popstate", e => {
 });
 marcar(view, true);
 const TABS = [["inicio","Inicio","casa"],["patrones","Patrones","libro"],["labores","Labores","corazon"],["mas","Más","mas"]];
-const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad", clave:"comunidad"};
+const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad", clave:"comunidad", avisos:"comunidad"};
 function pintarTabs(){
   const actual = TAB_DE[view.name] || view.name;
   const tabs = nubeActiva() ? [...TABS.slice(0,3), ["comunidad","Gente","gente"], TABS[3]] : TABS;
-  document.getElementById("tabs").replaceChildren(...tabs.map(([k,l,ic])=>h("button",{class:actual===k?"on":"", "aria-current":actual===k?"page":null, onclick:()=>go({name:k})}, icono(ic,26), l)));
+  const avisos = k => k==="comunidad" && typeof avisosSinLeer!=="undefined" && avisosSinLeer>0;
+  document.getElementById("tabs").replaceChildren(...tabs.map(([k,l,ic])=>h("button",{class:(actual===k?"on":"")+(avisos(k)?" con-aviso":""), "aria-current":actual===k?"page":null, "aria-label":avisos(k) ? l+", "+avisosSinLeer+(avisosSinLeer===1?" aviso nuevo":" avisos nuevos") : null, onclick:()=>go({name:k})}, icono(ic,26), l)));
 }
 document.getElementById("brand").onclick=()=>go({name:"inicio"});
 document.getElementById("bigger").onclick=()=>{ state.escala=Math.min(1.6, +((state.escala||1)+0.1).toFixed(1)); applyScale(); save(); };
@@ -3647,23 +3655,26 @@ async function borrarCuenta(){
 
 // ── Comunidad ──
 const fotoPublica = ruta => NUBE.url+"/storage/v1/object/public/publicas/"+ruta;
-const CAMPOS_PUB = "id,autor,titulo,texto,foto,con_patron,creado,perfiles!publicaciones_autor_fkey(nombre),megusta(count),comentarios(count)";
+const CAMPOS_PUB = "id,autor,titulo,texto,foto,con_patron,creado,n_gusta,n_tejida,perfiles!publicaciones_autor_fkey(nombre),comentarios(count)";
+const ORDENES = {recientes:["Más recientes","creado.desc"], gustados:["Más gustados","n_gusta.desc,creado.desc"], tejidos:["Más tejidos","n_tejida.desc,creado.desc"]};
 function haceCuanto(ts){
   const s = (Date.now()-new Date(ts).getTime())/1000;
   if(s<90) return "ahora"; if(s<3600) return "hace "+Math.round(s/60)+" min"; if(s<86400) return "hace "+Math.round(s/3600)+" h";
   if(s<86400*7){ const d = Math.round(s/86400); return "hace "+d+(d===1?" día":" días"); }
   return fechaTxt(ts);
 }
-async function misMeGusta(ids){
-  if(!ids.length) return new Set();
-  const f = await llamar("/rest/v1/megusta?select=publicacion&usuario=eq."+sesion.uid+"&publicacion=in.("+ids.join(",")+")");
-  return new Set(f.map(x=>x.publicacion));
+// Qué publicaciones de la lista le gustan y cuáles tiene guardadas
+async function loMio(ids){
+  if(!ids.length) return {gusta:new Set(), guardo:new Set()};
+  const en = "&publicacion=in.("+ids.join(",")+")";
+  const [g, s] = await Promise.all([llamar("/rest/v1/megusta?select=publicacion&usuario=eq."+sesion.uid+en), llamar("/rest/v1/guardados?select=publicacion&usuario=eq."+sesion.uid+en)]);
+  return {gusta:new Set(g.map(x=>x.publicacion)), guardo:new Set(s.map(x=>x.publicacion))};
 }
 // Lo que llega del servidor lo ha escrito cualquiera: siempre como texto (h() no interpreta HTML)
-function tarjetaPub(p, gusta, alCambiar, conComentarios){
+function tarjetaPub(p, mio, alCambiar, conComentarios){
   const mia = p.autor===sesion.uid, nombre = (p.perfiles && p.perfiles.nombre) || "Alguien";
-  const ng = (p.megusta && p.megusta[0] && p.megusta[0].count) || 0, nc = (p.comentarios && p.comentarios[0] && p.comentarios[0].count) || 0;
-  const leGusta = gusta.has(p.id);
+  const ng = p.n_gusta || 0, nt = p.n_tejida || 0, nc = (p.comentarios && p.comentarios[0] && p.comentarios[0].count) || 0;
+  const leGusta = mio.gusta.has(p.id), guardada = mio.guardo.has(p.id);
   const bGusta = h("button",{class:leGusta?"primary":"", "aria-pressed":String(leGusta), onclick:async ()=>{
     bGusta.disabled = true;
     try{
@@ -3672,6 +3683,14 @@ function tarjetaPub(p, gusta, alCambiar, conComentarios){
       alCambiar();
     }catch(e){ bGusta.disabled = false; toast(avisoNube(e)); }
   }}, icono("corazon",20), (leGusta?"Te gusta":"Me gusta")+(ng?" · "+ng:""));
+  const bGuardar = h("button",{class:guardada?"primary":"", "aria-pressed":String(guardada), onclick:async ()=>{
+    bGuardar.disabled = true;
+    try{
+      if(guardada) await llamar("/rest/v1/guardados?publicacion=eq."+p.id+"&usuario=eq."+sesion.uid, {metodo:"DELETE"});
+      else await llamar("/rest/v1/guardados", {metodo:"POST", cuerpo:{publicacion:p.id}, cabeceras:{Prefer:"return=minimal"}});
+      toast(guardada ? "Quitada de guardadas" : "Guardada. La tienes en «Guardadas»."); alCambiar();
+    }catch(e){ bGuardar.disabled = false; toast(avisoNube(e)); }
+  }}, icono("marcador",20), guardada ? "Guardada" : "Guardar");
   return h("article",{class:"pub"},
     h("div",{class:"pub-cab"},
       h("button",{class:"ghost pub-autora", onclick:()=>go({name:"perfil", id:p.autor})}, inicial(nombre), h("span",{}, nombre)),
@@ -3680,8 +3699,10 @@ function tarjetaPub(p, gusta, alCambiar, conComentarios){
     p.foto ? h("img",{class:"pub-foto", src:fotoPublica(p.foto), alt:"Foto de "+p.titulo, loading:"lazy"}) : null,
     h("h3",{}, p.titulo),
     p.texto ? h("p",{class:"pub-texto"}, p.texto) : null,
+    nt ? h("p",{class:"muted"}, nt===1 ? "Lo está tejiendo 1 persona" : "Lo están tejiendo "+nt+" personas") : null,
     h("div",{class:"row"}, bGusta,
       conComentarios ? null : h("button",{onclick:()=>go({name:"publicacion", id:p.id})}, icono("texto",20), "Comentarios"+(nc?" · "+nc:"")),
+      bGuardar,
       p.con_patron ? h("button",{class:"teal", onclick:()=>tejerPublicado(p)}, icono("libro",20), "Tejer este patrón") : null));
 }
 function inicial(nombre){ return h("span",{class:"avatar", "aria-hidden":"true"}, (nombre.trim()[0]||"?").toUpperCase()); }
@@ -3691,6 +3712,8 @@ async function tejerPublicado(p){
     const f = await llamar("/rest/v1/publicaciones?select=patron&id=eq."+p.id);
     const r = f && f[0] && validarPatronRecibido(f[0].patron);
     if(!r){ toast("Este patrón no se puede abrir."); return; }
+    // Cuenta una vez por persona (para «Más tejidos»); si falla, no impide tejerlo
+    if(p.autor!==sesion.uid) llamar("/rest/v1/tejidas?on_conflict=publicacion,usuario", {metodo:"POST", cuerpo:{publicacion:p.id}, cabeceras:{Prefer:"resolution=ignore-duplicates,return=minimal"}}).catch(()=>{});
     patronRecibido = r; go({name:"recibido"});
   }catch(e){ toast(avisoNube(e)); }
 }
@@ -3864,18 +3887,24 @@ VISTAS.comunidad = V => {
       }},"Guardar mi nombre"))));
   }).catch(()=>{});
   const lista = h("div",{class:"stack", "aria-live":"polite"}, h("p",{class:"muted"},"Cargando…"));
-  const buscarIn = h("input",{type:"search", id:"co-buscar", placeholder:"Buscar a alguien por su nombre", "aria-label":"Buscar a alguien"});
+  const buscarIn = h("input",{type:"search", id:"co-buscar", value:view.q||"", placeholder:pest==="gente" ? "Buscar a alguien por su nombre" : "Buscar: gorro, manta, amigurumi…", "aria-label":pest==="gente" ? "Buscar a alguien" : "Buscar labores y patrones"});
+  const orden = ORDENES[view.orden] ? view.orden : "recientes";
+  const ordenSel = h("select",{id:"co-orden", "aria-label":"Ordenar"}, Object.entries(ORDENES).map(([k,[t]])=>h("option",{value:k, selected:k===orden}, t)));
+  ordenSel.onchange = ()=>{ view.orden = ordenSel.value; marcar(view, true); pintar(); };
+  const bAvisos = h("button",{class:"ghost", id:"co-avisos", onclick:()=>go({name:"avisos"})}, icono("campana",20), h("span",{}, avisosSinLeer ? "Avisos · "+avisosSinLeer : "Avisos"));
   V.append(
     h("div",{class:"section"}, h("div",{class:"row", role:"group", "aria-label":"Qué ver"},
-      [["todas","Todas"],["sigo","A quien sigo"],["gente","Buscar gente"]].map(([k,t])=>h("button",{class:pest===k?"primary":"", "aria-pressed":String(pest===k), onclick:()=>{ view.pest = k; marcar(view, true); render(); }}, t)),
-      h("button",{class:"ghost", onclick:()=>go({name:"perfil", id:sesion.uid})}, icono("gente",20), "Mi perfil"))),
+      [["todas","Todas"],["sigo","A quien sigo"],["guardadas","Guardadas"],["gente","Gente"]].map(([k,t])=>h("button",{class:pest===k?"primary":"", "aria-pressed":String(pest===k), onclick:()=>{ view.pest = k; view.q = ""; marcar(view, true); render(); }}, t))),
+      h("div",{class:"row", style:"margin-top:.6rem"}, bAvisos, h("button",{class:"ghost", onclick:()=>go({name:"perfil", id:sesion.uid})}, icono("gente",20), "Mi perfil"))),
     bienvenida,
-    pest==="gente" ? h("div",{class:"section"}, buscarIn) : null,
+    h("div",{class:"section stack", style:"gap:.6rem"}, buscarIn, pest==="gente" ? null : h("label",{class:"orden"}, "Ordenar: ", ordenSel)),
     h("div",{class:"section"}, lista));
+  // Lo que se busca va dentro de la dirección de la consulta: se quitan los caracteres que tienen significado allí
+  const limpio = t => t.trim().replace(/[*,().%_\\:"'<>]/g," ").replace(/\s+/g," ").trim().slice(0,40);
   const pintar = async ()=>{
     try{
+      const q = limpio(buscarIn.value); view.q = buscarIn.value;
       if(pest==="gente"){
-        const q = buscarIn.value.trim().replace(/[*,().%_\\:"']/g,"").slice(0,40);
         if(q.length<2){ lista.replaceChildren(h("p",{class:"muted"},"Escribe al menos dos letras del nombre.")); return; }
         const f = await llamar("/rest/v1/perfiles?select=id,nombre,bio&nombre=ilike."+encodeURIComponent("*"+q+"*")+"&order=nombre&limit=30");
         lista.replaceChildren(...(f.length ? f.map(u=>h("button",{class:"persona", onclick:()=>go({name:"perfil", id:u.id})}, inicial(u.nombre), h("span",{class:"grow"}, u.nombre, u.bio ? h("small",{}, u.bio) : null), h("span",{class:"muted"},"›")))
@@ -3888,15 +3917,54 @@ VISTAS.comunidad = V => {
         if(!s.length){ lista.replaceChildren(h("div",{class:"empty"}, h("h3",{},"Aún no sigues a nadie"), h("p",{class:"muted"},"En «Todas» toca el nombre de alguien y luego «Seguir»."))); return; }
         filtro = "&autor=in.("+s.map(x=>x.seguido).join(",")+")";
       }
-      const pubs = await llamar("/rest/v1/publicaciones?select="+CAMPOS_PUB+filtro+"&order=creado.desc&limit=30");
-      const gusta = await misMeGusta(pubs.map(p=>p.id));
-      lista.replaceChildren(...(pubs.length ? pubs.map(p=>tarjetaPub(p, gusta, pintar))
+      if(pest==="guardadas"){
+        const g = await llamar("/rest/v1/guardados?select=publicacion&usuario=eq."+sesion.uid+"&order=creado.desc&limit=100");
+        if(!g.length){ lista.replaceChildren(h("div",{class:"empty"}, h("h3",{},"Aún no has guardado nada"), h("p",{class:"muted"},"Toca «Guardar» en una publicación para tenerla aquí a mano."))); return; }
+        filtro = "&id=in.("+g.map(x=>x.publicacion).join(",")+")";
+      }
+      if(q.length>=2){ const w = encodeURIComponent("*"+q+"*"); filtro += "&or=(titulo.ilike."+w+",texto.ilike."+w+")"; }
+      const pubs = await llamar("/rest/v1/publicaciones?select="+CAMPOS_PUB+filtro+"&order="+(ORDENES[view.orden]||ORDENES.recientes)[1]+"&limit=30");
+      const mio = await loMio(pubs.map(p=>p.id));
+      lista.replaceChildren(...(pubs.length ? pubs.map(p=>tarjetaPub(p, mio, pintar))
+        : q.length>=2 ? [h("p",{class:"muted"},"No he encontrado nada con «"+q+"».")]
         : [h("div",{class:"empty"}, h("h3",{},"Todavía no hay nada"), h("p",{class:"muted"},"Sé la primera: en «Mis labores» toca «Publicar» en una labor terminada."), h("button",{class:"primary big", onclick:()=>go({name:"labores"})},"Ir a Mis labores"))]));
     }catch(e){ lista.replaceChildren(h("p",{class:"note"}, avisoNube(e)), h("button",{onclick:pintar},"Probar otra vez")); }
   };
-  let espera; buscarIn.oninput = ()=>{ clearTimeout(espera); espera = setTimeout(pintar, 350); };
+  let espera; buscarIn.oninput = ()=>{ clearTimeout(espera); espera = setTimeout(()=>{ marcar(view, true); pintar(); }, 400); };
   pintar();
+  contarAvisos();
   if(pest==="gente") buscarIn.focus();
+};
+
+// ── Avisos: «a Bea le gusta tu labor»… Los crea la base de datos; aquí se cuentan y se enseñan ──
+var avisosSinLeer = 0, avisosT = null;
+async function contarAvisos(){
+  if(!sesion || !nubeActiva()) return;
+  try{
+    const r = await llamar("/rest/v1/avisos?select=id&leido=eq.false", {cabeceras:{Prefer:"count=exact", Range:"0-0"}, crudo:true});
+    const n = +((r.headers.get("content-range")||"").split("/")[1]||0);
+    if(n!==avisosSinLeer){ avisosSinLeer = n; pintarTabs(); }
+    const b = document.querySelector("#co-avisos span"); if(b) b.textContent = n ? "Avisos · "+n : "Avisos";
+  }catch(e){}
+}
+// Cada dos minutos, solo con la app a la vista
+function vigilarAvisos(){ clearInterval(avisosT); avisosT = setInterval(()=>{ if(document.visibilityState==="visible") contarAvisos(); }, 120000); contarAvisos(); }
+const TEXTO_AVISO = {gusta:"le gusta tu publicación", comenta:"ha comentado tu publicación", teje:"está tejiendo tu patrón", sigue:"te sigue"};
+VISTAS.avisos = V => {
+  if(!sesion) return go({name:"comunidad"}, true);
+  const lista = h("div",{class:"stack"}, h("p",{class:"muted"},"Cargando…"));
+  V.append(volver("Comunidad", {name:"comunidad"}), h("div",{class:"page-title"}, h("h1",{},"Avisos")), h("div",{class:"section"}, lista));
+  (async ()=>{
+    try{
+      const f = await llamar("/rest/v1/avisos?select=id,tipo,leido,creado,de,publicacion,perfiles!avisos_de_fkey(nombre),publicaciones(titulo)&order=creado.desc&limit=50");
+      lista.replaceChildren(...(f.length ? f.map(a=>{
+        const n = (a.perfiles && a.perfiles.nombre) || "Alguien", t = a.publicaciones && a.publicaciones.titulo;
+        return h("button",{class:"persona aviso"+(a.leido?"":" nuevo"), onclick:()=>go(a.publicacion ? {name:"publicacion", id:a.publicacion} : {name:"perfil", id:a.de})},
+          inicial(n), h("span",{class:"grow"}, a.tipo==="gusta" ? "A " : null, h("b",{}, n), " "+TEXTO_AVISO[a.tipo]+(t ? " «"+t+"»" : ""), h("small",{}, haceCuanto(a.creado))), h("span",{class:"muted"},"›"));
+      }) : [h("div",{class:"empty"}, h("h3",{},"Aún no tienes avisos"), h("p",{class:"muted"},"Aquí verás cuando a alguien le guste lo tuyo, te comente o te siga."))]));
+      if(f.some(a=>!a.leido)){ await llamar("/rest/v1/avisos?leido=eq.false", {metodo:"PATCH", cuerpo:{leido:true}, cabeceras:{Prefer:"return=minimal"}}); avisosSinLeer = 0; pintarTabs(); }
+    }catch(e){ lista.replaceChildren(h("p",{class:"note"}, avisoNube(e))); }
+  })();
 };
 
 VISTAS.publicacion = V => {
@@ -3908,7 +3976,7 @@ VISTAS.publicacion = V => {
     try{
       const f = await llamar("/rest/v1/publicaciones?select="+CAMPOS_PUB+"&id=eq."+view.id);
       if(!f.length){ caja.replaceChildren(h("p",{class:"note"},"Esta publicación ya no está.")); return; }
-      const p = f[0], gusta = await misMeGusta([p.id]);
+      const p = f[0], mio = await loMio([p.id]);
       const coms = await llamar("/rest/v1/comentarios?select=id,autor,texto,creado,perfiles(nombre)&publicacion=eq."+p.id+"&order=creado&limit=200");
       const nuevo = h("textarea",{id:"pub-comentario", maxlength:"500", placeholder:"Escribe algo bonito", "aria-label":"Tu comentario", style:"min-height:4.5rem"});
       const enviar = h("button",{class:"primary big", onclick:async ()=>{
@@ -3917,7 +3985,7 @@ VISTAS.publicacion = V => {
         try{ await llamar("/rest/v1/comentarios", {metodo:"POST", cuerpo:{publicacion:p.id, texto:t.slice(0,500)}, cabeceras:{Prefer:"return=minimal"}}); pintar(); }
         catch(e){ enviar.disabled = false; toast(avisoNube(e)); }
       }},"Comentar");
-      caja.replaceChildren(tarjetaPub(p, gusta, pintar, true),
+      caja.replaceChildren(tarjetaPub(p, mio, pintar, true),
         h("h2",{},"Comentarios"),
         coms.length ? h("div",{class:"stack"}, coms.map(c=>{
           const n = (c.perfiles && c.perfiles.nombre) || "Alguien", puedeBorrar = c.autor===sesion.uid || p.autor===sesion.uid;
@@ -3950,7 +4018,7 @@ VISTAS.perfil = V => {
         mio ? Promise.resolve([]) : llamar("/rest/v1/seguidores?select=seguido&seguidor=eq."+sesion.uid+"&seguido=eq."+u.id),
         llamar("/rest/v1/seguidores?select=seguidor&seguido=eq."+u.id, {cabeceras:{Prefer:"count=exact", Range:"0-0"}, crudo:true})]);
       const nSiguen = +((siguen.headers.get("content-range")||"").split("/")[1]||0);
-      const gusta = await misMeGusta(pubs.map(p=>p.id));
+      const lm = await loMio(pubs.map(p=>p.id));
       const laSigo = sigo.length>0;
       const cab = h("div",{class:"page-title"}, h("div",{class:"pub-cab"}, inicial(u.nombre), h("h1",{}, u.nombre)), u.bio ? h("p",{}, u.bio) : null,
         h("p",{class:"muted"}, pubs.length+(pubs.length===1?" publicación":" publicaciones")+" · "+nSiguen+(nSiguen===1?" la sigue":" la siguen")));
@@ -3966,7 +4034,7 @@ VISTAS.perfil = V => {
         bloquearBtn(u.id, u.nombre, ()=>go({name:"comunidad"}, true)));
       caja.replaceChildren(cab, h("div",{class:"section"}, acciones),
         h("div",{class:"section stack"}, h("h2",{}, mio ? "Lo que has publicado" : "Sus labores"),
-          pubs.length ? pubs.map(p=>tarjetaPub(p, gusta, pintar)) : h("p",{class:"muted"}, mio ? "Aún no has publicado nada. Hazlo desde «Mis labores»." : "Todavía no ha publicado nada.")));
+          pubs.length ? pubs.map(p=>tarjetaPub(p, lm, pintar)) : h("p",{class:"muted"}, mio ? "Aún no has publicado nada. Hazlo desde «Mis labores»." : "Todavía no ha publicado nada.")));
     }catch(e){ caja.replaceChildren(h("p",{class:"note"}, avisoNube(e)), h("button",{onclick:pintar},"Probar otra vez")); }
   };
   pintar();
@@ -4245,5 +4313,5 @@ if(nubeActiva()) sesion = leerSesion();
 render();
 abrirEnlaceRecibido();
 pedirAlmacenamientoFijo();
-arrancarNube().then(()=>{ if(sesion){ if(pendienteClave()) go({name:"clave"}, true); else render(); } });
+arrancarNube().then(()=>{ if(sesion){ vigilarAvisos(); if(pendienteClave()) go({name:"clave"}, true); else render(); } });
 </script>

@@ -38,8 +38,12 @@ async function codigoDe(correo) {
 let bien = 0, mal = 0;
 async function prueba(nombre, fn) {
   try { await fn(); bien++; console.log("  ✓ " + nombre); }
-  catch (e) { mal++; console.log("  ✗ " + nombre + "\n    " + String(e.stack || e).split("\n").slice(0, 4).join("\n    ")); }
+  catch (e) {
+    mal++; console.log("  ✗ " + nombre + "\n    " + String(e.stack || e).split("\n").slice(0, 4).join("\n    "));
+    for (const p of paginasAbiertas) { try { console.log("    [pantalla] " + (await p.textContent(".view")).slice(0, 300)); } catch (x) {} }
+  }
 }
+const paginasAbiertas = [];
 (async () => {
   try { await fetch(API + "/auth/v1/health", { headers: { apikey: CLAVE } }); }
   catch (e) { console.log("No hay un Supabase local en " + API + ": no pruebo la comunidad."); return; }
@@ -61,7 +65,7 @@ async function prueba(nombre, fn) {
     p.on("pageerror", e => p.errores.push(e.message));
     p.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) p.errores.push(m.text()); });
     await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
-    await p.goto(URL); return p;
+    await p.goto(URL); paginasAbiertas.push(p); return p;
   };
   // Al entrar, la app puede recargarse para poner la libreta de la cuenta: se espera a que esté lista de verdad
   const dentro = async p => {
@@ -74,8 +78,10 @@ async function prueba(nombre, fn) {
     await p.evaluate(() => go({ name: "inicio" }));
     await p.fill("#en-correo", correo); await p.fill("#en-clave", clave); await p.check("#en-acepto");
     await p.click("button:has-text('Entrar')");
-    await dentro(p);
-    await p.evaluate(() => { if (sesion) go({ name: "comunidad" }); });
+    for (let i = 0; i < 3; i++) {
+      await dentro(p);
+      try { await p.evaluate(() => { if (sesion) go({ name: "comunidad" }); }); break; } catch (e) { /* se ha recargado justo ahora */ }
+    }
     await p.waitForTimeout(800);
   };
   const NOMBRE_ANA = "Ana " + sufijo, ANA = "ana-" + sufijo + "@ejemplo.es", BEA = "bea-" + sufijo + "@ejemplo.es";
@@ -146,9 +152,48 @@ async function prueba(nombre, fn) {
     await bea.evaluate(() => { view = { name: "comunidad", pest: "sigo" }; render(); }); await bea.waitForSelector(".pub");
     assert.equal(await bea.locator(".pub").count(), 1);
   });
+  await prueba("avisos: a la dueña le sale un puntito en «Gente» y la lista de lo que ha pasado", async () => {
+    await ana.evaluate(() => contarAvisos()); await ana.waitForTimeout(500);
+    assert.equal(await ana.locator("nav.tabs button.con-aviso").count(), 1, "puntito en Gente");
+    assert.match(await ana.locator("nav.tabs button.con-aviso").getAttribute("aria-label"), /4 avisos nuevos/);
+    await ana.evaluate(() => go({ name: "avisos" })); await ana.waitForSelector(".aviso");
+    const textos = await ana.locator(".aviso").allTextContents();
+    assert.equal(textos.length, 4, JSON.stringify(textos));
+    assert.ok(textos.some(t => /Bea te sigue/.test(t)), JSON.stringify(textos));
+    assert.ok(textos.some(t => /A Bea le gusta tu publicación «Gorro de bebé»/.test(t)), JSON.stringify(textos));
+    assert.ok(textos.some(t => /Bea ha comentado/.test(t)) && textos.some(t => /Bea está tejiendo tu patrón/.test(t)));
+    await ana.waitForFunction(() => avisosSinLeer === 0);
+    assert.equal(await ana.locator("nav.tabs button.con-aviso").count(), 0, "al verlos se quita el puntito");
+  });
+  await prueba("ordenar por más gustados y más tejidos, buscar, y guardar para luego", async () => {
+    // Ana publica otra labor sin «me gusta» ni patrón
+    await ana.evaluate(() => { const p = { id: "m-2", titulo: "Manta de rayas", pasos: ["Fila 1: 30 pb (30)"], color: "#2E86C1" }; state.patrones.unshift(p); save(); guardarLabor(p, ""); });
+    const id = await ana.evaluate(() => state.labores[0].id);
+    await ana.evaluate(id => go({ name: "publicar", id }), id); await ana.waitForSelector("#pu-texto");
+    await ana.click("#pu-patron"); await ana.click("button:has-text('Publicar')"); await ana.waitForSelector(".pub");
+    const titulos = async () => (await bea.locator(".pub", { hasText: NOMBRE_ANA }).locator("h3").allTextContents());
+    await bea.evaluate(() => { view = { name: "comunidad", pest: "todas", orden: "recientes" }; render(); }); await bea.waitForSelector(".pub");
+    assert.deepEqual((await titulos()).slice(0, 2), ["Manta de rayas", "Gorro de bebé"], "lo más nuevo primero");
+    await bea.selectOption("#co-orden", "gustados"); await bea.waitForTimeout(800);
+    assert.equal((await titulos())[0], "Gorro de bebé", "el que tiene «me gusta» primero");
+    await bea.selectOption("#co-orden", "tejidos"); await bea.waitForTimeout(800);
+    assert.equal((await titulos())[0], "Gorro de bebé", "el que se está tejiendo primero");
+    assert.match(await bea.locator(".pub", { hasText: "Gorro de bebé" }).first().textContent(), /Lo está tejiendo 1 persona/);
+    await bea.fill("#co-buscar", "manta"); await bea.waitForTimeout(1200);
+    assert.deepEqual(await titulos(), ["Manta de rayas"], "buscar «manta»");
+    await bea.fill("#co-buscar", "algodón rosa"); await bea.waitForTimeout(1200);
+    assert.deepEqual(await titulos(), ["Gorro de bebé"], "busca también en el texto");
+    await bea.fill("#co-buscar", "zzzz(,)*"); await bea.waitForTimeout(1200);
+    assert.match(await bea.textContent(".view"), /No he encontrado nada/);
+    await bea.fill("#co-buscar", ""); await bea.waitForTimeout(1200);
+    await bea.locator(".pub", { hasText: "Manta de rayas" }).first().locator("button:has-text('Guardar')").click();
+    await bea.waitForSelector("text=Guardada. La tienes");
+    await bea.evaluate(() => { view = { name: "comunidad", pest: "guardadas" }; render(); }); await bea.waitForSelector(".pub");
+    assert.deepEqual(await bea.locator(".pub h3").allTextContents(), ["Manta de rayas"]);
+  });
   await prueba("la dueña puede quitar comentarios de su publicación", async () => {
     await ana.evaluate(() => go({ name: "comunidad" })); await ana.waitForSelector(".pub");
-    await ana.locator(".pub", { hasText: NOMBRE_ANA }).first().locator("button:has-text('Comentarios · 1')").click(); await ana.waitForSelector(".comentario");
+    await ana.locator(".pub", { hasText: NOMBRE_ANA }).filter({ hasText: "Gorro de bebé" }).first().locator("button:has-text('Comentarios · 1')").click(); await ana.waitForSelector(".comentario");
     await ana.click(".comentario button:has-text('Borrar')"); await ana.click(".comentario button:has-text('¿Borrar?')");
     await ana.waitForSelector("text=Nadie ha comentado todavía.");
   });
@@ -158,7 +203,7 @@ async function prueba(nombre, fn) {
     assert.equal(await ana.evaluate(() => state.labores.length), 0);
     assert.equal(await ana.evaluate(() => Object.keys(localStorage).some(k => k.startsWith(FKEY))), false, "no quedan fotos suyas en el móvil");
     await entrar(ana, ANA);
-    await ana.waitForFunction(() => state.labores.length === 1, null, { timeout: 10000 });
+    await ana.waitForFunction(() => state.labores.length === 2, null, { timeout: 10000 });
     await ana.evaluate(() => go({ name: "labores" }));
     await ana.waitForSelector(".labor img", { timeout: 10000 });
   });
@@ -196,13 +241,17 @@ async function prueba(nombre, fn) {
     await p.click("text=Guardar y entrar"); await dentro(p);
     await p.context().close();
     const q = await pagina(); await entrar(q, CARMEN, "cadeneta-nueva-1");
-    assert.equal(await q.evaluate(() => !!sesion), true, "entra con la contraseña nueva");
+    let dentroQ = false;
+    for (let i = 0; i < 3 && !dentroQ; i++) { try { dentroQ = await q.evaluate(() => !!sesion); } catch (e) { await dentro(q); } }
+    assert.equal(dentroQ, true, "entra con la contraseña nueva");
     await q.context().close();
   });
   await prueba("si se le quita la cuenta (deja de pagar), al caducar la sesión vuelve a la pantalla de entrar", async () => {
     const p = await pagina(); await entrar(p, CARMEN, "cadeneta-nueva-1");
     await bloquearCuenta(idCarmen);
-    await p.evaluate(async () => { sesion.exp = 0; try { await token(); } catch (e) {} });
+    for (let i = 0; i < 3; i++) {
+      try { await p.evaluate(async () => { sesion.exp = 0; try { await token(); } catch (e) {} }); break; } catch (e) { await dentro(p); }
+    }
     await p.waitForSelector("#en-clave");
     assert.equal(await p.locator("nav.tabs").isVisible(), false);
     await p.context().close();

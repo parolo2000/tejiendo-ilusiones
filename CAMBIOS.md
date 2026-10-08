@@ -352,3 +352,19 @@ Capturas en `tests/capturas/`.
 - Arreglos: el «null» que salía al entrar y en el aviso de leer un PDF, cajas de correo, búsqueda y contraseña con
   estilo, y el aviso dice por qué no se pudo mandar un correo.
 - `tests/nube.test.cjs`: 14 pruebas (crea las cuentas con la API de administración del Supabase local).
+
+## 2026-10-08 · Comunidad: ordenar, buscar, avisos y guardadas
+
+- Migración `supabase/migrations/0002_orden_avisos_guardados.sql` (se pega después de la 0001; repetible, no borra):
+  tabla `tejidas` (quién teje cada patrón publicado, una vez por persona), contadores `publicaciones.n_gusta` y
+  `n_tejida` que mantienen disparadores (la app no los puede cambiar), `guardados` (privados) y `avisos` (los crea
+  la base de datos al dar «me gusta», comentar, tejer o seguir; sin repetir, sin avisarse a sí misma, 200 por
+  persona). Reglas probadas en `supabase/pruebas/reglas2.sql`.
+- Comunidad: «Ordenar: Más recientes / Más gustados / Más tejidos», buscador en título y texto (se quitan los
+  caracteres con significado en la consulta), pestaña «Guardadas» y botón «Guardar» en cada publicación,
+  «Lo está tejiendo N personas».
+- Avisos: puntito en la pestaña «Gente» (se mira al abrir y cada 2 minutos con la app a la vista), «Avisos · N» y
+  `VISTAS.avisos`; al verlos se marcan como leídos.
+- Arreglos: el perfil fallaba por una variable repetida; la prueba de la versión instalable entra con una sesión
+  guardada (sin cuenta solo sale la pantalla de entrar).
+- `tests/nube.test.cjs`: 16 pruebas.

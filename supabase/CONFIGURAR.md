@@ -11,6 +11,8 @@ Todo se hace en https://supabase.com/dashboard, dentro del proyecto.
 1. Menú de la izquierda › **SQL Editor** › **New query**.
 2. Pega entero el archivo `supabase/migrations/0001_cuentas_y_red.sql` y pulsa **Run**.
 3. Debe acabar en «Success. No rows returned». Se puede ejecutar otra vez sin problema: no borra nada.
+4. Haz lo mismo, en otra **New query**, con `supabase/migrations/0002_orden_avisos_guardados.sql` (ordenar por
+   «me gusta» y por veces tejido, avisos y publicaciones guardadas). Siempre después de la 0001.
 
 ## 2. Direcciones de la app (obligatorio)
 

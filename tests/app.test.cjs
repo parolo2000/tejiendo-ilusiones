@@ -675,13 +675,19 @@ Fasten off and weave in ends.`;
       const errores = [];
       page.on("pageerror", e => errores.push(e.message));
       await page.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+      await page.route(/supabase\.co/, r => r.abort()); // el proyecto de verdad no se toca
       await page.goto(RAIZ_WEB);
       assert.equal(await page.evaluate(() => window.TI_LOCAL), true);
+      assert.equal(await page.locator("#en-clave").isVisible(), true, "sin cuenta, solo la pantalla de entrar");
       assert.doesNotMatch(await page.locator("main").textContent(), /Ponla en tu móvil/, "la instalada no invita a instalarse");
       await page.waitForFunction(() => navigator.serviceWorker.controller || navigator.serviceWorker.ready, null, { timeout: 30000 });
       await page.evaluate(() => navigator.serviceWorker.ready);
       // Un patrón nuevo guardado antes de quedarse sin conexión
-      await page.evaluate(() => { const p = { id: "m-sin", titulo: "Sin conexión", pasos: ["Vuelta 1: 6 pb en anillo mágico (6)"], color: "#8A2F5E" }; state.patrones.unshift(p); save(); });
+      // Ya había entrado con su cuenta (la sesión caducada no la echa si no hay conexión)
+      await page.evaluate(() => {
+        localStorage.setItem(SKEY, JSON.stringify({ access: "a", refresh: "r", uid: "u-prueba", exp: 0, email: "ana@ejemplo.es" })); localStorage.setItem(DUENA, "u-prueba");
+        const p = { id: "m-sin", titulo: "Sin conexión", pasos: ["Vuelta 1: 6 pb en anillo mágico (6)"], color: "#8A2F5E" }; state.patrones.unshift(p); save();
+      });
       await page.waitForTimeout(500);
       await ctx.setOffline(true);
       await recargar(page);
