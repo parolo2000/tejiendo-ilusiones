@@ -53,7 +53,7 @@ header.top .bar{max-width:48rem;margin:0 auto;padding:.5rem 16px;display:flex;al
 
 /* Pestañas abajo */
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:8;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);box-shadow:0 -4px 18px rgba(0,0,0,.05)}
-nav.tabs .in{max-width:48rem;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+nav.tabs .in{max-width:48rem;margin:0 auto;display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
 nav.tabs button{border:0;border-radius:0;background:none;min-height:var(--tabs);flex-direction:column;gap:.15rem;font-size:.85rem;font-weight:700;color:var(--muted);padding:.35rem .1rem}
 nav.tabs button svg{width:1.6rem;height:1.6rem}
 nav.tabs button.on{color:var(--accent)}
@@ -420,6 +420,22 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
   #imprimir li.parte{font-size:16pt;border-bottom:2px solid #000;padding-top:1em}
   #imprimir .pie{font-size:10pt; color:#555; margin-top:2em}
 }
+/* Comunidad */
+.pub{background:var(--surface);border:2px solid var(--line);border-radius:1.1rem;padding:.9rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.6rem}
+.pub h3{margin:0}
+.pub-cab{display:flex;align-items:center;gap:.6rem}
+.pub-cab .pub-autora{flex:1;justify-content:flex-start;min-width:0;padding-inline:.2rem;font-weight:700}
+.pub-cab .pub-autora span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.avatar{width:2.2rem;height:2.2rem;border-radius:50%;display:inline-grid;place-items:center;flex:none;background:var(--accent-soft);color:var(--accent);font-weight:800}
+.pub-foto{width:100%;max-height:28rem;object-fit:cover;border-radius:.8rem;background:var(--sunk)}
+.pub-texto,.comentario p{white-space:pre-line;overflow-wrap:anywhere;margin:0}
+.comentario{border-left:3px solid var(--line);padding:.2rem 0 .2rem .8rem;display:flex;flex-direction:column;gap:.3rem}
+.persona{justify-content:flex-start;text-align:left;gap:.7rem;min-height:3.6rem}
+.persona small{display:block;font-weight:400;color:var(--muted);font-size:.82rem}
+.persona .grow{flex:1;min-width:0}
+label.check{display:flex;gap:.6rem;align-items:flex-start;font-weight:400}
+label.check input{width:1.5rem;height:1.5rem;flex:none;margin-top:.1rem}
+nav.tabs button{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:min(.85rem,13px)}
 </style>
 
 <header class="top"><div class="bar">
@@ -544,6 +560,7 @@ let db=null, docRef=null, uid=null, saveTimer=null, writing=Promise.resolve();
 function save(){
   state.t = Date.now();
   try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
+  nubeAlGuardar();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
     if(!docRef) return;
@@ -578,6 +595,7 @@ function fotoGet(id){
   if(fotosCache[id]) return fotosCache[id];
   let v=null; try{ v=localStorage.getItem(FKEY+id); }catch(e){}
   if(v){ fotosCache[id]=v; return v; }
+  nubeFotoPedir(id);
   const ref = fotoRef(id);
   if(ref && !fotosPedidas.has(id)){
     fotosPedidas.add(id);
@@ -588,7 +606,7 @@ function fotoGet(id){
 async function fotoSet(id, data){
   if(data){ fotosCache[id]=data; state.conFoto[id]=true; try{ localStorage.setItem(FKEY+id, data); }catch(e){ toast("La foto no cabe en este aparato. Prueba con otra más pequeña."); } }
   else { delete fotosCache[id]; delete state.conFoto[id]; try{ localStorage.removeItem(FKEY+id); }catch(e){} }
-  save();
+  save(); nubeFotoGuardar(id, data);
   const ref = fotoRef(id);
   if(ref){ try{ data ? await ref.set({img:data}) : await ref.delete(); }catch(e){} }
 }
@@ -726,7 +744,8 @@ const ICONOS = {
   sofa:"M4 11V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3M3 12a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3zM5 17v2M19 17v2",
   deshacer:"M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
   ajustes:"M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6",
-  imprimir:"M7 9V3h10v6M7 17H4v-8h16v8h-3M7 14h10v7H7z"
+  imprimir:"M7 9V3h10v6M7 17H4v-8h16v8h-3M7 14h10v7H7z",
+  gente:"M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.6 3.2-6 6.5-6s6 2.4 6.5 6M16 4.3a3.5 3.5 0 0 1 0 6.4M18 14.4c2 .8 3.2 2.9 3.5 5.6"
 };
 function icono(n, z=24){ const v=s("svg",{width:z, height:z, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", "stroke-width":n==="mas"?3.4:1.9, "stroke-linecap":"round", "stroke-linejoin":"round", "aria-hidden":"true"}); v.append(s("path",{d:ICONOS[n]})); if(n==="play"||n==="pausa") v.firstChild.setAttribute("fill","currentColor"); return v; }
 
@@ -750,10 +769,11 @@ addEventListener("popstate", e => {
 });
 marcar(view, true);
 const TABS = [["inicio","Inicio","casa"],["patrones","Patrones","libro"],["labores","Labores","corazon"],["mas","Más","mas"]];
-const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas"};
+const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad"};
 function pintarTabs(){
   const actual = TAB_DE[view.name] || view.name;
-  document.getElementById("tabs").replaceChildren(...TABS.map(([k,l,ic])=>h("button",{class:actual===k?"on":"", "aria-current":actual===k?"page":null, onclick:()=>go({name:k})}, icono(ic,26), l)));
+  const tabs = nubeActiva() ? [...TABS.slice(0,3), ["comunidad","Gente","gente"], TABS[3]] : TABS;
+  document.getElementById("tabs").replaceChildren(...tabs.map(([k,l,ic])=>h("button",{class:actual===k?"on":"", "aria-current":actual===k?"page":null, onclick:()=>go({name:k})}, icono(ic,26), l)));
 }
 document.getElementById("brand").onclick=()=>go({name:"inicio"});
 document.getElementById("bigger").onclick=()=>{ state.escala=Math.min(1.6, +((state.escala||1)+0.1).toFixed(1)); applyScale(); save(); };
@@ -1393,8 +1413,9 @@ function tarjetaLabor(l, alCambiar){
         toast("Quitada del cuaderno", ()=>{ state.labores.splice(Math.max(0,pos), 0, l); if(foto) fotoSet(l.id, foto); save(); if(view.name==="labores") render(); }); }))));
     quien.focus();
   };
-  acciones.append(h("button",{class:"teal", onclick:()=>compartirLabor(l)}, icono("foto",20), "Compartir"),
-                  h("button",{class:"ghost", onclick:editar}, icono("lapiz",20), "Cambiar"));
+  acciones.append(...[h("button",{class:"teal", onclick:()=>compartirLabor(l)}, icono("foto",20), "Compartir"),
+                  nubeActiva() ? h("button",{onclick:()=>go({name:"publicar", id:l.id})}, icono("gente",20), "Publicar") : null,
+                  h("button",{class:"ghost", onclick:editar}, icono("lapiz",20), "Cambiar")].filter(Boolean));
   return h("article",{class:"labor"},
     foto ? h("div",{class:"thumb"}, h("img",{src:foto, alt:"Foto de "+l.titulo})) : miniaturaPatron(buscar(l.patron) || {id:l.patron, titulo:l.titulo, pasos:[]}),
     h("div",{class:"stack", style:"gap:.5rem"}, cab, acciones));
@@ -1515,6 +1536,7 @@ VISTAS.inicio = V => {
     h("div",{class:"hero"}, h("p",{class:"eyebrow"}, saludo), h("h1",{}, ult ? "¿Seguimos?" : "¿Qué tejemos hoy?")),
     ult ? h("div",{class:"section"}, tarjetaContinuar(ult)) : null,
     tocaRecordarCopia() ? avisoCopia() : null,
+    invitacionInicio(),
     !window.TI_LOCAL && state.prefs.avisoApp ? avisoInstalar() : null,
     tuSemana(),
     h("div",{class:"section"},
@@ -1830,6 +1852,7 @@ VISTAS.patron = V => {
         h("div",{class:"row"},
           h("button",{onclick:verGrafico}, icono("rejilla",20), "Ver como gráfico"),
           h("button",{onclick:()=>enviarPatron(p)}, icono("corazon",20), "Enviar a una amiga"),
+          nubeActiva() ? h("button",{onclick:()=>go({name:"publicar", id:p.id})}, icono("gente",20), "Publicar en la comunidad") : null,
           h("button",{onclick:()=>imprimirPatron(p)}, icono("imprimir",20), "Imprimir"),
           esMio(p) ? h("button",{onclick:()=>go({name:"editar", id:p.id})}, icono("lapiz",20), "Cambiar")
                    : h("button",{onclick:()=>{ const c=copiar(p); go({name:"editar", id:c.id}); toast("Copia creada. Cámbiala a tu gusto."); }}, icono("lapiz",20), "Copiar y cambiar")
@@ -3425,6 +3448,553 @@ VISTAS.lana = V => {
 };
 
 // ---------- Más ----------
+// ---------- Cuenta y comunidad ----------
+// Cada persona entra con su correo (le llega un código) o con Google. Su libreta se guarda en su cuenta y puede
+// publicar labores, seguir a otras, dar «me gusta» y comentar. La app solo lleva la dirección del proyecto y su
+// clave pública: quién puede ver o cambiar qué lo deciden las reglas de la base de datos (supabase/migrations).
+// Sin dirección, la app funciona como siempre, solo en este aparato.
+const NUBE = Object.assign({
+  url:"https://frbqbjusjfmucltuxodp.supabase.co",
+  clave:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYnFianVzamZtdWNsdHV4b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NDQ0ODgsImV4cCI6MjEwNzAyMDQ4OH0.1HEEcmoTkCNQrE-8uD71ELIPQGev8m4xUFtZHSNB3IY",
+  google:false, contacto:""}, window.TI_NUBE||{});
+const SKEY = "tejiendo-sesion", DUENA = "tejiendo-duena", SUBIDAS = "tejiendo-fotos-subidas", INVITA = "tejiendo-invitacion";
+var sesion = null, nubeTimer = null, nubePendiente = false, nubeSubiendo = null, nubeLista = false;
+// Solo en la app instalable (GitHub Pages); dentro de claude.ai sigue guardándose como hasta ahora
+const nubeActiva = () => !!(NUBE.url && NUBE.clave && (window.TI_LOCAL || window.TI_NUBE));
+function leerSesion(){ try{ const s = JSON.parse(localStorage.getItem(SKEY)||"null"); return s && s.access && s.refresh && s.uid ? s : null; }catch(e){ return null; } }
+function guardarSesion(s){ sesion = s; try{ s ? localStorage.setItem(SKEY, JSON.stringify(s)) : localStorage.removeItem(SKEY); }catch(e){} }
+function sesionDe(d){ return {access:d.access_token, refresh:d.refresh_token, exp:Date.now()+(d.expires_in||3600)*1000, uid:d.user.id, email:d.user.email||""}; }
+class ErrorNube extends Error { constructor(estado, msg){ super(msg||("nube "+estado)); this.estado = estado; } }
+// Una llamada al servidor, con la sesión si la hay. Se corta a los 20 s para no dejar la pantalla colgada.
+async function llamar(ruta, {metodo="GET", cuerpo, cabeceras={}, sinSesion=false, crudo=false}={}){
+  const c = {apikey:NUBE.clave, ...cabeceras};
+  if(!sinSesion){ const t = await token(); if(!t) throw new ErrorNube(401, "sin sesión"); c.Authorization = "Bearer "+t; }
+  let body = cuerpo;
+  if(cuerpo!==undefined && !(cuerpo instanceof Blob)){ c["Content-Type"] = "application/json"; body = JSON.stringify(cuerpo); }
+  const ctl = new AbortController(), corte = setTimeout(()=>ctl.abort(), 20000);
+  let r;
+  try{ r = await fetch(NUBE.url+ruta, {method:metodo, headers:c, body, signal:ctl.signal}); }
+  catch(e){ throw new ErrorNube(0, "sin conexión"); }
+  finally{ clearTimeout(corte); }
+  if(!r.ok){ let m=""; try{ const j = await r.json(); m = j.msg || j.message || j.error_description || j.error || ""; }catch(e){} throw new ErrorNube(r.status, m); }
+  if(crudo) return r;
+  const txt = await r.text(); return txt ? JSON.parse(txt) : null;
+}
+// La sesión dura una hora; antes de que caduque se renueva sola
+var renovando = null;
+async function token(){
+  if(!sesion) return null;
+  if(sesion.exp - Date.now() > 60000) return sesion.access;
+  if(!renovando) renovando = (async ()=>{
+    try{ guardarSesion(sesionDe(await llamar("/auth/v1/token?grant_type=refresh_token", {metodo:"POST", cuerpo:{refresh_token:sesion.refresh}, sinSesion:true}))); }
+    catch(e){ if(e.estado>=400 && e.estado<500){ guardarSesion(null); render(); } else throw e; }
+    finally{ renovando = null; }
+  })();
+  await renovando;
+  return sesion ? sesion.access : null;
+}
+const correoValido = c => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(c);
+async function pedirCodigo(correo){
+  await llamar("/auth/v1/otp?redirect_to="+encodeURIComponent(location.origin+location.pathname), {metodo:"POST", cuerpo:{email:correo, create_user:true}, sinSesion:true});
+}
+async function comprobarCodigo(correo, codigo){
+  const d = await llamar("/auth/v1/verify", {metodo:"POST", cuerpo:{type:"email", email:correo, token:codigo}, sinSesion:true});
+  guardarSesion(sesionDe(d)); await alEntrar();
+}
+function entrarConGoogle(){ location.href = NUBE.url+"/auth/v1/authorize?provider=google&redirect_to="+encodeURIComponent(location.origin+location.pathname); }
+// Al volver del enlace del correo o de Google, la sesión llega en la dirección (después de «#»)
+async function leerVueltaDeEntrar(){
+  const hs = location.hash||"";
+  if(!/^#(access_token|error)=|&(access_token|error)=/.test(hs)) return false;
+  const q = new URLSearchParams(hs.slice(1));
+  try{ history.replaceState(history.state, "", location.pathname+location.search); }catch(e){}
+  if(q.get("error")){ toast(q.get("error_code")==="otp_expired" ? "Ese enlace ya ha caducado. Pide otro código." : "No he podido entrar. Prueba otra vez."); return true; }
+  const access = q.get("access_token"), refresh = q.get("refresh_token");
+  if(!access || !refresh) return true;
+  try{
+    const u = await llamar("/auth/v1/user", {cabeceras:{Authorization:"Bearer "+access}, sinSesion:true});
+    guardarSesion({access, refresh, exp:Date.now()+(+q.get("expires_in")||3600)*1000, uid:u.id, email:u.email||""});
+    await alEntrar(); go({name:"comunidad"}, true); toast("¡Ya has entrado!");
+  }catch(e){ toast("No he podido entrar. Prueba otra vez."); }
+  return true;
+}
+
+// ── La libreta en la cuenta ──
+// ¿Hay algo hecho a mano en este aparato? (patrones propios, labores, progreso, lanas, gráficos…)
+function hayDatosPropios(){ return state.patrones.length>0 || state.labores.length>0 || state.lanas.length>0 || state.graficos.length>0 || Object.keys(state.progreso).length>0; }
+function nubeAlGuardar(){
+  if(!sesion || !nubeLista) return;
+  nubePendiente = true; clearTimeout(nubeTimer); nubeTimer = setTimeout(subirEstado, 1500);
+}
+async function subirEstado(){
+  if(!sesion) return false;
+  if(nubeSubiendo) return nubeSubiendo;
+  nubeSubiendo = (async ()=>{
+    try{
+      await llamar("/rest/v1/estados?on_conflict=usuario", {metodo:"POST", cuerpo:{usuario:sesion.uid, datos:state, t:state.t||Date.now()}, cabeceras:{Prefer:"resolution=merge-duplicates,return=minimal"}});
+      nubePendiente = false; return true;
+    }catch(e){ return false; }
+    finally{ nubeSubiendo = null; }
+  })();
+  return nubeSubiendo;
+}
+// Cambia lo de este aparato por otra libreta. Antes se guarda una copia literal, por si acaso.
+function ponerLibreta(datos){
+  try{ const antes = localStorage.getItem(KEY); if(antes && hayDatosPropios()) localStorage.setItem(KEY+"-antes-de-entrar", antes); }catch(e){}
+  try{ datos ? localStorage.setItem(KEY, JSON.stringify(datos)) : localStorage.removeItem(KEY); }catch(e){}
+  location.reload();
+}
+// Nada más entrar: si la cuenta ya tiene una libreta, se usa la más nueva; si no, se sube la de este aparato
+async function alEntrar(){
+  if(!sesion) return;
+  let duena = null; try{ duena = localStorage.getItem(DUENA); }catch(e){}
+  const filas = await llamar("/rest/v1/estados?select=datos,t&usuario=eq."+sesion.uid);
+  const remoto = filas && filas[0];
+  const esDeOtra = duena && duena!==sesion.uid;
+  try{ localStorage.setItem(DUENA, sesion.uid); }catch(e){}
+  if(esDeOtra){ ponerLibreta(remoto ? remoto.datos : null); return; } // lo de este aparato es de otra cuenta: no se mezcla
+  if(remoto && (!hayDatosPropios() || +remoto.t >= (state.t||0))){ ponerLibreta(remoto.datos); return; }
+  nubeLista = true;
+  await subirEstado(); subirFotosPendientes();
+}
+async function arrancarNube(){
+  if(!nubeActiva()) return;
+  sesion = leerSesion();
+  if(await leerVueltaDeEntrar()) return;
+  if(!sesion) return;
+  try{
+    const filas = await llamar("/rest/v1/estados?select=t&usuario=eq."+sesion.uid);
+    const t = filas && filas[0] ? +filas[0].t : 0;
+    if(t > (state.t||0)){ const d = await llamar("/rest/v1/estados?select=datos&usuario=eq."+sesion.uid); ponerLibreta(d[0].datos); return; }
+    nubeLista = true;
+    if(t < (state.t||0)) await subirEstado();
+    subirFotosPendientes();
+  }catch(e){ nubeLista = !!sesion; } // sin internet se sigue tejiendo; se sube al volver la conexión
+}
+addEventListener("online", ()=>{ if(sesion && nubeLista){ if(nubePendiente) subirEstado(); subirFotosPendientes(); } });
+
+// ── Fotos de la libreta (solo las ve su dueña) ──
+const rutaFoto = id => sesion.uid+"/"+String(id).replace(/[^A-Za-z0-9_-]/g,"_")+".jpg";
+function fotosSubidas(){ try{ return new Set(JSON.parse(localStorage.getItem(SUBIDAS)||"[]")); }catch(e){ return new Set(); } }
+function marcarSubida(id, si){ const s = fotosSubidas(); si ? s.add(id) : s.delete(id); try{ localStorage.setItem(SUBIDAS, JSON.stringify([...s])); }catch(e){} }
+const aBlob = async dataUrl => (await fetch(dataUrl)).blob();
+async function subirFoto(id, data){
+  await llamar("/storage/v1/object/privadas/"+rutaFoto(id), {metodo:"POST", cuerpo:await aBlob(data), cabeceras:{"Content-Type":"image/jpeg", "x-upsert":"true"}});
+  marcarSubida(id, true);
+}
+function nubeFotoGuardar(id, data){
+  if(!sesion || !nubeLista) return;
+  marcarSubida(id, false);
+  if(data) subirFoto(id, data).catch(()=>{});
+  else llamar("/storage/v1/object/privadas", {metodo:"DELETE", cuerpo:{prefixes:[rutaFoto(id)]}}).catch(()=>{});
+}
+var subiendoFotos = false;
+async function subirFotosPendientes(){
+  if(!sesion || subiendoFotos) return true;
+  subiendoFotos = true;
+  try{
+    const ya = fotosSubidas();
+    for(const id of Object.keys(state.conFoto||{})){
+      if(ya.has(id)) continue;
+      let d = null; try{ d = localStorage.getItem(FKEY+id); }catch(e){}
+      if(d) await subirFoto(id, d);
+    }
+    return true;
+  }catch(e){ return false; }
+  finally{ subiendoFotos = false; }
+}
+// Una foto que no está en este aparato (por ejemplo, en un móvil nuevo) se trae de la cuenta
+const fotosBajando = new Set();
+function nubeFotoPedir(id){
+  if(!sesion || fotosBajando.has(id)) return;
+  fotosBajando.add(id);
+  llamar("/storage/v1/object/authenticated/privadas/"+rutaFoto(id), {crudo:true}).then(r=>r.blob()).then(b=>new Promise(ok=>{ const fr = new FileReader(); fr.onload=()=>ok(fr.result); fr.readAsDataURL(b); }))
+    .then(d=>{ fotosCache[id] = d; try{ localStorage.setItem(FKEY+id, d); }catch(e){} marcarSubida(id, true); render(); })
+    .catch(()=>{});
+}
+
+// ── Salir y borrar la cuenta ──
+// Al salir, lo de esta cuenta se quita del aparato (sigue en la cuenta). Solo se sale si todo está ya subido.
+async function cerrarSesion(){
+  toast("Guardando todo en tu cuenta…");
+  const ok = await subirEstado() && await subirFotosPendientes();
+  if(!ok){ toast("No hay conexión. Conéctate a internet para salir sin perder nada."); return; }
+  try{ await llamar("/auth/v1/logout", {metodo:"POST"}); }catch(e){}
+  guardarSesion(null);
+  try{
+    Object.keys(localStorage).filter(k=>k.startsWith(FKEY)).forEach(k=>localStorage.removeItem(k));
+    [KEY, DUENA, SUBIDAS].forEach(k=>localStorage.removeItem(k));
+  }catch(e){}
+  location.reload();
+}
+// Borra en el servidor sus fotos, su libreta, sus publicaciones, comentarios y «me gusta», y la cuenta.
+// Lo de este aparato se queda en el aparato (sin cuenta), para que no pierda su trabajo sin querer.
+async function borrarCuenta(){
+  try{
+    for(const cubo of ["privadas","publicas"]){
+      for(;;){
+        const lista = await llamar("/storage/v1/object/list/"+cubo, {metodo:"POST", cuerpo:{prefix:sesion.uid+"/", limit:100, offset:0}});
+        if(!lista || !lista.length) break;
+        await llamar("/storage/v1/object/"+cubo, {metodo:"DELETE", cuerpo:{prefixes:lista.map(o=>sesion.uid+"/"+o.name)}});
+      }
+    }
+    await llamar("/rest/v1/rpc/borrar_mi_cuenta", {metodo:"POST", cuerpo:{}});
+  }catch(e){ toast(e.estado===0 ? "No hay conexión. Prueba con internet." : "No he podido borrar la cuenta. Prueba otra vez."); return; }
+  guardarSesion(null);
+  try{ [DUENA, SUBIDAS].forEach(k=>localStorage.removeItem(k)); }catch(e){}
+  nubeLista = false;
+  toast("Cuenta borrada. Lo de este móvil sigue aquí."); go({name:"inicio"}, true);
+}
+
+// ── Comunidad ──
+const fotoPublica = ruta => NUBE.url+"/storage/v1/object/public/publicas/"+ruta;
+const CAMPOS_PUB = "id,autor,titulo,texto,foto,con_patron,creado,perfiles!publicaciones_autor_fkey(nombre),megusta(count),comentarios(count)";
+function haceCuanto(ts){
+  const s = (Date.now()-new Date(ts).getTime())/1000;
+  if(s<90) return "ahora"; if(s<3600) return "hace "+Math.round(s/60)+" min"; if(s<86400) return "hace "+Math.round(s/3600)+" h";
+  if(s<86400*7){ const d = Math.round(s/86400); return "hace "+d+(d===1?" día":" días"); }
+  return fechaTxt(ts);
+}
+async function misMeGusta(ids){
+  if(!ids.length) return new Set();
+  const f = await llamar("/rest/v1/megusta?select=publicacion&usuario=eq."+sesion.uid+"&publicacion=in.("+ids.join(",")+")");
+  return new Set(f.map(x=>x.publicacion));
+}
+// Lo que llega del servidor lo ha escrito cualquiera: siempre como texto (h() no interpreta HTML)
+function tarjetaPub(p, gusta, alCambiar, conComentarios){
+  const mia = p.autor===sesion.uid, nombre = (p.perfiles && p.perfiles.nombre) || "Alguien";
+  const ng = (p.megusta && p.megusta[0] && p.megusta[0].count) || 0, nc = (p.comentarios && p.comentarios[0] && p.comentarios[0].count) || 0;
+  const leGusta = gusta.has(p.id);
+  const bGusta = h("button",{class:leGusta?"primary":"", "aria-pressed":String(leGusta), onclick:async ()=>{
+    bGusta.disabled = true;
+    try{
+      if(leGusta) await llamar("/rest/v1/megusta?publicacion=eq."+p.id+"&usuario=eq."+sesion.uid, {metodo:"DELETE"});
+      else await llamar("/rest/v1/megusta", {metodo:"POST", cuerpo:{publicacion:p.id}, cabeceras:{Prefer:"return=minimal"}});
+      alCambiar();
+    }catch(e){ bGusta.disabled = false; toast(avisoNube(e)); }
+  }}, icono("corazon",20), (leGusta?"Te gusta":"Me gusta")+(ng?" · "+ng:""));
+  return h("article",{class:"pub"},
+    h("div",{class:"pub-cab"},
+      h("button",{class:"ghost pub-autora", onclick:()=>go({name:"perfil", id:p.autor})}, inicial(nombre), h("span",{}, nombre)),
+      h("span",{class:"muted"}, haceCuanto(p.creado)),
+      h("button",{class:"ghost", "aria-label":"Más opciones", onclick:()=>menuPub(p, nombre, mia, alCambiar)}, "⋯")),
+    p.foto ? h("img",{class:"pub-foto", src:fotoPublica(p.foto), alt:"Foto de "+p.titulo, loading:"lazy"}) : null,
+    h("h3",{}, p.titulo),
+    p.texto ? h("p",{class:"pub-texto"}, p.texto) : null,
+    h("div",{class:"row"}, bGusta,
+      conComentarios ? null : h("button",{onclick:()=>go({name:"publicacion", id:p.id})}, icono("texto",20), "Comentarios"+(nc?" · "+nc:"")),
+      p.con_patron ? h("button",{class:"teal", onclick:()=>tejerPublicado(p)}, icono("libro",20), "Tejer este patrón") : null));
+}
+function inicial(nombre){ return h("span",{class:"avatar", "aria-hidden":"true"}, (nombre.trim()[0]||"?").toUpperCase()); }
+function avisoNube(e){ return e && e.estado===0 ? "No hay conexión. Prueba otra vez con internet." : "No se ha podido. Prueba otra vez."; }
+async function tejerPublicado(p){
+  try{
+    const f = await llamar("/rest/v1/publicaciones?select=patron&id=eq."+p.id);
+    const r = f && f[0] && validarPatronRecibido(f[0].patron);
+    if(!r){ toast("Este patrón no se puede abrir."); return; }
+    patronRecibido = r; go({name:"recibido"});
+  }catch(e){ toast(avisoNube(e)); }
+}
+function menuPub(p, nombre, mia, alCambiar){
+  const ov = h("div",{class:"overlay", role:"dialog", "aria-label":"Opciones", onclick:e=>{ if(e.target===ov) cerrarV(); }},
+    h("div",{class:"box stack"},
+      h("h2",{}, p.titulo),
+      mia ? confirmBtn("Borrar mi publicación","¿Borrarla? Toca otra vez","danger big", async ()=>{
+              try{
+                await llamar("/rest/v1/publicaciones?id=eq."+p.id, {metodo:"DELETE"});
+                if(p.foto) llamar("/storage/v1/object/publicas", {metodo:"DELETE", cuerpo:{prefixes:[p.foto]}}).catch(()=>{});
+                cerrarV(); toast("Publicación borrada"); alCambiar();
+              }catch(e){ toast(avisoNube(e)); }
+            })
+          : [h("button",{class:"big", onclick:()=>{ cerrarV(); denunciar({publicacion:p.id}); }},"Denunciar esta publicación"),
+             bloquearBtn(p.autor, nombre, ()=>{ cerrarV(); alCambiar(); })],
+      h("button",{onclick:cerrarV},"Cerrar")));
+  abrirVentana(ov, ()=>ov.remove());
+}
+function bloquearBtn(id, nombre, despues){
+  return confirmBtn("Bloquear a "+nombre, "¿Bloquear? Toca otra vez", "danger big", async ()=>{
+    try{
+      await llamar("/rest/v1/bloqueos", {metodo:"POST", cuerpo:{a_quien:id}, cabeceras:{Prefer:"return=minimal"}});
+      await llamar("/rest/v1/seguidores?or=(and(seguidor.eq."+sesion.uid+",seguido.eq."+id+"),and(seguidor.eq."+id+",seguido.eq."+sesion.uid+"))", {metodo:"DELETE"});
+      toast("Bloqueada. No verás lo suyo y ella no verá lo tuyo."); despues();
+    }catch(e){ toast(avisoNube(e)); }
+  });
+}
+function denunciar(que){
+  const motivo = h("textarea",{id:"den-motivo", maxlength:"500", placeholder:"Cuéntanos qué pasa", "aria-label":"Qué pasa", style:"min-height:5rem"});
+  const ov = h("div",{class:"overlay", role:"dialog", "aria-label":"Denunciar", onclick:e=>{ if(e.target===ov) cerrarV(); }},
+    h("div",{class:"box stack"},
+      h("h2",{},"Denunciar"),
+      h("p",{class:"muted"},"Lo revisará quien cuida la comunidad. Quien lo publicó no sabrá que has sido tú."),
+      motivo,
+      h("button",{class:"primary big", onclick:async ()=>{
+        const m = motivo.value.trim(); if(!m){ motivo.focus(); return; }
+        try{ await llamar("/rest/v1/denuncias", {metodo:"POST", cuerpo:{...que, motivo:m.slice(0,500)}, cabeceras:{Prefer:"return=minimal"}}); cerrarV(); toast("Gracias. Lo revisaremos."); }
+        catch(e){ toast(avisoNube(e)); }
+      }},"Enviar la denuncia"),
+      h("button",{onclick:cerrarV},"Cancelar")));
+  abrirVentana(ov, ()=>ov.remove()); motivo.focus();
+}
+
+// Pantalla para entrar. Sin contraseñas: llega un código de 6 cifras al correo (o se entra con Google).
+function panelEntrar(motivo){
+  const caja = h("div",{class:"panel stack"});
+  const aviso = h("p",{class:"muted", "aria-live":"polite"});
+  const acepto = h("input",{type:"checkbox", id:"en-acepto"});
+  const paso1 = ()=>{
+    const correo = h("input",{type:"email", id:"en-correo", autocomplete:"email", inputmode:"email", placeholder:"tu@correo.es", "aria-label":"Tu correo"});
+    const pedir = h("button",{class:"primary big", onclick:async ()=>{
+      const c = correo.value.trim().toLowerCase();
+      if(!correoValido(c)){ aviso.textContent = "Escribe bien tu correo, por ejemplo maria@gmail.com"; correo.focus(); return; }
+      if(!acepto.checked){ aviso.textContent = "Marca la casilla de abajo para seguir."; return; }
+      pedir.disabled = true; aviso.textContent = "Mandando el código…";
+      try{ await pedirCodigo(c); paso2(c); }
+      catch(e){ pedir.disabled = false; aviso.textContent = e.estado===429 ? "Has pedido muchos códigos seguidos. Espera un poco y vuelve a probar." : avisoNube(e); }
+    }},"Mandarme un código");
+    caja.replaceChildren(
+      h("h2",{},"Entra en tu cuenta"),
+      motivo ? h("p",{}, motivo) : null,
+      h("label",{for:"en-correo"},"Tu correo"), correo, pedir,
+      NUBE.google ? h("button",{class:"big", onclick:()=>{ if(!acepto.checked){ aviso.textContent = "Marca la casilla de abajo para seguir."; return; } entrarConGoogle(); }},"Entrar con Google") : null,
+      h("label",{class:"check"}, acepto, " Tengo 14 años o más y acepto ", h("a",{href:"#", onclick:e=>{ e.preventDefault(); go({name:"privacidad"}); }},"cómo se guardan mis datos"), "."),
+      aviso);
+  };
+  const paso2 = correo=>{
+    const codigo = h("input",{type:"text", id:"en-codigo", inputmode:"numeric", autocomplete:"one-time-code", maxlength:"10", placeholder:"123456", "aria-label":"Código del correo", style:"font-size:1.6rem;letter-spacing:.3em;text-align:center"});
+    const entrar = h("button",{class:"primary big", onclick:async ()=>{
+      const k = codigo.value.replace(/\D/g,"");
+      if(k.length<6){ aviso.textContent = "El código tiene 6 números."; codigo.focus(); return; }
+      entrar.disabled = true; aviso.textContent = "Entrando…";
+      try{ await comprobarCodigo(correo, k); toast("¡Ya has entrado!"); render(); }
+      catch(e){ entrar.disabled = false; aviso.textContent = e.estado===0 ? avisoNube(e) : "Ese código no vale o ha caducado. Revísalo o pide otro."; }
+    }},"Entrar");
+    caja.replaceChildren(
+      h("h2",{},"Mira tu correo"),
+      h("p",{},"Te he mandado un código de 6 números a ", h("b",{}, correo), ". Escríbelo aquí. Si no lo ves, mira en «Spam» o «Promociones»."),
+      h("label",{for:"en-codigo"},"Código"), codigo, entrar,
+      h("p",{class:"muted"},"También puedes tocar el enlace del correo desde este mismo móvil."),
+      h("button",{class:"ghost", onclick:paso1},"← Usar otro correo"),
+      aviso);
+    codigo.focus();
+  };
+  paso1();
+  return caja;
+}
+function invitacionInicio(){
+  if(!nubeActiva() || sesion) return null;
+  try{ if(localStorage.getItem(INVITA)) return null; }catch(e){}
+  return h("div",{class:"section"}, h("div",{class:"panel stack invita"},
+    h("h2",{},"Guarda tus labores en tu cuenta"),
+    h("p",{},"Entra con tu correo: lo tendrás en cualquier móvil, no se perderá nunca y podrás enseñar tus labores en la comunidad."),
+    h("div",{class:"row"},
+      h("button",{class:"primary big", onclick:()=>go({name:"comunidad"})},"Entrar"),
+      h("button",{class:"ghost", onclick:()=>{ try{ localStorage.setItem(INVITA, "1"); }catch(e){} render(); }},"Ahora no"))));
+}
+
+VISTAS.comunidad = V => {
+  if(!nubeActiva()) return go({name:"inicio"}, true);
+  V.append(h("div",{class:"page-title"}, h("h1",{},"Comunidad"), h("p",{class:"muted"},"Lo que tejen las demás, y lo tuyo para quien quieras enseñárselo.")));
+  if(!sesion){ V.append(h("div",{class:"section"}, panelEntrar("Para ver la comunidad y guardar tu libreta en tu cuenta."))); return; }
+  const pest = view.pest || "todas";
+  // Recién entrada, con el nombre provisional: se le pide cómo quiere que la vean
+  const bienvenida = h("div",{});
+  llamar("/rest/v1/perfiles?select=nombre&id=eq."+sesion.uid).then(f=>{
+    if(!f[0] || !/^Tejedora [0-9a-f]{5}$/.test(f[0].nombre)) return;
+    const nombre = h("input",{type:"text", id:"co-nombre", maxlength:"40", placeholder:"Por ejemplo: Carmen de Sevilla", "aria-label":"Tu nombre"});
+    bienvenida.replaceChildren(h("div",{class:"section"}, h("div",{class:"panel stack"},
+      h("h2",{},"¿Cómo quieres que te vean?"),
+      h("p",{class:"muted"},"Es el nombre que saldrá en lo que publiques. Tu correo no lo ve nadie."),
+      nombre,
+      h("button",{class:"primary big", onclick:async ()=>{
+        const n = nombre.value.trim(); if(n.length<2){ nombre.focus(); return; }
+        try{ await llamar("/rest/v1/perfiles?id=eq."+sesion.uid, {metodo:"PATCH", cuerpo:{nombre:n.slice(0,40)}, cabeceras:{Prefer:"return=minimal"}}); toast("¡Encantadas, "+n+"!"); render(); }
+        catch(e){ toast(avisoNube(e)); }
+      }},"Guardar mi nombre"))));
+  }).catch(()=>{});
+  const lista = h("div",{class:"stack", "aria-live":"polite"}, h("p",{class:"muted"},"Cargando…"));
+  const buscarIn = h("input",{type:"search", id:"co-buscar", placeholder:"Buscar a alguien por su nombre", "aria-label":"Buscar a alguien"});
+  V.append(
+    h("div",{class:"section"}, h("div",{class:"row", role:"group", "aria-label":"Qué ver"},
+      [["todas","Todas"],["sigo","A quien sigo"],["gente","Buscar gente"]].map(([k,t])=>h("button",{class:pest===k?"primary":"", "aria-pressed":String(pest===k), onclick:()=>{ view.pest = k; marcar(view, true); render(); }}, t)),
+      h("button",{class:"ghost", onclick:()=>go({name:"perfil", id:sesion.uid})}, icono("gente",20), "Mi perfil"))),
+    bienvenida,
+    pest==="gente" ? h("div",{class:"section"}, buscarIn) : null,
+    h("div",{class:"section"}, lista));
+  const pintar = async ()=>{
+    try{
+      if(pest==="gente"){
+        const q = buscarIn.value.trim().replace(/[*,().%_\\:"']/g,"").slice(0,40);
+        if(q.length<2){ lista.replaceChildren(h("p",{class:"muted"},"Escribe al menos dos letras del nombre.")); return; }
+        const f = await llamar("/rest/v1/perfiles?select=id,nombre,bio&nombre=ilike."+encodeURIComponent("*"+q+"*")+"&order=nombre&limit=30");
+        lista.replaceChildren(...(f.length ? f.map(u=>h("button",{class:"persona", onclick:()=>go({name:"perfil", id:u.id})}, inicial(u.nombre), h("span",{class:"grow"}, u.nombre, u.bio ? h("small",{}, u.bio) : null), h("span",{class:"muted"},"›")))
+                                         : [h("p",{class:"muted"},"No he encontrado a nadie con ese nombre.")]));
+        return;
+      }
+      let filtro = "";
+      if(pest==="sigo"){
+        const s = await llamar("/rest/v1/seguidores?select=seguido&seguidor=eq."+sesion.uid);
+        if(!s.length){ lista.replaceChildren(h("div",{class:"empty"}, h("h3",{},"Aún no sigues a nadie"), h("p",{class:"muted"},"En «Todas» toca el nombre de alguien y luego «Seguir»."))); return; }
+        filtro = "&autor=in.("+s.map(x=>x.seguido).join(",")+")";
+      }
+      const pubs = await llamar("/rest/v1/publicaciones?select="+CAMPOS_PUB+filtro+"&order=creado.desc&limit=30");
+      const gusta = await misMeGusta(pubs.map(p=>p.id));
+      lista.replaceChildren(...(pubs.length ? pubs.map(p=>tarjetaPub(p, gusta, pintar))
+        : [h("div",{class:"empty"}, h("h3",{},"Todavía no hay nada"), h("p",{class:"muted"},"Sé la primera: en «Mis labores» toca «Publicar» en una labor terminada."), h("button",{class:"primary big", onclick:()=>go({name:"labores"})},"Ir a Mis labores"))]));
+    }catch(e){ lista.replaceChildren(h("p",{class:"note"}, avisoNube(e)), h("button",{onclick:pintar},"Probar otra vez")); }
+  };
+  let espera; buscarIn.oninput = ()=>{ clearTimeout(espera); espera = setTimeout(pintar, 350); };
+  pintar();
+  if(pest==="gente") buscarIn.focus();
+};
+
+VISTAS.publicacion = V => {
+  if(!sesion) return go({name:"comunidad"}, true);
+  V.append(volver("Comunidad", {name:"comunidad"}));
+  const caja = h("div",{class:"section stack"}, h("p",{class:"muted"},"Cargando…"));
+  V.append(caja);
+  const pintar = async ()=>{
+    try{
+      const f = await llamar("/rest/v1/publicaciones?select="+CAMPOS_PUB+"&id=eq."+view.id);
+      if(!f.length){ caja.replaceChildren(h("p",{class:"note"},"Esta publicación ya no está.")); return; }
+      const p = f[0], gusta = await misMeGusta([p.id]);
+      const coms = await llamar("/rest/v1/comentarios?select=id,autor,texto,creado,perfiles(nombre)&publicacion=eq."+p.id+"&order=creado&limit=200");
+      const nuevo = h("textarea",{id:"pub-comentario", maxlength:"500", placeholder:"Escribe algo bonito", "aria-label":"Tu comentario", style:"min-height:4.5rem"});
+      const enviar = h("button",{class:"primary big", onclick:async ()=>{
+        const t = nuevo.value.trim(); if(!t){ nuevo.focus(); return; }
+        enviar.disabled = true;
+        try{ await llamar("/rest/v1/comentarios", {metodo:"POST", cuerpo:{publicacion:p.id, texto:t.slice(0,500)}, cabeceras:{Prefer:"return=minimal"}}); pintar(); }
+        catch(e){ enviar.disabled = false; toast(avisoNube(e)); }
+      }},"Comentar");
+      caja.replaceChildren(tarjetaPub(p, gusta, pintar, true),
+        h("h2",{},"Comentarios"),
+        coms.length ? h("div",{class:"stack"}, coms.map(c=>{
+          const n = (c.perfiles && c.perfiles.nombre) || "Alguien", puedeBorrar = c.autor===sesion.uid || p.autor===sesion.uid;
+          return h("div",{class:"comentario"},
+            h("div",{class:"pub-cab"}, h("button",{class:"ghost pub-autora", onclick:()=>go({name:"perfil", id:c.autor})}, inicial(n), h("span",{}, n)), h("span",{class:"muted"}, haceCuanto(c.creado))),
+            h("p",{}, c.texto),
+            h("div",{class:"row"},
+              puedeBorrar ? confirmBtn("Borrar","¿Borrar? Toca otra vez","ghost", async ()=>{ try{ await llamar("/rest/v1/comentarios?id=eq."+c.id, {metodo:"DELETE"}); pintar(); }catch(e){ toast(avisoNube(e)); } }) : null,
+              c.autor!==sesion.uid ? h("button",{class:"ghost", onclick:()=>denunciar({comentario:c.id})},"Denunciar") : null));
+        })) : h("p",{class:"muted"},"Nadie ha comentado todavía."),
+        h("label",{for:"pub-comentario"},"Tu comentario"), nuevo, enviar);
+    }catch(e){ caja.replaceChildren(h("p",{class:"note"}, avisoNube(e)), h("button",{onclick:pintar},"Probar otra vez")); }
+  };
+  pintar();
+};
+
+VISTAS.perfil = V => {
+  if(!sesion) return go({name:"comunidad"}, true);
+  const mio = view.id===sesion.uid;
+  V.append(volver("Comunidad", {name:"comunidad"}));
+  const caja = h("div",{class:"stack"}, h("p",{class:"muted"},"Cargando…"));
+  V.append(caja);
+  const pintar = async ()=>{
+    try{
+      const f = await llamar("/rest/v1/perfiles?select=id,nombre,bio&id=eq."+view.id);
+      if(!f.length){ caja.replaceChildren(h("p",{class:"note"},"No se puede ver este perfil.")); return; }
+      const u = f[0];
+      const [pubs, sigo, siguen] = await Promise.all([
+        llamar("/rest/v1/publicaciones?select="+CAMPOS_PUB+"&autor=eq."+u.id+"&order=creado.desc&limit=30"),
+        mio ? Promise.resolve([]) : llamar("/rest/v1/seguidores?select=seguido&seguidor=eq."+sesion.uid+"&seguido=eq."+u.id),
+        llamar("/rest/v1/seguidores?select=seguidor&seguido=eq."+u.id, {cabeceras:{Prefer:"count=exact", Range:"0-0"}, crudo:true})]);
+      const nSiguen = +((siguen.headers.get("content-range")||"").split("/")[1]||0);
+      const gusta = await misMeGusta(pubs.map(p=>p.id));
+      const laSigo = sigo.length>0;
+      const cab = h("div",{class:"page-title"}, h("div",{class:"pub-cab"}, inicial(u.nombre), h("h1",{}, u.nombre)), u.bio ? h("p",{}, u.bio) : null,
+        h("p",{class:"muted"}, pubs.length+(pubs.length===1?" publicación":" publicaciones")+" · "+nSiguen+(nSiguen===1?" la sigue":" la siguen")));
+      const acciones = mio ? editorPerfil(u, pintar) : h("div",{class:"row"},
+        h("button",{class:laSigo?"":"primary big", onclick:async ()=>{
+          try{
+            if(laSigo) await llamar("/rest/v1/seguidores?seguidor=eq."+sesion.uid+"&seguido=eq."+u.id, {metodo:"DELETE"});
+            else await llamar("/rest/v1/seguidores", {metodo:"POST", cuerpo:{seguido:u.id}, cabeceras:{Prefer:"return=minimal"}});
+            pintar();
+          }catch(e){ toast(avisoNube(e)); }
+        }}, laSigo ? "Dejar de seguir" : "Seguir"),
+        h("button",{class:"ghost", onclick:()=>denunciar({perfil:u.id})},"Denunciar"),
+        bloquearBtn(u.id, u.nombre, ()=>go({name:"comunidad"}, true)));
+      caja.replaceChildren(cab, h("div",{class:"section"}, acciones),
+        h("div",{class:"section stack"}, h("h2",{}, mio ? "Lo que has publicado" : "Sus labores"),
+          pubs.length ? pubs.map(p=>tarjetaPub(p, gusta, pintar)) : h("p",{class:"muted"}, mio ? "Aún no has publicado nada. Hazlo desde «Mis labores»." : "Todavía no ha publicado nada.")));
+    }catch(e){ caja.replaceChildren(h("p",{class:"note"}, avisoNube(e)), h("button",{onclick:pintar},"Probar otra vez")); }
+  };
+  pintar();
+};
+function editorPerfil(u, alGuardar){
+  const nombre = h("input",{type:"text", id:"pf-nombre", value:u.nombre, maxlength:"40", "aria-label":"Tu nombre"});
+  const bio = h("textarea",{id:"pf-bio", maxlength:"300", placeholder:"Por ejemplo: tejo amigurumis para mis nietos", "aria-label":"Sobre ti", style:"min-height:4rem"}, u.bio||"");
+  const aviso = h("p",{class:"muted", "aria-live":"polite"});
+  return h("div",{class:"panel stack"},
+    h("h2",{},"Tu perfil"),
+    h("p",{class:"muted"},"Las demás ven tu nombre, lo que escribas aquí y lo que publiques. Tu correo no lo ve nadie."),
+    h("label",{for:"pf-nombre"},"Tu nombre"), nombre,
+    h("label",{for:"pf-bio"},"Sobre ti"), bio,
+    h("button",{class:"primary", onclick:async ()=>{
+      const n = nombre.value.trim();
+      if(n.length<2){ aviso.textContent = "El nombre necesita al menos dos letras."; nombre.focus(); return; }
+      try{ await llamar("/rest/v1/perfiles?id=eq."+sesion.uid, {metodo:"PATCH", cuerpo:{nombre:n.slice(0,40), bio:bio.value.trim().slice(0,300)}, cabeceras:{Prefer:"return=minimal"}}); toast("Perfil guardado"); alGuardar(); }
+      catch(e){ aviso.textContent = avisoNube(e); }
+    }},"Guardar"),
+    h("p",{class:"muted"},"Has entrado como ", h("b",{}, sesion.email||"tu cuenta"), "."),
+    h("div",{class:"row"},
+      h("button",{onclick:cerrarSesion},"Salir de mi cuenta"),
+      h("button",{class:"ghost", onclick:()=>go({name:"privacidad"})},"Tus datos y privacidad")),
+    h("details",{}, h("summary",{},"Borrar mi cuenta"),
+      h("div",{class:"stack", style:"margin-top:.6rem"},
+        h("p",{},"Se borra para siempre tu cuenta, tu libreta guardada, tus fotos, tus publicaciones, comentarios y «me gusta». Lo que hay en este móvil se queda en el móvil."),
+        confirmBtn("Borrar mi cuenta para siempre","¿Segura? Toca otra vez","danger big", borrarCuenta))));
+}
+
+// Publicar una labor terminada (o un patrón), con su foto y, si quiere, el patrón para que otras lo tejan
+VISTAS.publicar = V => {
+  if(!sesion){ V.append(volver("Mis labores", {name:"labores"}), h("div",{class:"section"}, panelEntrar("Para publicar necesitas entrar en tu cuenta."))); return; }
+  const l = laborDe(view.id), p = l ? buscar(l.patron) : buscar(view.id);
+  if(!l && !p) return go({name:"labores"}, true);
+  const foto = l ? fotoDeLabor(l) : fotoGet(p.id);
+  const titulo = h("input",{type:"text", id:"pu-titulo", maxlength:"80", value:(l ? l.titulo : p.titulo)||"", "aria-label":"Título"});
+  const texto = h("textarea",{id:"pu-texto", maxlength:"1000", placeholder:"Cuéntalo: para quién es, qué lana usaste…", "aria-label":"Texto", style:"min-height:6rem"}, l && l.para ? "Para "+l.para+"." : "");
+  const conPatron = h("input",{type:"checkbox", id:"pu-patron", checked:!!(p && p.pasos && p.pasos.length)});
+  const conFoto = h("input",{type:"checkbox", id:"pu-foto", checked:!!foto});
+  const aviso = h("p",{class:"muted", "aria-live":"polite"});
+  const boton = h("button",{class:"primary big", onclick:async ()=>{
+    const t = titulo.value.trim(); if(!t){ aviso.textContent = "Ponle un título."; titulo.focus(); return; }
+    boton.disabled = true; aviso.textContent = "Publicando…";
+    try{
+      let ruta = null;
+      if(foto && conFoto.checked){
+        ruta = sesion.uid+"/"+crypto.randomUUID()+".jpg";
+        await llamar("/storage/v1/object/publicas/"+ruta, {metodo:"POST", cuerpo:await aBlob(foto), cabeceras:{"Content-Type":"image/jpeg"}});
+      }
+      const patron = p && conPatron.checked ? {v:1, t:p.titulo, p:p.pasos, g:p.ganchillo||"", h:p.hilo||"", n:p.nivel||"", d:p.descripcion||"", o:p.notas||""} : null;
+      await llamar("/rest/v1/publicaciones", {metodo:"POST", cuerpo:{titulo:t.slice(0,80), texto:texto.value.trim().slice(0,1000), patron, foto:ruta}, cabeceras:{Prefer:"return=minimal"}});
+      toast("¡Publicado!"); view.pest = "todas"; go({name:"comunidad"}, true);
+    }catch(e){ boton.disabled = false; aviso.textContent = avisoNube(e); }
+  }},"Publicar");
+  V.append(volver(l ? "Mis labores" : "Patrón", l ? {name:"labores"} : {name:"patron", id:p.id}),
+    h("div",{class:"page-title"}, h("h1",{},"Publicar en la comunidad"), h("p",{class:"muted"},"Lo verá toda la gente que use la app. Puedes borrarlo cuando quieras.")),
+    h("div",{class:"section panel stack"},
+      foto ? h("img",{class:"pub-foto", src:foto, alt:"La foto que se publicará"}) : h("p",{class:"note"},"Sin foto. Puedes añadirla en «Mis labores» con «Cambiar»."),
+      foto ? h("label",{class:"check"}, conFoto, " Publicar la foto") : null,
+      h("label",{for:"pu-titulo"},"Título"), titulo,
+      h("label",{for:"pu-texto"},"Texto"), texto,
+      p && p.pasos && p.pasos.length ? h("label",{class:"check"}, conPatron, " Compartir también el patrón para que otras lo tejan") : null,
+      boton, aviso));
+};
+
+VISTAS.privacidad = V => {
+  const contacto = NUBE.contacto ? h("a",{href:"mailto:"+NUBE.contacto}, NUBE.contacto) : h("a",{href:"https://github.com/parolo2000/tejiendo-ilusiones/issues", target:"_blank", rel:"noopener"},"la página del proyecto");
+  const parr = (t, ...k)=>h("div",{class:"section"}, h("h2",{}, t), ...k.map(x=>h("p",{}, x)));
+  V.append(volver("Atrás", sesion ? {name:"perfil", id:sesion.uid} : {name:"comunidad"}),
+    h("div",{class:"page-title"}, h("h1",{},"Tus datos y privacidad")),
+    parr("Qué se guarda", "Si no entras en una cuenta, todo se queda en tu móvil y no se manda a ningún sitio.",
+      "Si entras: tu correo (para entrar), tu libreta (patrones, labores, lanas, progreso, apuntes y fotos) y lo que publiques en la comunidad (fotos, textos, «me gusta», comentarios, a quién sigues)."),
+    parr("Quién lo ve", "Tu libreta y sus fotos solo las ves tú. Tu correo no lo ve nadie más.",
+      "Tu nombre, lo que escribas sobre ti y lo que publiques lo ve la gente que usa la app, salvo quien hayas bloqueado."),
+    parr("Dónde está", "En Supabase, en servidores de la Unión Europea. No se vende ni se usa para publicidad, y no hay anuncios."),
+    parr("Tus derechos", "Puedes cambiar tu nombre y lo que publicas cuando quieras, y borrar tu cuenta con todo lo suyo desde «Mi perfil».",
+      "La app es para mayores de 14 años."),
+    h("div",{class:"section"}, h("h2",{},"Contacto"), h("p",{},"Para cualquier duda o para reclamar: ", contacto, ".")));
+};
+
 VISTAS.mas = V => {
   const item = (ic, t, sub, fn)=>h("button",{onclick:fn}, h("span",{class:"ic"}, icono(ic,22)), h("span",{class:"grow"}, t, h("small",{},sub)), h("span",{class:"muted"},"›"));
   V.append(
@@ -3437,7 +4007,8 @@ VISTAS.mas = V => {
       item("regla","Calcular con la muestra","Cuántas cadenetas montar", ()=>go({name:"herramientas", ancla:"muestra"})),
       item("contador","Contador","Vueltas y puntos sin patrón", ()=>go({name:"contador"})),
       item("ayuda","Abreviaturas y nombres de puntos","España, Latinoamérica e inglés", ()=>go({name:"ayuda"})),
-      item("guardar","Copia de seguridad","Guarda o recupera todo lo tuyo", ()=>go({name:"copia"}))
+      item("guardar","Copia de seguridad","Guarda o recupera todo lo tuyo", ()=>go({name:"copia"})),
+      nubeActiva() ? item("gente", sesion ? "Mi cuenta" : "Entrar en mi cuenta", sesion ? (sesion.email||"Tu perfil, salir o borrar la cuenta") : "Guarda tu libreta y entra en la comunidad", ()=>sesion ? go({name:"perfil", id:sesion.uid}) : go({name:"comunidad"})) : null
     )),
     h("div",{class:"section"},
       h("h2",{},"Tamaño de la letra"),
@@ -3620,6 +4191,7 @@ document.documentElement.lang = document.documentElement.lang || "es"; // lector
 render();
 abrirEnlaceRecibido();
 pedirAlmacenamientoFijo();
+arrancarNube().then(()=>{ if(sesion) render(); });
 </script>
 
 <script>

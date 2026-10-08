@@ -30,8 +30,10 @@ async function prueba(nombre, fn) {
   catch (e) { fallos++; console.log("  ✗ " + nombre + "\n    " + (e.stack || e).toString().split("\n").slice(0, 4).join("\n    ")); }
 }
 
-async function nuevaPagina(browser, opts = {}, datos = null) {
+async function nuevaPagina(browser, { nube, ...opts } = {}, datos = null) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, ...opts });
+  // Con «nube», la app usa un Supabase de prueba (local); si no, funciona solo en el aparato, como siempre
+  if (nube) await ctx.addInitScript(n => { window.TI_NUBE = n; }, nube);
   // Los datos se siembran solo al abrir la pestaña, no al recargar. La marca va en window.name, que sigue al
   // recargar: sessionStorage a veces llega vacío al principio de la recarga y se volvían a sembrar los datos.
   if (datos) await ctx.addInitScript(d => { if (window.name !== "sembrado") { localStorage.clear(); localStorage.setItem("rincon-ganchillo-v1", d); window.name = "sembrado"; } }, JSON.stringify(datos));

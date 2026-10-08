@@ -312,3 +312,27 @@ Capturas en `tests/capturas/`.
   ya no se come la línea siguiente. «Filas 11 a 18: 60 pb» toma el total de los puntos (`implicito`).
 - Nombre del patrón a partir del nombre del archivo. Colores aqua/aguamarina.
 - Test nuevo (65).
+
+## 2026-10-08 · Cuentas y comunidad (Supabase, plan gratis)
+
+- Copia previa: `versiones/tejiendo-ilusiones-antes-cuentas.html`.
+- Solo en la app instalable (GitHub Pages, `TI_LOCAL`); dentro de claude.ai todo sigue como antes. Sin cuenta,
+  la app funciona igual que siempre en el móvil; en Inicio invita a entrar («Ahora no» lo esconde).
+- Entrar sin contraseña: código de 6 cifras al correo (o el enlace del correo). Google, preparado y apagado.
+  Sesión en `localStorage["tejiendo-sesion"]`, se renueva sola. Casilla de 14 años y privacidad.
+- La libreta entera (`state`) va a la tabla `estados` (una fila por persona, gana la más nueva por `t`); las fotos
+  al cubo privado `privadas/<uid>/`. Al entrar: si la cuenta ya tiene libreta y es más nueva, se usa esa (antes se
+  guarda copia literal en `rincon-ganchillo-v1-antes-de-entrar`); si no, se sube la del móvil. Lo de otra cuenta
+  en el mismo móvil no se mezcla (`tejiendo-duena`). Al salir se sube todo y, solo si se ha podido, se quita del
+  móvil. Sin internet se sigue tejiendo y se sube al volver la conexión.
+- Comunidad (pestaña «Gente»): publicar una labor o un patrón con foto (cubo público `publicas/<uid>/`) y, si se
+  quiere, el patrón; «Todas», «A quien sigo», buscar gente; me gusta, comentarios (la dueña puede quitarlos),
+  «Tejer este patrón» (pasa por `validarPatronRecibido` y la pantalla de patrón recibido), perfil con nombre y
+  «sobre ti», pedir nombre la primera vez, seguir, denunciar, bloquear (se dejan de ver las dos), salir, borrar la
+  cuenta con todo lo suyo, página de privacidad.
+- Seguridad: la app solo lleva la URL y la clave pública; todo el control está en RLS
+  (`supabase/migrations/0001_cuentas_y_red.sql`): nadie sin sesión lee nada, cada una solo escribe lo suyo, las
+  columnas de autoría no se pueden cambiar, límites de tamaño, fotos solo en su carpeta, denuncias solo se crean.
+  Lo que escribe la gente se pinta siempre como texto.
+- Pruebas: `supabase/pruebas/probar.sh` (reglas, Postgres local) y `tests/nube.test.cjs` (11 pruebas con dos
+  personas contra un Supabase local). Configuración del proyecto real: `supabase/CONFIGURAR.md`.

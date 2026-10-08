@@ -1,0 +1,154 @@
+// Pruebas de las cuentas y la comunidad contra un Supabase local (el de verdad no se toca).
+// Hace falta Docker y la CLI de Supabase:
+//   cd <carpeta con supabase/config.toml y supabase/migrations/ de este repo> && npx supabase start
+//   NODE_PATH=$(npm root -g) node tests/nube.test.cjs
+// Si el Supabase local no responde, avisa y no hace nada. Las reglas de la base de datos se prueban aparte, sin
+// Docker, con supabase/pruebas/probar.sh.
+const assert = require("assert"), http = require("http"), fs = require("fs"), path = require("path");
+const { chromium } = require("playwright");
+const API = process.env.SUPABASE_URL || "http://127.0.0.1:54321", CORREO = process.env.MAILPIT_URL || "http://127.0.0.1:54324";
+const CLAVE = process.env.SUPABASE_CLAVE || "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH"; // la clave pública de prueba de la CLI
+const NUBE = { url: API, clave: CLAVE };
+const espera = ms => new Promise(r => setTimeout(r, ms));
+async function codigoDe(correo) {
+  for (let i = 0; i < 40; i++) {
+    const r = await (await fetch(CORREO + "/api/v1/search?query=" + encodeURIComponent("to:" + correo))).json();
+    const m = r.messages && r.messages[0];
+    if (m) {
+      const t = await (await fetch(CORREO + "/api/v1/message/" + m.ID)).json();
+      await fetch(CORREO + "/api/v1/messages", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ IDs: [m.ID] }) });
+      return /code: (\d{6})/.exec(t.Text)[1];
+    }
+    await espera(250);
+  }
+  throw new Error("no ha llegado el correo a " + correo);
+}
+let bien = 0, mal = 0;
+async function prueba(nombre, fn) {
+  try { await fn(); bien++; console.log("  ✓ " + nombre); }
+  catch (e) { mal++; console.log("  ✗ " + nombre + "\n    " + String(e.stack || e).split("\n").slice(0, 4).join("\n    ")); }
+}
+(async () => {
+  try { await fetch(API + "/auth/v1/health", { headers: { apikey: CLAVE } }); }
+  catch (e) { console.log("No hay un Supabase local en " + API + ": no pruebo la comunidad."); return; }
+  const RAIZ = path.resolve(__dirname, "..");
+  const servidor = http.createServer((req, res) => {
+    const f = path.join(RAIZ, decodeURIComponent(new globalThis.URL(req.url, "http://x").pathname));
+    if (!f.startsWith(RAIZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { "Content-Type": f.endsWith(".html") ? "text/html; charset=utf-8" : "text/javascript" }); res.end(fs.readFileSync(f));
+  }).listen(0, "127.0.0.1");
+  await new Promise(r => servidor.once("listening", r));
+  const URL = "http://127.0.0.1:" + servidor.address().port + "/tejiendo-ilusiones.html";
+  const browser = await chromium.launch();
+  const sufijo = Date.now().toString(36);
+  const pagina = async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    await ctx.addInitScript(n => { window.TI_NUBE = n; }, NUBE);
+    const p = await ctx.newPage(); p.errores = [];
+    p.on("pageerror", e => p.errores.push(e.message));
+    p.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) p.errores.push(m.text()); });
+    await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    await p.goto(URL); return p;
+  };
+  const entrar = async (p, correo) => {
+    await p.evaluate(() => go({ name: "comunidad" }));
+    await p.fill("#en-correo", correo); await p.check("#en-acepto"); await p.click("text=Mandarme un código");
+    await p.waitForSelector("#en-codigo"); await p.fill("#en-codigo", await codigoDe(correo));
+    await Promise.all([p.waitForLoadState("load").catch(() => {}), p.click("button:has-text('Entrar')")]);
+    await p.waitForFunction(() => typeof sesion !== "undefined" && sesion && nubeLista, null, { timeout: 15000 }).catch(() => {});
+    await p.waitForTimeout(800);
+  };
+  const NOMBRE_ANA = "Ana " + sufijo, ANA = "ana-" + sufijo + "@ejemplo.es", BEA = "bea-" + sufijo + "@ejemplo.es";
+  const ana = await pagina(), bea = await pagina();
+  console.log("Cuentas y comunidad");
+  await prueba("sin cuenta la app funciona igual y en Inicio invita a entrar", async () => {
+    assert.equal(await ana.locator(".invita").count(), 1);
+    assert.equal(await ana.locator("nav.tabs button", { hasText: "Gente" }).count(), 1);
+  });
+  await prueba("entrar con el código del correo sube al instante lo que ya tenía en el móvil, con sus fotos", async () => {
+    await ana.evaluate(async () => {
+      const c = document.createElement("canvas"); c.width = 200; c.height = 200; const x = c.getContext("2d"); x.fillStyle = "#e84393"; x.fillRect(0, 0, 200, 200);
+      const p = { id: "m-1", titulo: "Gorro de bebé", pasos: ["Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: aum en cada punto (12)"], color: "#E84393" };
+      state.patrones.unshift(p); save(); const l = guardarLabor(p, "mi nieta"); await fotoSet(l.id, c.toDataURL("image/jpeg", .8));
+    });
+    await entrar(ana, ANA);
+    await ana.waitForFunction(() => !nubePendiente && fotosSubidas().size > 0, null, { timeout: 10000 });
+    const remoto = await ana.evaluate(async () => (await llamar("/rest/v1/estados?select=datos&usuario=eq." + sesion.uid))[0].datos);
+    assert.equal(remoto.labores[0].para, "mi nieta");
+    assert.equal(await ana.locator("#co-nombre").count(), 1, "pide un nombre para la comunidad");
+    await ana.fill("#co-nombre", NOMBRE_ANA); await ana.click("text=Guardar mi nombre"); await ana.waitForTimeout(800);
+    assert.equal(await ana.locator("#co-nombre").count(), 0);
+  });
+  await prueba("publicar una labor con su foto y su patrón", async () => {
+    const id = await ana.evaluate(() => state.labores[0].id);
+    await ana.evaluate(id => go({ name: "publicar", id }), id);
+    await ana.fill("#pu-texto", "Para mi nieta, con algodón rosa.");
+    await ana.click("button:has-text('Publicar')"); await ana.waitForSelector(".pub");
+    assert.match(await ana.locator(".pub h3").first().textContent(), /Gorro de bebé/);
+    assert.equal(await ana.locator(".pub img.pub-foto").first().evaluate(i => i.complete && i.naturalWidth > 0), true, "la foto publicada se ve");
+  });
+  await prueba("otra persona lo ve, da me gusta, comenta y lo guarda para tejerlo", async () => {
+    await entrar(bea, BEA);
+    await bea.fill("#co-nombre", "Bea"); await bea.click("text=Guardar mi nombre"); await bea.waitForSelector(".pub");
+    const suya = bea.locator(".pub", { hasText: NOMBRE_ANA }).first();
+    await suya.locator("button:has-text('Me gusta')").click();
+    await bea.locator(".pub", { hasText: NOMBRE_ANA }).first().locator("button:has-text('Te gusta · 1')").waitFor();
+    await bea.locator(".pub", { hasText: NOMBRE_ANA }).first().locator("button:has-text('Comentarios')").click(); await bea.waitForSelector("#pub-comentario");
+    await bea.fill("#pub-comentario", "¡Qué bonito!"); await bea.click("button:has-text('Comentar')");
+    await bea.waitForSelector(".comentario");
+    await bea.click("button:has-text('Tejer este patrón')"); await bea.waitForSelector("text=Te han mandado un patrón");
+    await bea.click("text=Guardar en mis patrones");
+    assert.equal(await bea.evaluate(() => state.patrones[0].titulo), "Gorro de bebé");
+  });
+  await prueba("seguir, y en «A quien sigo» sale solo lo de quien sigues", async () => {
+    await bea.evaluate(() => go({ name: "comunidad" })); await bea.waitForSelector(".pub");
+    await bea.locator(".pub .pub-autora", { hasText: NOMBRE_ANA }).first().click(); await bea.click("button:has-text('Seguir')");
+    await bea.waitForSelector("button:has-text('Dejar de seguir')");
+    assert.match(await bea.textContent(".page-title"), /1 la sigue/);
+    await bea.evaluate(() => { view = { name: "comunidad", pest: "sigo" }; render(); }); await bea.waitForSelector(".pub");
+    assert.equal(await bea.locator(".pub").count(), 1);
+  });
+  await prueba("la dueña puede quitar comentarios de su publicación", async () => {
+    await ana.evaluate(() => go({ name: "comunidad" })); await ana.waitForSelector(".pub");
+    await ana.locator(".pub", { hasText: NOMBRE_ANA }).first().locator("button:has-text('Comentarios · 1')").click(); await ana.waitForSelector(".comentario");
+    await ana.click(".comentario button:has-text('Borrar')"); await ana.click(".comentario button:has-text('¿Borrar?')");
+    await ana.waitForSelector("text=Nadie ha comentado todavía.");
+  });
+  await prueba("salir quita lo suyo del móvil; al volver a entrar vuelve todo, también la foto", async () => {
+    await ana.evaluate(() => go({ name: "perfil", id: sesion.uid })); await ana.waitForSelector("text=Salir de mi cuenta");
+    await Promise.all([ana.waitForEvent("load"), ana.click("text=Salir de mi cuenta")]);
+    assert.equal(await ana.evaluate(() => state.labores.length), 0);
+    assert.equal(await ana.evaluate(() => Object.keys(localStorage).some(k => k.startsWith(FKEY))), false, "no quedan fotos suyas en el móvil");
+    await entrar(ana, ANA);
+    await ana.waitForFunction(() => state.labores.length === 1, null, { timeout: 10000 });
+    await ana.evaluate(() => go({ name: "labores" }));
+    await ana.waitForSelector(".labor img", { timeout: 10000 });
+  });
+  await prueba("otra cuenta en el mismo móvil no ve ni se queda con lo de la anterior", async () => {
+    await ana.evaluate(() => go({ name: "perfil", id: sesion.uid })); await ana.waitForSelector("text=Salir de mi cuenta");
+    await Promise.all([ana.waitForEvent("load"), ana.click("text=Salir de mi cuenta")]);
+    await entrar(ana, BEA);
+    await ana.waitForFunction(() => state.patrones.some(p => p.titulo === "Gorro de bebé"), null, { timeout: 10000 });
+    assert.equal(await ana.evaluate(() => state.labores.length), 0, "las labores de Ana no pasan a Bea");
+  });
+  await prueba("bloquear: deja de verse lo suyo (lo demás lo prueban las reglas en supabase/pruebas)", async () => {
+    await bea.evaluate(() => { view = { name: "comunidad", pest: "todas" }; render(); }); await bea.waitForSelector(".pub");
+    await bea.locator(".pub", { hasText: NOMBRE_ANA }).first().locator("button[aria-label='Más opciones']").click();
+    await bea.click("button:has-text('Bloquear')"); await bea.click("button:has-text('¿Bloquear?')");
+    await bea.waitForFunction(n => ![...document.querySelectorAll(".pub")].some(p => p.textContent.includes(n)) && !document.querySelector(".overlay"), NOMBRE_ANA);
+  });
+  await prueba("borrar la cuenta borra todo en el servidor y deja el móvil como estaba", async () => {
+    await bea.evaluate(() => go({ name: "perfil", id: sesion.uid })); await bea.waitForSelector("summary");
+    const uid = await bea.evaluate(() => sesion.uid);
+    await bea.click("summary"); await bea.click("text=Borrar mi cuenta para siempre"); await bea.click("text=¿Segura? Toca otra vez");
+    await bea.waitForSelector("text=Cuenta borrada");
+    assert.equal(await bea.evaluate(() => state.patrones[0].titulo), "Gorro de bebé", "lo del móvil se queda");
+    await entrar(bea, "otra-" + sufijo + "@ejemplo.es");
+    const resto = await bea.evaluate(async u => (await llamar("/rest/v1/perfiles?select=id&id=eq." + u)).length, uid);
+    assert.equal(resto, 0, "su perfil ya no existe");
+  });
+  await prueba("sin errores en la consola", async () => { assert.deepEqual([...ana.errores, ...bea.errores], []); });
+  await browser.close(); servidor.close();
+  console.log("\n" + bien + " bien, " + mal + " mal");
+  process.exitCode = mal ? 1 : 0;
+})();

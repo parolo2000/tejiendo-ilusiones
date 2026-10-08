@@ -1,3 +1,5 @@
 tests/capturas/
 versiones/
 node_modules/
+supabase/.branches
+supabase/.temp
