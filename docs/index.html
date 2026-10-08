@@ -174,7 +174,7 @@ ol.steps .rev.aviso{color:var(--danger)}
 .counter .small button{flex:1;font-size:.9rem}
 .timer{display:flex;align-items:center;justify-content:space-between;gap:.8rem;background:var(--surface);border-radius:1rem;padding:.6rem .6rem .6rem 1rem;box-shadow:var(--shadow)}
 .timer .t{font-weight:700;font-size:1.35rem;font-variant-numeric:tabular-nums}
-textarea,input[type=text],input[type=email],input[type=search],input[type=number],select{font:inherit;width:100%;box-sizing:border-box;padding:.6rem .8rem;border:2px solid var(--line);border-radius:.7rem;background:var(--surface);color:var(--fg)}
+textarea,input[type=text],input[type=email],input[type=search],input[type=password],input[type=number],select{font:inherit;width:100%;box-sizing:border-box;padding:.6rem .8rem;border:2px solid var(--line);border-radius:.7rem;background:var(--surface);color:var(--fg)}
 textarea{min-height:6rem;resize:vertical;line-height:1.5}
 label.f,.f{display:flex;flex-direction:column;gap:.3rem;font-weight:700}
 label.f small,.f small{font-weight:400;color:var(--muted)}
@@ -340,7 +340,7 @@ details.colores[open] .row{margin-top:.5rem}
 /* Modo sofá: pantalla completa, sin bajar; la mitad de abajo es el botón de +1 */
 body.en-sofa{overflow:hidden}
 body.en-sofa .view{animation:none}
-body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
+body.en-sofa header.top, body.en-sofa nav.tabs, body.sin-cuenta nav.tabs{display:none}
 .sofa{position:fixed;inset:0;z-index:15;background:var(--bg);display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) 45%;padding-top:env(safe-area-inset-top,0px)}
 .sofa-eye{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
 .sofa-voz{min-height:2rem;padding:0 .5rem;margin:-.3rem 0;gap:.3rem;font-size:.9rem;color:var(--thread)}
@@ -433,6 +433,8 @@ body.en-sofa header.top, body.en-sofa nav.tabs{display:none}
 .persona{justify-content:flex-start;text-align:left;gap:.7rem;min-height:3.6rem}
 .persona small{display:block;font-weight:400;color:var(--muted);font-size:.82rem}
 .persona .grow{flex:1;min-width:0}
+.row.clave{flex-wrap:nowrap}
+.row.clave input{flex:1;min-width:0}
 label.check{display:flex;gap:.6rem;align-items:flex-start;font-weight:400}
 label.check input{width:1.5rem;height:1.5rem;flex:none;margin-top:.1rem}
 nav.tabs button{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:min(.85rem,13px)}
@@ -769,7 +771,7 @@ addEventListener("popstate", e => {
 });
 marcar(view, true);
 const TABS = [["inicio","Inicio","casa"],["patrones","Patrones","libro"],["labores","Labores","corazon"],["mas","Más","mas"]];
-const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad"};
+const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad", clave:"comunidad"};
 function pintarTabs(){
   const actual = TAB_DE[view.name] || view.name;
   const tabs = nubeActiva() ? [...TABS.slice(0,3), ["comunidad","Gente","gente"], TABS[3]] : TABS;
@@ -796,8 +798,11 @@ function render(){
   $app.replaceChildren(wrap);
   keepAwake(PANTALLA_ENCENDIDA.includes(view.name));
   document.body.classList.toggle("en-sofa", view.name==="sofa");
+  // En la app instalable solo se entra con cuenta: sin sesión, solo se ve la pantalla de entrar (y la de privacidad)
+  const cerrada = nubeActiva() && !sesion;
+  document.body.classList.toggle("sin-cuenta", cerrada);
   pintarTabs();
-  const fn = VISTAS[view.name] || VISTAS.inicio;
+  const fn = cerrada ? (view.name==="privacidad" ? VISTAS.privacidad : VISTAS.entrar) : (VISTAS[view.name] || VISTAS.inicio);
   fn(wrap);
 }
 function volver(label, destino){ return h("button",{class:"ghost back", onclick:()=>atras(destino)},"← "+label); }
@@ -1536,7 +1541,6 @@ VISTAS.inicio = V => {
     h("div",{class:"hero"}, h("p",{class:"eyebrow"}, saludo), h("h1",{}, ult ? "¿Seguimos?" : "¿Qué tejemos hoy?")),
     ult ? h("div",{class:"section"}, tarjetaContinuar(ult)) : null,
     tocaRecordarCopia() ? avisoCopia() : null,
-    invitacionInicio(),
     !window.TI_LOCAL && state.prefs.avisoApp ? avisoInstalar() : null,
     tuSemana(),
     h("div",{class:"section"},
@@ -3457,7 +3461,8 @@ const NUBE = Object.assign({
   url:"https://frbqbjusjfmucltuxodp.supabase.co",
   clave:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZyYnFianVzamZtdWNsdHV4b2RwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NDQ0ODgsImV4cCI6MjEwNzAyMDQ4OH0.1HEEcmoTkCNQrE-8uD71ELIPQGev8m4xUFtZHSNB3IY",
   google:false, contacto:""}, window.TI_NUBE||{});
-const SKEY = "tejiendo-sesion", DUENA = "tejiendo-duena", SUBIDAS = "tejiendo-fotos-subidas", INVITA = "tejiendo-invitacion";
+const SKEY = "tejiendo-sesion", DUENA = "tejiendo-duena", SUBIDAS = "tejiendo-fotos-subidas", PONER_CLAVE = "tejiendo-poner-clave";
+function pendienteClave(){ try{ return !!localStorage.getItem(PONER_CLAVE); }catch(e){ return false; } }
 var sesion = null, nubeTimer = null, nubePendiente = false, nubeSubiendo = null, nubeLista = false;
 // Solo en la app instalable (GitHub Pages); dentro de claude.ai sigue guardándose como hasta ahora
 const nubeActiva = () => !!(NUBE.url && NUBE.clave && (window.TI_LOCAL || window.TI_NUBE));
@@ -3494,12 +3499,18 @@ async function token(){
   return sesion ? sesion.access : null;
 }
 const correoValido = c => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(c);
-async function pedirCodigo(correo){
-  await llamar("/auth/v1/otp?redirect_to="+encodeURIComponent(location.origin+location.pathname), {metodo:"POST", cuerpo:{email:correo, create_user:true}, sinSesion:true});
+async function entrarConClave(correo, clave){
+  guardarSesion(sesionDe(await llamar("/auth/v1/token?grant_type=password", {metodo:"POST", cuerpo:{email:correo, password:clave}, sinSesion:true})));
+  await alEntrar();
 }
-async function comprobarCodigo(correo, codigo){
-  const d = await llamar("/auth/v1/verify", {metodo:"POST", cuerpo:{type:"email", email:correo, token:codigo}, sinSesion:true});
-  guardarSesion(sesionDe(d)); await alEntrar();
+async function pedirCodigoClave(correo){
+  await llamar("/auth/v1/recover?redirect_to="+encodeURIComponent(location.origin+location.pathname), {metodo:"POST", cuerpo:{email:correo}, sinSesion:true});
+}
+async function cambiarClaveConCodigo(correo, codigo, clave){
+  const d = await llamar("/auth/v1/verify", {metodo:"POST", cuerpo:{type:"recovery", email:correo, token:codigo}, sinSesion:true});
+  guardarSesion(sesionDe(d));
+  await llamar("/auth/v1/user", {metodo:"PUT", cuerpo:{password:clave}});
+  await alEntrar();
 }
 function entrarConGoogle(){ location.href = NUBE.url+"/auth/v1/authorize?provider=google&redirect_to="+encodeURIComponent(location.origin+location.pathname); }
 // Al volver del enlace del correo o de Google, la sesión llega en la dirección (después de «#»)
@@ -3514,7 +3525,8 @@ async function leerVueltaDeEntrar(){
   try{
     const u = await llamar("/auth/v1/user", {cabeceras:{Authorization:"Bearer "+access}, sinSesion:true});
     guardarSesion({access, refresh, exp:Date.now()+(+q.get("expires_in")||3600)*1000, uid:u.id, email:u.email||""});
-    await alEntrar(); go({name:"comunidad"}, true); toast("¡Ya has entrado!");
+    if(q.get("type")==="recovery") try{ localStorage.setItem(PONER_CLAVE, "1"); }catch(e){}
+    await alEntrar(); go(pendienteClave() ? {name:"clave"} : {name:"comunidad"}, true); toast("¡Ya has entrado!");
   }catch(e){ toast("No he podido entrar. Prueba otra vez."); }
   return true;
 }
@@ -3643,7 +3655,7 @@ async function borrarCuenta(){
   guardarSesion(null);
   try{ [DUENA, SUBIDAS].forEach(k=>localStorage.removeItem(k)); }catch(e){}
   nubeLista = false;
-  toast("Cuenta borrada. Lo de este móvil sigue aquí."); go({name:"inicio"}, true);
+  toast("Cuenta borrada."); go({name:"inicio"}, true);
 }
 
 // ── Comunidad ──
@@ -3737,60 +3749,112 @@ function denunciar(que){
 }
 
 // Pantalla para entrar. Sin contraseñas: llega un código de 6 cifras al correo (o se entra con Google).
+// Pantalla para entrar: correo y contraseña. Las cuentas las crea quien lleva la app (no hay «crear cuenta»).
+// Si se olvida la contraseña, llega un código de 6 cifras al correo y se pone una nueva.
+const CLAVE_MIN = 8;
+function campoClave(id, etiqueta, nueva){
+  const inp = h("input",{type:"password", id, autocomplete:nueva ? "new-password" : "current-password", "aria-label":etiqueta, minlength:nueva ? String(CLAVE_MIN) : null});
+  const ver = h("button",{type:"button", class:"ghost", "aria-pressed":"false", onclick:()=>{ const v = inp.type==="password"; inp.type = v ? "text" : "password"; ver.textContent = v ? "Ocultar" : "Ver"; ver.setAttribute("aria-pressed", String(v)); }},"Ver");
+  return {inp, nodo:h("div",{class:"row clave"}, inp, ver)};
+}
+function pideTuCuenta(){
+  return h("p",{class:"muted"},"¿No tienes cuenta? Pídesela a Tejiendo Ilusiones", NUBE.contacto ? [": ", h("a",{href:"mailto:"+NUBE.contacto}, NUBE.contacto)] : "", ".");
+}
 function panelEntrar(motivo){
   const caja = h("div",{class:"panel stack"});
   const aviso = h("p",{class:"muted", "aria-live":"polite"});
   const acepto = h("input",{type:"checkbox", id:"en-acepto"});
-  const paso1 = ()=>{
-    const correo = h("input",{type:"email", id:"en-correo", autocomplete:"email", inputmode:"email", placeholder:"tu@correo.es", "aria-label":"Tu correo"});
-    const pedir = h("button",{class:"primary big", onclick:async ()=>{
-      const c = correo.value.trim().toLowerCase();
+  const casilla = h("label",{class:"check"}, acepto, h("span",{},"Tengo 14 años o más y acepto ", h("a",{href:"#", onclick:e=>{ e.preventDefault(); go({name:"privacidad"}); }},"cómo se guardan mis datos"), "."));
+  let correoVisto = "";
+  const entrar = ()=>{
+    const correo = h("input",{type:"email", id:"en-correo", autocomplete:"username", inputmode:"email", placeholder:"tu@correo.es", "aria-label":"Tu correo", value:correoVisto});
+    const clave = campoClave("en-clave", "Tu contraseña");
+    const boton = h("button",{class:"primary big", onclick:async ()=>{
+      const c = correo.value.trim().toLowerCase(); correoVisto = c;
       if(!correoValido(c)){ aviso.textContent = "Escribe bien tu correo, por ejemplo maria@gmail.com"; correo.focus(); return; }
+      if(!clave.inp.value){ aviso.textContent = "Escribe tu contraseña."; clave.inp.focus(); return; }
       if(!acepto.checked){ aviso.textContent = "Marca la casilla de abajo para seguir."; return; }
-      pedir.disabled = true; aviso.textContent = "Mandando el código…";
-      try{ await pedirCodigo(c); paso2(c); }
-      catch(e){ pedir.disabled = false; aviso.textContent = e.estado===429 ? "Has pedido muchos códigos seguidos. Espera un poco y vuelve a probar."
-        : e.estado ? "No he podido mandar el correo. Prueba dentro de un rato." + (e.message ? " ("+e.message+")" : "") : avisoNube(e); }
-    }},"Mandarme un código");
+      boton.disabled = true; aviso.textContent = "Entrando…";
+      try{ await entrarConClave(c, clave.inp.value); toast("¡Ya has entrado!"); render(); }
+      catch(e){ boton.disabled = false; aviso.textContent = e.estado===400 ? "El correo o la contraseña no son correctos." : e.estado===429 ? "Demasiados intentos seguidos. Espera un poco." : avisoNube(e); }
+    }},"Entrar");
+    clave.inp.addEventListener("keydown", e=>{ if(e.key==="Enter") boton.click(); });
     caja.replaceChildren(...[
       h("h2",{},"Entra en tu cuenta"),
       motivo ? h("p",{}, motivo) : null,
-      h("label",{for:"en-correo"},"Tu correo"), correo, pedir,
-      NUBE.google ? h("button",{class:"big", onclick:()=>{ if(!acepto.checked){ aviso.textContent = "Marca la casilla de abajo para seguir."; return; } entrarConGoogle(); }},"Entrar con Google") : null,
-      h("label",{class:"check"}, acepto, " Tengo 14 años o más y acepto ", h("a",{href:"#", onclick:e=>{ e.preventDefault(); go({name:"privacidad"}); }},"cómo se guardan mis datos"), "."),
-      aviso].filter(Boolean));
+      h("label",{for:"en-correo"},"Tu correo"), correo,
+      h("label",{for:"en-clave"},"Tu contraseña"), clave.nodo,
+      casilla, boton, aviso,
+      h("button",{class:"ghost", onclick:()=>{ correoVisto = correo.value.trim().toLowerCase(); olvido(); }},"He olvidado mi contraseña"),
+      pideTuCuenta()].filter(Boolean));
   };
-  const paso2 = correo=>{
-    const codigo = h("input",{type:"text", id:"en-codigo", inputmode:"numeric", autocomplete:"one-time-code", maxlength:"10", placeholder:"123456", "aria-label":"Código del correo", style:"font-size:1.6rem;letter-spacing:.3em;text-align:center"});
-    const entrar = h("button",{class:"primary big", onclick:async ()=>{
-      const k = codigo.value.replace(/\D/g,"");
-      if(k.length<6){ aviso.textContent = "El código tiene 6 números."; codigo.focus(); return; }
-      entrar.disabled = true; aviso.textContent = "Entrando…";
-      try{ await comprobarCodigo(correo, k); toast("¡Ya has entrado!"); render(); }
-      catch(e){ entrar.disabled = false; aviso.textContent = e.estado===0 ? avisoNube(e) : "Ese código no vale o ha caducado. Revísalo o pide otro."; }
-    }},"Entrar");
+  const olvido = ()=>{
+    const correo = h("input",{type:"email", id:"en-correo", autocomplete:"username", inputmode:"email", placeholder:"tu@correo.es", "aria-label":"Tu correo", value:correoVisto});
+    const boton = h("button",{class:"primary big", onclick:async ()=>{
+      const c = correo.value.trim().toLowerCase(); correoVisto = c;
+      if(!correoValido(c)){ aviso.textContent = "Escribe bien tu correo, por ejemplo maria@gmail.com"; correo.focus(); return; }
+      boton.disabled = true; aviso.textContent = "Mandando el código…";
+      try{ await pedirCodigoClave(c); aviso.textContent = ""; codigo(c); }
+      catch(e){ boton.disabled = false; aviso.textContent = e.estado===429 ? "Has pedido muchos códigos seguidos. Espera un poco y vuelve a probar."
+        : e.estado ? "No he podido mandar el correo. Prueba dentro de un rato." + (e.message ? " ("+e.message+")" : "") : avisoNube(e); }
+    }},"Mandarme un código");
+    caja.replaceChildren(
+      h("h2",{},"Poner una contraseña nueva"),
+      h("p",{},"Te mando un código de 6 números a tu correo para que pongas una contraseña nueva."),
+      h("label",{for:"en-correo"},"Tu correo"), correo, boton, aviso,
+      h("button",{class:"ghost", onclick:entrar},"← Volver"));
+    correo.focus();
+  };
+  const codigo = correo=>{
+    const cod = h("input",{type:"text", id:"en-codigo", inputmode:"numeric", autocomplete:"one-time-code", maxlength:"10", placeholder:"123456", "aria-label":"Código del correo", style:"font-size:1.6rem;letter-spacing:.3em;text-align:center"});
+    const clave = campoClave("en-nueva", "Contraseña nueva", true);
+    const boton = h("button",{class:"primary big", onclick:async ()=>{
+      const k = cod.value.replace(/\D/g,"");
+      if(k.length<6){ aviso.textContent = "El código tiene 6 números."; cod.focus(); return; }
+      if(clave.inp.value.length<CLAVE_MIN){ aviso.textContent = "La contraseña necesita al menos "+CLAVE_MIN+" letras o números."; clave.inp.focus(); return; }
+      if(!acepto.checked){ aviso.textContent = "Marca la casilla de abajo para seguir."; return; }
+      boton.disabled = true; aviso.textContent = "Guardando…";
+      try{ await cambiarClaveConCodigo(correo, k, clave.inp.value); toast("Contraseña cambiada. ¡Ya has entrado!"); render(); }
+      catch(e){ boton.disabled = false; aviso.textContent = e.estado===0 ? avisoNube(e) : e.estado===422 ? "Esa contraseña no vale. Prueba con otra más larga o distinta." : "Ese código no vale o ha caducado. Revísalo o pide otro."; }
+    }},"Guardar y entrar");
     caja.replaceChildren(
       h("h2",{},"Mira tu correo"),
-      h("p",{},"Te he mandado un código de 6 números a ", h("b",{}, correo), ". Escríbelo aquí. Si no lo ves, mira en «Spam» o «Promociones»."),
-      h("label",{for:"en-codigo"},"Código"), codigo, entrar,
-      h("p",{class:"muted"},"También puedes tocar el enlace del correo desde este mismo móvil."),
-      h("button",{class:"ghost", onclick:paso1},"← Usar otro correo"),
-      aviso);
-    codigo.focus();
+      h("p",{},"Te he mandado un código de 6 números a ", h("b",{}, correo), ". Si no lo ves, mira en «Spam» o «Promociones»."),
+      h("label",{for:"en-codigo"},"Código"), cod,
+      h("label",{for:"en-nueva"},"Contraseña nueva (al menos "+CLAVE_MIN+" letras o números)"), clave.nodo,
+      casilla, boton, aviso,
+      h("button",{class:"ghost", onclick:olvido},"← Usar otro correo"));
+    cod.focus();
   };
-  paso1();
+  entrar();
   return caja;
 }
-function invitacionInicio(){
-  if(!nubeActiva() || sesion) return null;
-  try{ if(localStorage.getItem(INVITA)) return null; }catch(e){}
-  return h("div",{class:"section"}, h("div",{class:"panel stack invita"},
-    h("h2",{},"Guarda tus labores en tu cuenta"),
-    h("p",{},"Entra con tu correo: lo tendrás en cualquier móvil, no se perderá nunca y podrás enseñar tus labores en la comunidad."),
-    h("div",{class:"row"},
-      h("button",{class:"primary big", onclick:()=>go({name:"comunidad"})},"Entrar"),
-      h("button",{class:"ghost", onclick:()=>{ try{ localStorage.setItem(INVITA, "1"); }catch(e){} render(); }},"Ahora no"))));
-}
+// Cambiar la contraseña con la sesión abierta (desde «Mi perfil» o al volver del enlace del correo)
+VISTAS.clave = V => {
+  if(!sesion) return go({name:"comunidad"}, true);
+  const clave = campoClave("cl-nueva", "Contraseña nueva", true), otra = campoClave("cl-otra", "Repite la contraseña", true);
+  const aviso = h("p",{class:"muted", "aria-live":"polite"});
+  const boton = h("button",{class:"primary big", onclick:async ()=>{
+    if(clave.inp.value.length<CLAVE_MIN){ aviso.textContent = "La contraseña necesita al menos "+CLAVE_MIN+" letras o números."; clave.inp.focus(); return; }
+    if(clave.inp.value!==otra.inp.value){ aviso.textContent = "Las dos contraseñas no son iguales."; otra.inp.focus(); return; }
+    boton.disabled = true;
+    try{ await llamar("/auth/v1/user", {metodo:"PUT", cuerpo:{password:clave.inp.value}}); try{ localStorage.removeItem(PONER_CLAVE); }catch(e){} toast("Contraseña cambiada"); go({name:"perfil", id:sesion.uid}, true); }
+    catch(e){ boton.disabled = false; aviso.textContent = e.estado===422 ? "Esa contraseña no vale. Prueba con otra más larga o distinta." : avisoNube(e); }
+  }},"Guardar la contraseña");
+  V.append(volver("Mi perfil", {name:"perfil", id:sesion.uid}),
+    h("div",{class:"page-title"}, h("h1",{},"Tu contraseña")),
+    h("div",{class:"section panel stack"},
+      h("label",{for:"cl-nueva"},"Contraseña nueva (al menos "+CLAVE_MIN+" letras o números)"), clave.nodo,
+      h("label",{for:"cl-otra"},"Repítela"), otra.nodo,
+      boton, aviso));
+  clave.inp.focus();
+};
+VISTAS.entrar = V => {
+  V.append(
+    h("div",{class:"hero"}, h("p",{class:"eyebrow"},"Bienvenida"), h("h1",{},"Tejiendo Ilusiones")),
+    h("div",{class:"section"}, h("p",{},"Tus patrones vuelta a vuelta, tus labores y la comunidad de tejedoras, en cualquier móvil y sin perder nada nunca.")),
+    h("div",{class:"section"}, panelEntrar(null)));
+};
 
 VISTAS.comunidad = V => {
   if(!nubeActiva()) return go({name:"inicio"}, true);
@@ -3937,11 +4001,12 @@ function editorPerfil(u, alGuardar){
     }},"Guardar"),
     h("p",{class:"muted"},"Has entrado como ", h("b",{}, sesion.email||"tu cuenta"), "."),
     h("div",{class:"row"},
+      h("button",{onclick:()=>go({name:"clave"})},"Cambiar mi contraseña"),
       h("button",{onclick:cerrarSesion},"Salir de mi cuenta"),
       h("button",{class:"ghost", onclick:()=>go({name:"privacidad"})},"Tus datos y privacidad")),
     h("details",{}, h("summary",{},"Borrar mi cuenta"),
       h("div",{class:"stack", style:"margin-top:.6rem"},
-        h("p",{},"Se borra para siempre tu cuenta, tu libreta guardada, tus fotos, tus publicaciones, comentarios y «me gusta». Lo que hay en este móvil se queda en el móvil."),
+        h("p",{},"Se borra para siempre tu cuenta, tu libreta guardada, tus fotos, tus publicaciones, comentarios y «me gusta», y ya no podrás usar la app. Si quieres quedarte con tus patrones, antes guarda una copia en «Más › Copia de seguridad»."),
         confirmBtn("Borrar mi cuenta para siempre","¿Segura? Toca otra vez","danger big", borrarCuenta))));
 }
 
@@ -3986,8 +4051,8 @@ VISTAS.privacidad = V => {
   const parr = (t, ...k)=>h("div",{class:"section"}, h("h2",{}, t), ...k.map(x=>h("p",{}, x)));
   V.append(volver("Atrás", sesion ? {name:"perfil", id:sesion.uid} : {name:"comunidad"}),
     h("div",{class:"page-title"}, h("h1",{},"Tus datos y privacidad")),
-    parr("Qué se guarda", "Si no entras en una cuenta, todo se queda en tu móvil y no se manda a ningún sitio.",
-      "Si entras: tu correo (para entrar), tu libreta (patrones, labores, lanas, progreso, apuntes y fotos) y lo que publiques en la comunidad (fotos, textos, «me gusta», comentarios, a quién sigues)."),
+    parr("Qué se guarda", "Para usar la app necesitas una cuenta que te da Tejiendo Ilusiones.",
+      "Se guarda: tu correo (para entrar), tu libreta (patrones, labores, lanas, progreso, apuntes y fotos) y lo que publiques en la comunidad (fotos, textos, «me gusta», comentarios, a quién sigues)."),
     parr("Quién lo ve", "Tu libreta y sus fotos solo las ves tú. Tu correo no lo ve nadie más.",
       "Tu nombre, lo que escribas sobre ti y lo que publiques lo ve la gente que usa la app, salvo quien hayas bloqueado."),
     parr("Dónde está", "En Supabase, en servidores de la Unión Europea. No se vende ni se usa para publicidad, y no hay anuncios."),
@@ -4189,10 +4254,11 @@ VISTAS.herramientas = V => {
 
 applyScale();
 document.documentElement.lang = document.documentElement.lang || "es"; // lectores de pantalla y voz en español
+if(nubeActiva()) sesion = leerSesion();
 render();
 abrirEnlaceRecibido();
 pedirAlmacenamientoFijo();
-arrancarNube().then(()=>{ if(sesion) render(); });
+arrancarNube().then(()=>{ if(sesion){ if(pendienteClave()) go({name:"clave"}, true); else render(); } });
 </script>
 
 <script>

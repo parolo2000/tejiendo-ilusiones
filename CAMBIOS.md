@@ -336,3 +336,19 @@ Capturas en `tests/capturas/`.
   Lo que escribe la gente se pinta siempre como texto.
 - Pruebas: `supabase/pruebas/probar.sh` (reglas, Postgres local) y `tests/nube.test.cjs` (11 pruebas con dos
   personas contra un Supabase local). Configuración del proyecto real: `supabase/CONFIGURAR.md`.
+
+## 2026-10-08 · Solo con cuenta: usuario y contraseña, altas por Tejiendo Ilusiones
+
+- En la app instalable, sin sesión solo se ve `VISTAS.entrar` (y la de privacidad); sin pestañas (`body.sin-cuenta`).
+  La comprobación está en `render()`; la sesión guardada se lee antes del primer `render()`, así que sin internet
+  se sigue entrando. Dentro de claude.ai no cambia nada.
+- Entrar con correo y contraseña (`grant_type=password`). No hay «crear cuenta»: «¿No tienes cuenta? Pídesela a
+  Tejiendo Ilusiones». Las altas se hacen en el panel de Supabase con los registros cerrados.
+- «He olvidado mi contraseña»: código de 6 cifras al correo (`/recover` + `verify type=recovery`) y contraseña nueva
+  de al menos 8; si se usa el enlace del correo, se pide la contraseña nueva aunque la app se recargue
+  (`tejiendo-poner-clave`). «Cambiar mi contraseña» en el perfil (`VISTAS.clave`).
+- Si se bloquea la cuenta en Supabase (deja de pagar), al renovar la sesión se cierra y vuelve a la pantalla de
+  entrar; lo del móvil no se borra.
+- Arreglos: el «null» que salía al entrar y en el aviso de leer un PDF, cajas de correo, búsqueda y contraseña con
+  estilo, y el aviso dice por qué no se pudo mandar un correo.
+- `tests/nube.test.cjs`: 14 pruebas (crea las cuentas con la API de administración del Supabase local).
