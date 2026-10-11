@@ -2709,15 +2709,24 @@ function traducirRuso(linea){
   t = t.replace(/(\d)(?=[а-яё])/giu, "$1 ")                                                        // 6сбн → 6 сбн
        .replace(/[\[(]([^\])]*[а-яё][^\])]*)[\])]\s*(?:[xх×*]\s*(\d+)|(\d+)\s*раз[а]?)/giu, "*$1* repetir $2$3 veces") // (сбн, пр) х 6
        .replace(/\*([^*]+?)\*\s*[xх×]\s*(\d+)/giu, "*$1* repetir $2 veces");
-  // Número de vuelta: «1 ряд:», «1р:», «Ряд 1.», «2-5 ряды», «3 круг»
-  t = t.replace(/^\s*(\d+)\s*[-–]\s*(\d+)\s*(?:рядах|ряды|ряд|круги|круг|р)\.?\s*[:.)]?/iu, "Vueltas $1 a $2:")
-       .replace(/^\s*(?:ряды|круги)\s*(\d+)\s*[-–]\s*(\d+)\s*[:.)]?/iu, "Vueltas $1 a $2:")
-       .replace(/^\s*(\d+)\s*(?:ряд|круг|р)\.?\s*[:.)]?/iu, "Vuelta $1:")
+  // Número de vuelta: «1 ряд:», «1р:», «Ряд 1.», «2-5 ряды», «3 круг», «1-й ряд:», «5-12-й ряды:», «с 5 по 12 ряд»
+  const N = "(\\d+)(?:\\s*-?\\s*(?:ый|ий|ой|й|я|е|ом))?";
+  t = t.replace(new RegExp("^\\s*(?:с\\s+)?"+N+"\\s*(?:[-–—]|по)\\s*"+N+"\\s*(?:рядах|ряды|ряд|ряда|круги|круг|р)\\.?\\s*[:.)]?", "iu"), "Vueltas $1 a $2:")
+       .replace(/^\s*(?:ряды|круги)\s*(\d+)\s*[-–—]\s*(\d+)\s*[:.)]?/iu, "Vueltas $1 a $2:")
+       .replace(new RegExp("^\\s*"+N+"\\s*(?:ряд|круг|р)\\.?\\s*[:.)]?", "iu"), "Vuelta $1:")
        .replace(/^\s*(?:ряд|круг|р)\.?\s*(\d+)\s*[:.)]?/iu, "Vuelta $1:");
+  // Total al final: «= 6 п.», «– 12 петель», «(18 п.)»
+  t = t.replace(/\s*[=–—-]\s*(\d+)\s*(?:п\.?|петел[ьи]|петля|петли|сбн|ст\.?)?\.?\s*$/iu, " ($1) ");
   const P = [
-    ["пссн|полустолбик[а-яё]* с накидом", "mpa"], ["с2н|столбик[а-яё]* с двумя накидами", "pad"],
-    ["ссн|с1н|столбик[а-яё]* с накидом", "pa"], ["сбн|столбик[а-яё]* без накида", "pb"],
-    ["вп|возд\\.?\\s*п[а-яё]*|воздушн[а-яё]* петл[а-яё]*", "cad"], ["сс|соед[а-яё]*\\.?\\s*ст[а-яё]*", "pd"],
+    ["пссн|пс\\s*с/н|полустолбик[а-яё]* с накидом", "mpa"], ["с2н|ст\\.?\\s*с\\s*2\\s*н|столбик[а-яё]* с двумя накидами", "pad"],
+    ["ссн|с1н|ст\\.?\\s*с/н|с/н|столбик[а-яё]* с накидом|столбик[а-яё]* с 1 накидом", "pa"], ["сбн|ст\\.?\\s*б/н|б/н|столбик[а-яё]* без накида", "pb"],
+    ["вп|в\\.\\s*п\\.?|возд\\.?\\s*п[а-яё]*\\.?|воздушн[а-яё]* петл[а-яё]*", "cad"], ["сс|соед[а-яё]*\\.?\\s*ст[а-яё]*\\.?|соединительн[а-яё]* столбик[а-яё]*|полустолбик[а-яё]*", "pd"],
+    ["в\\s+(\\d+)-?[юй]\\s+(?:петлю|вп|п\\.?)\\s+от\\s+крючка", "en la $1ª cad"], ["в ту же петлю|в эту же петлю|в ту же", "en el mismo punto"],
+    ["в следующую петлю|в следующую|в следующий", "en el siguiente"], ["через обе стенки|за обе стенки", "por las dos hebras"],
+    ["оставить нить для пришивания|оставьте нить для пришивания|оставить длинный кончик нити", "deja una hebra larga para coser"],
+    ["спрятать нить|спрятать|прячем нить", "esconde la hebra"], ["вставить глазки|вставляем глазки|вставить глаза", "pon los ojos de seguridad"],
+    ["сложить пополам|складываем пополам", "dobla por la mitad"], ["считаются за|считается за|засчитываются как|засчитывается как|заменяют|заменяет", "cuentan como"], ["провязать|провязываем|вяжем|вязать", "teje"], ["пришить|пришиваем", "cose"],
+    ["наполнителем|наполнитель", "relleno"], ["между", "entre"], ["рядом|рядами|рядов|ряда", "vueltas"], ["расстояние", "separados"], ["до конца ряда|до конца", "hasta el final"],
     ["пр|прибав[а-яё]*", "aum"], ["уб|убав[а-яё]*", "dism"], ["ка|кольц[а-яё]* амигуруми|волшебн[а-яё]* кольц[а-яё]*", "anillo mágico"],
     ["в каждую петлю|в каждый столбик|в каждую|в каждый", "en cada punto"], ["по кругу", "alrededor"],
     ["закрепить нить|закрепить|закрепляем нить|закрепляем", "corta el hilo"], ["набить|набиваем|набивка", "rellena"],
@@ -2753,7 +2762,7 @@ function lanaDelTexto(lineas){
 function limpiarPegado(texto){
   let t = (texto||"").replace(/\r/g, "").replace(/ /g, " ").replace(/[•●▪◦]\s*/g, "").replace(/[ \t]+/g, " ");
   // Separa las vueltas que vienen pegadas en un mismo párrafo
-  t = t.replace(/([^\n])\s+(?=(?:vueltas?|filas?|hileras?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*\d+\s*)?[:.)])/gi, "$1\n")
+  t = t.replace(/([^\n])(?<![-–—]|\b(?:a|al|to))\s+(?=(?:vueltas?|rondas?|filas?|hileras?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*(?:r\s*)?\d+\s*)?[:.)])/gi, "$1\n")
        .replace(/([^\n])(?<!\b(?:a|al|la|y)|[-–])\s+(?=\d+\s*[ªº°]\s*(?:vueltas?|filas?|hileras?)\s*:)/gi, "$1\n"); // no corta «de la 11ª a la 14ª fila»
   const lineas = [];
   // Pies y cabeceras de página en mayúsculas que se repiten en todas las hojas («MAGIA PARA PEQUES EN SU DÍA»)
@@ -2770,15 +2779,22 @@ function limpiarPegado(texto){
     const enParrafo = !nuevoParrafo; nuevoParrafo = false;
     if( /^[^\p{L}\p{N}]+$/u.test(l) || /^(https?:\/\/|www\.)/i.test(l) || /^(©|copyright|p[aá]g(ina)?\.? ?\d+$|page \d+$)/i.test(l)) continue;
     const prev = lineas[lineas.length-1];
-    const suelta = esVueltaDeVerdad(normalizarVuelta(l)) || esLeyenda(l) || esLeyenda(prev||"") || lineaDeColor(l) || cabeceraParte(l);
+    const suelta = pareceVuelta(l) || esLeyenda(l) || esLeyenda(prev||"") || lineaDeColor(l) || cabeceraParte(l);
     // Una vuelta larga sigue en las líneas de su mismo párrafo hasta que cierra con su total: «(13 puntos en total)»
-    const sigueVuelta = prev && enParrafo && esVueltaDeVerdad(normalizarVuelta(prev)) && !/(\)|\]|\d+\s*(sts?|stitches|puntos|p\.?))\s*\.?\s*$/i.test(prev)
-      && !/^(al finalizar|corta|rellena|remata|cose|c[oó]sel|borda|repite|ahora,? borda|a partir|stuff|fasten|sew|cut|weave|finish|embroider|набей|закреп|приш|отрез)/i.test(l);
-    const cortada = prev && (/^[a-záéíóúñ(]/.test(l) || /[,;]$/.test(prev) || /(\s[xх×]|\bpor|\by|\bde|\ben|\(|[-–])\s*$/i.test(prev) || sigueVuelta);
-    if(cortada && !suelta) lineas[lineas.length-1] = prev+" "+l; // línea cortada
+    const sigueVuelta = prev && enParrafo && pareceVuelta(prev) && !/(\)|\]|\d+\s*(sts?|stitches|puntos|p\.?|п\.?|петел[ьи])|=\s*\d+\s*\p{L}{0,8}\.?)\s*\.?\s*$/iu.test(prev)
+      && !/^(al finalizar|corta|rellena|remata|cose|c[oó]sel|borda|repite|ahora,? borda|a partir|stuff|fasten|sew|cut|weave|finish|embroider|набей|набить|набиваем|закреп|приш|отрез|вставить|оставить)/i.test(l)
+      && !/^[\p{Lu}][\p{L} ]{2,20}:/u.test(l); // «Borde:», «Montaje:», «Сборка:» empiezan algo nuevo
+    const abierto = prev && (prev.match(/\(/g)||[]).length > (prev.match(/\)/g)||[]).length; // «(12» y en la siguiente «sts)»
+    const cortada = prev && (/^[\p{Ll}(]/u.test(l) || /[,;/]$/.test(prev) || /(\s[xх×]|\bpor|\by|\bde|\ben|\(|[-–])\s*$/i.test(prev) || (abierto && enParrafo) || sigueVuelta);
+    // «2 ст. с/» + «н в…» y «dismi-» + «nución»: la palabra partida se junta sin espacio
+    if(cortada && !suelta) lineas[lineas.length-1] = /(\/|\p{L}-)$/u.test(prev) && /^\p{Ll}/u.test(l) ? prev.replace(/(\p{L})-$/u, "$1")+l : prev+" "+l; // línea cortada
     else lineas.push(l);
   }
   return lineas;
+}
+// ¿Empieza una vuelta? También «R1:», «1 ряд:», «1-й ряд», «Р.3», y «3.» en un patrón numerado
+function pareceVuelta(l){
+  return esVueltaDeVerdad(normalizarVuelta(prefijoVuelta(l))) || /^\s*\d+(?:\s*[-–]\s*\d+)?(?:\s*-?\s*(?:ый|ий|ой|й))?\s*(?:ряд|ряды|круг|р)\.?\s*[:.)]/iu.test(l);
 }
 // ¿Es una instrucción para tejer (y no materiales, notas o el título)?
 function esPaso(l){ if(esLeyenda(l)) return false; if(/^(materials?|materiales|yarn|hook|gauge|notes?|abbreviations|size|lana|hilo|ganchillo|necesitas|tension|muestra)\b/i.test(l)) return false; return RX_VUELTA.test(l) || lineaAFilas(l).length>0 || /\b(haz|teje|monta|anillo|corta|esconde|rellena|cose|remata|cierra)\b/i.test(l); }
@@ -2786,6 +2802,8 @@ function revisarLinea(t){
   const filas = lineaAFilas(t), info = infoPaso(t);
   if(!filas.length) return /\b(pb|pa|mpa|pad|aum|dism)\b/i.test(t) ? {estado:"duda"} : {estado:"texto"};
   let n = filas[0].reduce((a,k)=>a+anchoDe(k),0);
+  // Una vuelta solo de puntos deslizados («1 pd en cada punto (40)»): ahí sí cuentan
+  if(!n && filas[0].length && filas[0].every(k=>pk(k)==="pd")) n = filas[0].length;
   if(/cuentan? como (1|un) (pa|mpa|pad|punto)/i.test(t)) n++;
   if(!info.objetivo || info.implicito || info.unidad!=="puntos") return {estado:"ok", n};
   if(n===info.objetivo) return {estado:"cuadra", n, obj:info.objetivo};
@@ -2816,14 +2834,55 @@ function sugerirArreglo(t){
   if(total && rev.n>0) return {texto:t.slice(0, total.index)+"("+rev.n+")"+t.slice(total.index+total[0].length), antes:"("+rev.obj+")", despues:"("+rev.n+")", total:true};
   return null;
 }
+// «R1:», «V5-V9:», «Ronda 3:», «Rnd 4 -», «Р4-Р12:», «ряд 2:» → «Vuelta 1:», «Vueltas 5-9:» (antes de traducir)
+const PREF_VUELTA = "(?:rondas?|rounds?|rnds?|rds?|vueltas?|vtas?|ряды?|круги?|v|r|р)";
+const RX_PREF_RANGO = new RegExp("^\\s*"+PREF_VUELTA+"\\s*\\.?\\s*(\\d+)\\s*(?:-|–|—|a|al|to|до)\\s*"+PREF_VUELTA+"?\\s*\\.?\\s*(\\d+)\\s*[:.)\\-–—]\\s*", "iu");
+const RX_PREF_UNA = new RegExp("^\\s*"+PREF_VUELTA+"\\s*\\.?\\s*(\\d+)\\s*[:.)\\-–—]\\s*", "iu");
+function prefijoVuelta(l){
+  if(RX_PREF_RANGO.test(l)) return l.replace(RX_PREF_RANGO, "Vueltas $1-$2: ");
+  return l.replace(RX_PREF_UNA, "Vuelta $1: ");
+}
+// Patrones que numeran las vueltas sin decir «vuelta»: «1. 6 pb en AM (6)», «5-9. 24 сбн», «3) 18 sc»
+const RX_NUMERADA = /^\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?\s*[.:)]\s+(?=\S)/;
+const tienePuntos = t => lineaAFilas(t).length>0 || /\banillo\b/i.test(t);
+function numerosAVueltas(lineas){
+  const son = lineas.filter(l => RX_NUMERADA.test(l) && !RX_VUELTA.test(l) && tienePuntos(l.replace(RX_NUMERADA, "")));
+  if(son.length < 3) return lineas;
+  return lineas.map(l => {
+    const m = l.match(RX_NUMERADA);
+    if(!m || RX_VUELTA.test(l) || !tienePuntos(l.slice(m[0].length))) return l;
+    return (m[2] ? "Vueltas "+m[1]+" a "+m[2] : "Vuelta "+m[1])+": "+l.slice(m[0].length);
+  });
+}
+const PUNTO_ES = "pbt|pb|mpa|pad|pa|pd|cad|aum|dism|pina|garb|picot";
+function retocarPaso(l){
+  return l
+    // «(1 pb, 1 aum) x 6», «[2 pb, aum] x6», «(pb, aum) 6 veces», «(…) repetir 6 veces»
+    .replace(/[(\[]([^()\[\]]*?[\p{L}][^()\[\]]*?)[)\]]\s*(?:[xх×*]\s*(\d+)|(\d+)\s*(?:veces|vez)\b|repetir\s*(\d+)\s*veces)/giu,
+      (m, a, n1, n2, n3) => new RegExp("\\b("+PUNTO_ES+")\\b", "i").test(a) ? "*"+a+"* repetir "+(n1||n2||n3)+" veces" : m)
+    // Total con «=» al final de una vuelta: «… = 18», «… = 18 puntos» → «(18)»
+    .replace(/^((?:Vueltas?|Filas?|Hileras?)\s.*?\S)\s*=\s*(\d+)\s*(?:puntos|pts?|p|sts?)?\.?\s*$/i, "$1 ($2)")
+    // «Vueltas 5-9:» → «Vueltas 5 a 9:»
+    .replace(/^(Vueltas|Filas) (\d+)\s*[-–]\s*(\d+):/, "$1 $2 a $3:")
+    // «pb alrededor» (sin número): un punto en cada punto
+    .replace(new RegExp("(^|[:,]\\s*)("+PUNTO_ES+")\\s+alrededor\\b", "gi"), "$1$2 en cada punto alrededor");
+}
+// Una parte escrita sin mayúsculas («Голова», «Cola», «Ushki (2 детали)») se reconoce porque justo debajo empieza
+// otra vez por la vuelta 1 (o por un anillo o una cadeneta de base)
+function esCabeceraSuave(l, sig){
+  const t = (l||"").trim(), sin = t.replace(/\(.*?\)/g, "").trim();
+  if(!sin || sin.length > 30 || /\d/.test(sin) || /[.,;!?]$/.test(t) || sin.split(/\s+/).length > 4) return false;
+  if(!/\p{L}{3,}/u.test(sin) || NO_PARTES.test(sin) || esLeyenda(t) || lineaDeColor(t) || lineaAFilas(t).length) return false;
+  return /^\s*Vueltas?\s+1\b/i.test(sig||"") || /^\s*(haz|monta|teje)\b.*\b(anillo|cad)/i.test(sig||"");
+}
 function importarTexto(texto, uk, soloVueltas=false){
   const rus = esRuso(texto);
   const ingles = !rus && esIngles(texto);
   const latino = !rus && !ingles && esLatino(texto);
   if(uk==null) uk = ingles && esUK(texto);
   const originales = limpiarPegado(texto);
-  const lineas = originales.map(l => normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : latino ? traducirLatino(l) : l)
-    .replace(/\bpor cada punto( de la vuelta anterior| de la fila anterior)?/gi, "en cada punto"));
+  const lineas = numerosAVueltas(originales.map(l0 => { const l = prefijoVuelta(l0); return normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : latino ? traducirLatino(l) : l)
+    .replace(/\bpor cada punto( de la vuelta anterior| de la fila anterior)?/gi, "en cada punto"); })).map(retocarPaso);
   // La primera línea corta y sin números es el título, aunque nombre puntos («Bufanda de punto bajo»)
   const conTitulo = originales.length>1 && originales[0].length<=60 && !/\d|:/.test(originales[0]) && !/^(haz|teje|monta|make|chain|start)\b/i.test(originales[0]);
   const desde = conTitulo ? 1 : 0;
@@ -2840,8 +2899,9 @@ function importarTexto(texto, uk, soloVueltas=false){
     const colorEn = (l, rx) => { const m = l.match(rx); if(!m) return null; const c = COLORES_LANA.find(([r])=>r.test(m[1])); return c ? {nombre:m[1].trim().toLowerCase(), hex:c[2]} : null; };
     const RX_HILO = /\b(?:en\s+)?(?:hilo\s+)?colou?r\s+([\p{L} ]{3,25}?)(?=\s*[,.]|\s+(?:inicia|teje|levanta|haz|y|monta)\b)/iu;
     const RX_CAMBIA = /\bcambia(?:r)?\s+(?:a|al)\s+(?:la\s+)?(?:color|hilo|lana)\s+([\p{L} ]{3,25}?)(?=\s*[,.]|\s+y\b|$)/iu;
-    for(const l of lineas.slice(ini)){
-      const cab = cabeceraParte(l), col = !cab && lineaDeColor(l);
+    while(ini>desde && esCabeceraSuave(lineas[ini-1], lineas[ini])) ini--;
+    for(const [i, l] of lineas.slice(ini).entries()){
+      const cab = cabeceraParte(l) || (esCabeceraSuave(l, lineas[ini+i+1]) ? l.trim().replace(/[:.]$/, "") : null), col = !cab && lineaDeColor(l);
       if(cab){
         // «CABEZA (continúa)»: es la misma parte que sigue en otra página
         const base = cab.replace(/\s*\(?\s*contin[uú]a\s*\)?\s*$/i, "").trim();
@@ -2868,7 +2928,7 @@ function importarTexto(texto, uk, soloVueltas=false){
   const primeraLana = (()=>{ for(const l of lineas){ const c = lineaDeColor(l); if(c) return c; } return null; })();
   const tituloLinea = conTitulo ? originales[0] : antes.find(l => l.length<=60 && !/\d\s*mm|:/.test(l));
   // El grosor del ganchillo: mejor el que va junto a «ganchillo» o «hook» que el de la lana
-  const gan = texto.match(/(?:ganchillo|aguja|hook|crochet|крючок)[^\n\d]{0,25}(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])/iu) || texto.match(/(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])[^\n]{0,4}(?:ganchillo|hook)?/iu);
+  const gan = texto.match(/(?:ganchillo|aguja|hook|crochet|крючок)[^\n\d]{0,25}(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])/iu) || texto.match(/(?:крючок|ganchillo|aguja)\s*(?:№|n[º°o]\.?|num\.?)\s*(\d+(?:[.,]\d+)?)/iu) || texto.match(/(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])[^\n]{0,4}(?:ganchillo|hook)?/iu);
   const lana = lanaDelTexto(antes.length ? antes : originales);
   if(!lana.color && primeraLana) lana.color = primeraLana;
   return {
@@ -2901,29 +2961,138 @@ async function abrirPDF(datos){
   // isEvalSupported:false evita ejecutar código de las fuentes del PDF (CVE-2024-4367)
   return window.pdfjsLib.getDocument({data:datos, isEvalSupported:false, disableFontFace:true, useSystemFonts:false}).promise;
 }
-// Junta los trozos de texto de cada página en líneas, según su altura en la hoja
-async function textoDePDF(doc){
+// ---------- Sacar el texto de un PDF respetando cómo está maquetado ----------
+// pdf.js da trozos de texto con su posición. Se juntan en líneas por su altura, se separan las columnas de la
+// página (se lee una columna entera y luego la otra), las tablas se leen fila a fila aunque una celda ocupe varias
+// líneas, y se quitan las cabeceras y pies que se repiten en todas las hojas.
+const limpiarUnicode = t => t.replace(/[\uFB00-\uFB06\uFF01-\uFF5E\u2002-\u200A\u3000]/g, c => c.normalize("NFKC")).replace(/[­​-‍⁠﻿]/g, "").replace(/ /g, " ");
+// Junta los trozos de una línea de izquierda a derecha; un hueco mayor que «umbral» (en alturas de letra) los separa
+function trozosDeLinea(its, h, umbral){
+  const out = [];
+  for(const it of its){
+    const s = out[out.length-1];
+    // Los espacios que da el PDF entre palabras (texto justificado) unen, no separan
+    if(!it.t.trim()){ if(s && it.x - s.x1 <= h*umbral){ s.x1 = Math.max(s.x1, it.x+it.w); if(!/\s$/.test(s.t)) s.t += " "; } continue; }
+    if(s && it.x - s.x1 <= h*umbral){ if(it.x - s.x1 > h*0.12 && !/\s$/.test(s.t) && !/^\s/.test(it.t)) s.t += " "; s.t += it.t; s.x1 = Math.max(s.x1, it.x+it.w); }
+    else out.push({x:it.x, x1:it.x+it.w, t:it.t});
+  }
+  return out;
+}
+function hacerLinea(y, h, its){
+  its = its.slice().sort((a,b)=>a.x-b.x);
+  const seg = trozosDeLinea(its, h, 1.6);
+  return {y, h, its, seg, celdas:trozosDeLinea(its, h, 0.6), x0:seg[0].x, x1:Math.max(...seg.map(s=>s.x1))};
+}
+function lineasDeTrozos(its){
+  const ord = its.slice().sort((a,b)=> (b.y-a.y) || (a.x-b.x));
+  const grupos = [];
+  for(const it of ord){
+    const l = grupos[grupos.length-1];
+    if(l && Math.abs(l.y-it.y) <= Math.max(l.h, it.h)*0.45) { l.its.push(it); l.h = Math.max(l.h, it.h); }
+    else grupos.push({y:it.y, h:it.h, its:[it]});
+  }
+  return grupos.filter(g=>g.its.some(it=>it.t.trim())).map(g=>hacerLinea(g.y, g.h, g.its));
+}
+// Busca el hueco vertical entre dos columnas: ninguna línea lo cruza y a cada lado hay bastante texto y ancho
+function partirColumnas(lineas){
+  if(lineas.length < 3) return null;
+  const x0 = Math.min(...lineas.map(l=>l.x0)), x1 = Math.max(...lineas.map(l=>l.x1)), ancho = x1-x0;
+  if(ancho <= 0) return null;
+  let mejor = null;
+  for(let x = x0+ancho*.25; x <= x0+ancho*.75; x += Math.max(1, ancho/200)){
+    let cruzan = 0, izq = 0, der = 0, izqFin = x0, derIni = x1, vueltasDer = 0;
+    for(const l of lineas){
+      if(l.seg.some(s=>s.x < x && s.x1 > x)) { cruzan++; continue; }
+      const a = l.seg.filter(s=>s.x1 <= x), b = l.seg.filter(s=>s.x >= x);
+      if(a.length){ izq++; izqFin = Math.max(izqFin, ...a.map(s=>s.x1)); }
+      if(b.length){ der++; derIni = Math.min(derIni, ...b.map(s=>s.x)); if(pareceVuelta(b[0].t) || RX_NUMERADA.test(b[0].t)) vueltasDer++; }
+    }
+    // Las dos columnas de verdad son anchas; en una tabla la columna del número o del total es estrecha.
+    // Con poco texto, también vale si a la derecha empiezan vueltas («Р.3:», «8р:»): no es la celda de una tabla.
+    const anchoIzq = izqFin-x0, anchoDer = x1-derIni, min = vueltasDer >= Math.max(2, der*.5) ? .15 : .3;
+    if(izq < 2 || der < 2 || anchoIzq < ancho*min || anchoDer < ancho*min) continue;
+    if(cruzan > Math.max(1, lineas.length*.08)) continue;
+    if(!mejor || cruzan < mejor.cruzan || (cruzan===mejor.cruzan && Math.abs(x-(x0+ancho/2)) < Math.abs(mejor.x-(x0+ancho/2)))) mejor = {x, cruzan};
+  }
+  return mejor ? mejor.x : null;
+}
+// Ordena las líneas de un trozo de página: columnas (de izquierda a derecha), y dentro, de arriba abajo
+function ordenarLineas(lineas, prof=0){
+  const x = prof < 2 ? partirColumnas(lineas) : null;
+  if(x == null) return lineas;
+  const cruza = l => l.seg.some(s=>s.x < x && s.x1 > x);
+  const cuerpo = lineas.filter(l=>!cruza(l)), yTop = Math.max(...cuerpo.map(l=>l.y));
+  const parte = f => cuerpo.map(l=>{ const its = l.its.filter(f); return its.some(it=>it.t.trim()) ? hacerLinea(l.y, l.h, its) : null; }).filter(Boolean);
+  // Lo que cruza por encima de las columnas (el título) va antes; lo que cruza por debajo, al final
+  return [...lineas.filter(l=>cruza(l) && l.y > yTop), ...ordenarLineas(parte(it=>it.x+it.w/2 < x), prof+1), ...ordenarLineas(parte(it=>it.x+it.w/2 >= x), prof+1),
+          ...lineas.filter(l=>cruza(l) && l.y <= yTop)];
+}
+// Tablas: una fila con varias celdas, y una celda que sigue en la línea de debajo («Hilera» / «3:», o el texto de
+// la vuelta que no cabe). Esos trozos van dentro de su celda, y la fila se lee entera: «Hilera 3: … (100)».
+function textoDeLineas(lineas){
+  const out = []; let fila = null, antes = null;
+  const cerrar = () => { if(fila){ out.push(fila.celdas.map(c=>c.t.trim()).join(" ")); fila = null; } };
+  for(const l of lineas){
+    const hueco = antes ? antes.y - l.y : 0, tol = l.h*0.4;
+    if(fila && hueco > 0 && hueco <= l.h*1.6){
+      // Sigue la fila si cada trozo empieza justo donde empezaba un trozo de la fila (el borde de una celda)
+      const casa = c => fila.xs.some(x=>Math.abs(x-c.x) <= tol);
+      const sigue = l.celdas.every(casa) && (l.celdas.length >= 2 || Math.abs(l.celdas[0].x-fila.xs[0]) > tol || (hueco <= l.h*1.35 && fila.celdas[0].t.length <= 20));
+      if(sigue){
+        for(const c of l.celdas){ let k = fila.celdas[0]; for(const f of fila.celdas) if(f.x <= c.x + tol) k = f; k.t += " "+c.t; }
+        antes = l; continue;
+      }
+    }
+    cerrar();
+    // Entre párrafos separados, una línea en blanco
+    if(antes && (hueco > l.h*1.9 || hueco < 0)) out.push("");
+    if(l.celdas.length >= 2) fila = {celdas: l.celdas.map(c=>({x:c.x, t:c.t})), xs: l.its.filter(it=>it.t.trim()).map(it=>it.x)};
+    else out.push(l.celdas[0].t);
+    antes = l;
+  }
+  cerrar();
+  return out.map(t=>t.replace(/\s+/g, " ").trim());
+}
+function maquetarPagina(its){
+  return textoDeLineas(ordenarLineas(lineasDeTrozos(its)));
+}
+// Cabeceras y pies: la misma línea (con otro número de página) arriba o abajo en la mitad de las hojas o más
+function quitarRepetidas(paginas){
+  if(paginas.length < 2) return paginas;
+  const clave = t => t.toLowerCase().replace(/\d+/g, "#").replace(/\s+/g, " ").trim();
+  const bordes = p => { const ls = p.filter(Boolean); return [...ls.slice(0, 2), ...ls.slice(-2)]; };
+  const veces = {};
+  for(const p of paginas) for(const k of new Set(bordes(p).map(clave))) veces[k] = (veces[k]||0)+1;
+  const min = Math.max(2, Math.ceil(paginas.filter(p=>p.some(Boolean)).length/2));
+  return paginas.map(p => { const b = new Set(bordes(p)); return p.filter(l => !(b.has(l) && l && veces[clave(l)] >= min && !/^\s*(vueltas?|rnds?|rounds?|rows?|filas?|ряд)\s*\d/i.test(l))); });
+}
+async function paginasDePDF(doc){
   const paginas = [];
   for(let n=1; n<=doc.numPages; n++){
     const pag = await doc.getPage(n), cont = await pag.getTextContent();
-    let lineas = [], linea = "", y = null, finX = null;
+    const its = [];
     for(const it of cont.items){
-      if(typeof it.str!=="string") continue;
-      const iy = it.transform[5], ix = it.transform[4], alto = Math.abs(it.transform[3]) || it.height || 10;
-      if(y!==null && Math.abs(iy-y) > alto*0.5){ lineas.push(linea); linea = ""; finX = null; }
-      else if(finX!==null && it.str && ix-finX > alto*0.15 && !/\s$/.test(linea) && !/^\s/.test(it.str)) linea += " ";
-      linea += it.str; y = iy; finX = ix + (it.width||0);
-      if(it.hasEOL){ lineas.push(linea); linea = ""; y = null; finX = null; }
+      if(typeof it.str!=="string" || !it.str) continue;
+      const [a, b] = it.transform;
+      if(Math.abs(b) > Math.abs(a)*0.1) continue; // texto girado: marcas de agua y textos al margen
+      its.push({t:limpiarUnicode(it.str), x:it.transform[4], y:it.transform[5], w:it.width||0, h:Math.abs(it.transform[3]) || it.height || 10});
     }
-    if(linea) lineas.push(linea);
-    paginas.push(lineas.map(l=>l.trim()).filter(Boolean).join("\n"));
+    paginas.push(its.length ? maquetarPagina(its) : []);
     pag.cleanup();
   }
-  return paginas.join("\n\n");
+  return quitarRepetidas(paginas);
 }
-async function paginasComoImagen(doc, max){
+async function textoDePDF(doc){
+  return (await paginasDePDF(doc)).map(p=>p.join("\n").replace(/\n{3,}/g, "\n\n").trim()).join("\n\n");
+}
+// ¿El texto sacado del PDF se puede leer? Algunos PDF usan fuentes sin tabla de letras y salen símbolos raros
+function textoLegible(t){
+  const letras = (t.match(/[\p{L}\p{N}]/gu)||[]).length, raros = (t.match(/[-�]|[^\p{L}\p{N}\p{P}\p{S}\p{Z}\n\t]/gu)||[]).length;
+  return letras >= 30 && raros < letras*0.1;
+}
+async function paginasComoImagen(doc, max, cuales=null){
   const imgs = [];
-  for(let n=1; n<=Math.min(doc.numPages, max); n++){
+  for(const n of (cuales || Array.from({length:doc.numPages}, (_, i)=>i+1)).slice(0, max)){
     const pag = await doc.getPage(n), vp0 = pag.getViewport({scale:1});
     const vp = pag.getViewport({scale: Math.min(3, 2000/Math.max(vp0.width, vp0.height))});
     const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
@@ -2941,7 +3110,7 @@ async function prepararFoto(archivo){
   c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close && bmp.close();
   return c;
 }
-async function leerImagenes(imgs, avisar){
+async function leerImagenes(imgs, avisar, porPagina=false){
   await cargarScript(TESSERACT);
   // Comprueba que los datos del lector están publicados junto a la app antes de arrancarlo
   const prueba = await fetch(OCR_DIR+"worker.min.js", {method:"HEAD"}).catch(()=>null);
@@ -2960,7 +3129,7 @@ async function leerImagenes(imgs, avisar){
     try{ await worker.setParameters({tessedit_pageseg_mode: "3", preserve_interword_spaces: "1"}); }catch(e){}
     const textos = [];
     for(; actual<imgs.length; actual++){ const d = (await worker.recognize(imgs[actual], {}, {text:true, blocks:true})).data; let t = null; try{ t = textoEnColumnas(d, imgs[actual].width); }catch(e){} textos.push(t || d.text); }
-    return arreglarLectura(textos.join("\n\n"));
+    return porPagina ? textos.map(arreglarLectura) : arreglarLectura(textos.join("\n\n"));
   } finally { worker.terminate(); }
 }
 // Una página a dos columnas: el lector a veces junta la línea de la izquierda con la de la derecha. Con la
@@ -2977,6 +3146,12 @@ function textoEnColumnas(d, ancho){
     if(!mejor || cruzan<mejor.cruzan) mejor = {x, cruzan};
   }
   if(!mejor || mejor.cruzan > Math.max(2, palabras.length*.03)) return null;
+  // El hueco entre columnas es ancho; si en las líneas con palabras a los dos lados el hueco es el de un espacio entre
+  // palabras («Rnd 1: 6 sc | in magic ring»), no son columnas
+  const altos = palabras.map(w=>w.bbox.y1-w.bbox.y0).sort((a,b)=>a-b), alto = altos[Math.floor(altos.length/2)] || 10;
+  const huecos = lineas.map(ws => { const a = ws.filter(w=>w.bbox.x1<=mejor.x), b = ws.filter(w=>w.bbox.x0>=mejor.x);
+    return a.length && b.length ? Math.min(...b.map(w=>w.bbox.x0)) - Math.max(...a.map(w=>w.bbox.x1)) : null; }).filter(x=>x!==null).sort((a,b)=>a-b);
+  if(huecos.length && huecos[Math.floor(huecos.length/2)] < alto*1.2) return null;
   // Las líneas que cruzan el hueco (títulos centrados) van arriba; luego la columna izquierda y después la derecha
   const lado = (ws, f) => ws.filter(f).sort((a,b)=>a.bbox.x0-b.bbox.x0).map(w=>w.text).join(" ");
   const arriba = [], izq = [], der = [];
@@ -3100,10 +3275,23 @@ VISTAS.importar = V => {
     traer(async ()=>{
       avisar("Abriendo «"+f.name+"»…", null);
       const doc = await abrirPDF(new Uint8Array(await f.arrayBuffer()));
-      const texto = await textoDePDF(doc);
-      if(texto.replace(/\s/g,"").length >= 30){ doc.destroy(); return texto; }
-      // PDF escaneado: no tiene texto, solo imágenes de las páginas
-      avisar("Este PDF es una imagen escaneada. Lo leo como una foto…", null);
+      const paginas = (await paginasDePDF(doc)).map(p=>p.join("\n").trim());
+      const texto = paginas.join("\n\n").trim();
+      const vueltas = t => importarTexto(t, null, true).pasos.filter(l=>RX_VUELTA.test(l)).length;
+      if(textoLegible(texto)){
+        // Hojas sin texto dentro de un PDF con texto: suelen ser el patrón escaneado (o fotos). Si con el texto no
+        // salen vueltas, esas hojas se leen como una foto y se ponen en su sitio.
+        const sinTexto = paginas.map((p, i)=>p.replace(/\s/g,"").length < 30 ? i+1 : 0).filter(Boolean);
+        if(!sinTexto.length || vueltas(texto) >= 3){ doc.destroy(); return texto; }
+        avisar("Algunas hojas son imágenes escaneadas. Las leo como una foto…", null);
+        const imgs = await paginasComoImagen(doc, 20, sinTexto); doc.destroy();
+        let leidas = [];
+        try{ leidas = (await leerImagenes(imgs, avisar, true)); }catch(e){ return texto; }
+        sinTexto.slice(0, 20).forEach((n, i)=>{ paginas[n-1] = leidas[i] || paginas[n-1]; });
+        return paginas.join("\n\n").trim();
+      }
+      // PDF escaneado (no tiene texto, solo imágenes de las páginas) o con letras que no se pueden sacar
+      avisar(texto.replace(/\s/g,"").length >= 30 ? "No puedo sacar las letras de este PDF. Lo leo como una foto…" : "Este PDF es una imagen escaneada. Lo leo como una foto…", null);
       const imgs = await paginasComoImagen(doc, 20); doc.destroy();
       const leido = await conFoto(()=>leerImagenes(imgs, avisar))();
       if(!leido.trim()) throw Object.assign(new Error("vacio"), {foto:true});

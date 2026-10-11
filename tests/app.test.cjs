@@ -280,7 +280,7 @@ Fasten off and weave in ends.`;
     assert.match(r.notas, /^Materials/);
     assert.equal(r.pasos.length, 10, "la vuelta 11 pegada a la 10 se separa");
     assert.equal(r.pasos[0], "Vuelta 1: 6 pb en anillo mágico (6)");
-    assert.equal(r.pasos[4], "Vueltas 5 al 8: pb en cada punto alrededor. (24)");
+    assert.equal(r.pasos[4], "Vueltas 5 a 8: pb en cada punto alrededor. (24)");
     assert.equal(r.revision.filter(x => x.estado === "cuadra").length, 8);
     assert.equal(r.revision.filter(x => ["distinto", "duda"].includes(x.estado)).length, 0);
     // y el modo sofá entiende lo importado: 4 repeticiones en «Vueltas 5 al 8»
@@ -428,6 +428,53 @@ Fasten off and weave in ends.`;
     const r = await page.evaluate(() => importarTexto(document.querySelector("#im-texto").value));
     assert.equal(r.pasos.length, 5);
     assert.equal(r.revision.filter(x => x.estado === "cuadra").length, 4);
+    await page.context().close();
+  });
+  await prueba("PDF a dos columnas, en tabla y con cabecera y pie en cada hoja: se lee en orden", async () => {
+    const fx3 = await browser.newPage();
+    const L = ["Ballena", "Ronda 1: 6 pb en anillo mágico (6)", "Ronda 2: 6 aum (12)", "Ronda 3: (1 pb, 1 aum) x 6 (18)", "Rondas 4 a 8: 18 pb (18)", "Ronda 9: (1 pb, 1 dism) x 6 (12)", "Ronda 10: 6 dism (6)"];
+    const p = x => `<p style="margin:0 0 6px">${x}</p>`;
+    await fx3.setContent(`<style>body{font:12px Arial;margin:30px}</style><h1>${L[0]}</h1><div style="columns:2;column-gap:30px">${L.slice(1).map(p).join("")}</div>`);
+    const dosCol = await fx3.pdf({ format: "A5" });
+    await fx3.setContent(`<style>body{font:13px Arial;margin:30px} td{border:1px solid #ccc;padding:4px;vertical-align:top}</style><h1>Gorro</h1><table>
+<tr><td>Hilera<br>1:</td><td>1 pb en la 2.ª cad desde el ganchillo y 1 pb en cada cad hasta el final, que es una línea larga</td><td>(30)</td></tr>
+<tr><td>Hilera 2:</td><td>1 cad, 1 pb en cada punto</td><td>(30)</td></tr></table>`);
+    const tabla = await fx3.pdf({ format: "A5" });
+    await fx3.setContent(`<style>body{font:24px Verdana} p{margin:0 0 60px}</style>${L.map(x => `<p>${x}</p>`).join("")}`);
+    const pies = await fx3.pdf({ format: "A6", displayHeaderFooter: true, margin: { top: "50px", bottom: "50px", left: "30px", right: "30px" },
+      headerTemplate: '<div style="font-size:8px;margin-left:30px">© 2024 Estudio de ganchillo · www.ejemplo.com</div>', footerTemplate: '<div style="font-size:8px;margin-left:30px">Página <span class=pageNumber></span> de <span class=totalPages></span></div>' });
+    await fx3.close();
+    const page = await paginaWeb();
+    const leer = async pdf => page.evaluate(async a => { const doc = await abrirPDF(new Uint8Array(a)); const paginas = doc.numPages, t = await textoDePDF(doc); doc.destroy(); const r = importarTexto(t, null, true); return { t, pasos: r.pasos, rev: r.revision.map(x => x.estado), paginas }; }, [...pdf]);
+    const ESPERADO = ["Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)", "Vueltas 4 a 8: 18 pb (18)", "Vuelta 9: *1 pb, 1 dism* repetir 6 veces (12)", "Vuelta 10: 6 dism (6)"];
+    const a = await leer(dosCol);
+    assert.deepEqual(a.pasos, ESPERADO, "dos columnas: primero una y luego la otra\n" + a.t);
+    const b = await leer(tabla);
+    assert.deepEqual(b.pasos, ["Hilera 1: 1 pb en la 2.ª cad desde el ganchillo y 1 pb en cada cad hasta el final, que es una línea larga (30)", "Hilera 2: 1 cad, 1 pb en cada punto (30)"], "tabla, fila a fila\n" + b.t);
+    assert.ok(b.rev.every(x => x === "cuadra"), JSON.stringify(b.rev));
+    const c = await leer(pies);
+    assert.ok(c.paginas >= 2, "ocupa varias hojas");
+    assert.deepEqual(c.pasos, ESPERADO, "sin cabeceras ni pies\n" + c.t);
+    assert.doesNotMatch(c.t, /©|Página \d/);
+    assert.equal(await page.evaluate(() => [textoLegible("Vuelta 1: 6 pb en anillo mágico (6)\nVuelta 2: 6 aum (12)"), textoLegible("   12  ab")].join()), "true,false", "las letras raras de un PDF mal hecho no valen como texto");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("PDF con texto y una hoja escaneada: esa hoja se lee como una foto", async () => {
+    const fx4 = await browser.newPage();
+    await fx4.setContent(`<style>body{font:14px Georgia;margin:30px}</style><h1>Bola amigurumi</h1><p>Materiales: algodón y ganchillo de 3 mm.</p>
+<div style="page-break-before:always"><img src="data:image/png;base64,${foto.toString("base64")}" style="width:100%"></div>`);
+    const mixto = await fx4.pdf({ format: "A5" }); await fx4.close();
+    const page = await paginaWeb();
+    await page.evaluate(() => go({ name: "importar" }));
+    await subir(page, "#im-pdf", "bola.pdf", "application/pdf", mixto);
+    await page.waitForFunction(() => /escaneadas/.test(document.querySelector(".leyendo").textContent), null, { timeout: 60000 });
+    await esperarLectura(page);
+    const t = await page.locator("#im-texto").inputValue();
+    assert.match(t, /^Bola amigurumi\n+Materiales/, "el texto de la primera hoja va primero: " + t);
+    const r = await page.evaluate(() => importarTexto(document.querySelector("#im-texto").value, null, true));
+    assert.equal(r.revision.filter(x => x.estado === "cuadra").length, 4, "leído: " + t);
+    assert.deepEqual(page.errores, []);
     await page.context().close();
   });
   await prueba("archivos que no se pueden leer: avisa claro y no se rompe", async () => {
@@ -1010,6 +1057,35 @@ Fasten off and weave in ends.`;
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });
+  await prueba("patrones rusos escritos de muchas formas: «1.», «1-й ряд», «Р.1», «ст. с/н», «= 6 п.», partes sin mayúsculas", async () => {
+    const page = await nuevaPagina(browser);
+    const casos = [
+      ["Мишка\nГОЛОВА:\n1. 6 сбн в кольцо амигуруми\n2. 6 прибавок (12)\n3. (сбн, пр) х 6 (18)\n5-9. 18 сбн\n10. (сбн, уб) х 6 (12)",
+        ["Parte: ГОЛОВА", "Vuelta 1: 6 pb en anillo mágico", "Vuelta 2: 6 aum (12)", "Vuelta 3: *pb, aum* repetir 6 veces (18)", "Vueltas 5 a 9: 18 pb", "Vuelta 10: *pb, dism* repetir 6 veces (12)"]],
+      ["Котик\nТело\n1-й ряд: 6 сбн в кольцо амигуруми = 6 п.\n2-й ряд: 6 прибавок = 12 п.\n3-й ряд: (1 сбн, 1 прибавка) повторить 6 раз = 18 п.\n4-6-й ряды: 18 сбн = 18 п.\nХвост\n1 круг: 5 сбн в КА (5)",
+        ["Parte: Тело", "Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)", "Vueltas 4 a 6: 18 pb (18)", "Parte: Хвост", "Vuelta 1: 5 pb en anillo mágico (5)"]],
+      ["Шапочка\nКрючок № 3.\nР1: 3 в.п. (считаются за 1 ст. с/н), 11 ст. с/н в 3-ю петлю от крючка, соед. ст. (12)\nР2-Р4: 3 в.п., 1 ст. с/н в каждую петлю (12)",
+        ["Vuelta 1: 3 cad (cuentan como 1 pa), 11 pa en la 3ª cad, pd (12)", "Vueltas 2 a 4: 3 cad, 1 pa en cada punto (12)"]],
+      ["Шарик\n1р: 6сбн в КА\n2р: 6пр (12)\n3р: (сбн, пр)х6 =18\nР.4-7: за заднюю стенку 18 сбн (18)",
+        ["Vuelta 1: 6 pb en anillo mágico", "Vuelta 2: 6 aum (12)", "Vuelta 3: *pb, aum* repetir 6 veces (18)", "Vueltas 4 a 7: por la hebra de atrás 18 pb (18)"]],
+    ];
+    for (const [txt, esperado] of casos) {
+      const r = await page.evaluate(t => importarTexto(t, null, true), txt);
+      assert.equal(r.ruso, true, txt);
+      assert.deepEqual(r.pasos, esperado);
+      assert.ok(r.revision.every(x => !["distinto", "duda"].includes(x.estado)), JSON.stringify(r.revision));
+    }
+    assert.equal(await page.evaluate(() => importarTexto("Шапочка\nКрючок № 3.\nР1: 6 сбн в КА (6)\nР2: 6 пр (12)").ganchillo), "3 mm");
+    // En español y en inglés: «V1:», «Ronda 3:», «(1 pb, 1 aum) x 6», «R5 - R14:», «1.» numeradas y «= 18»
+    const es = await page.evaluate(() => importarTexto("Bola\nV1: 6 pb en AM (6)\nRonda 2: 6 aum (12)\nV.3: (1 pb, 1 aum) x 6 = 18\nV4-V7: 18 pb (18)", null, true).pasos);
+    assert.deepEqual(es, ["Vuelta 1: 6 pb en AM (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)", "Vueltas 4 a 7: 18 pb (18)"]);
+    const num = await page.evaluate(() => importarTexto("Posavasos\n1. Haz un anillo mágico y teje 8 pb dentro (8)\n2. 2 pb en cada punto (16)\n3. *1 pb, 1 aum* repetir 8 veces (24)\n4. 1 pd en cada punto (24)", null, true));
+    assert.equal(num.pasos[0], "Vuelta 1: Haz un anillo mágico y teje 8 pb dentro (8)");
+    assert.ok(num.revision.every(x => x.estado === "cuadra"), "una vuelta solo de pd también cuadra");
+    const en = await page.evaluate(() => importarTexto("Hat\nR4: Ch 1, sc in each st around (48 sts)\nR5 - R14: Ch 1, sc in each st around (48 sts)\nRnds 15-16: sc around (48)", null, true).pasos);
+    assert.deepEqual(en, ["Vuelta 4: 1 cad, pb en cada punto alrededor (48)", "Vueltas 5 a 14: 1 cad, pb en cada punto alrededor (48)", "Vueltas 15 a 16: pb en cada punto alrededor (48)"]);
+    await page.context().close();
+  });
   await prueba("importa un patrón en ruso y coge el color de la lana", async () => {
     const page = await nuevaPagina(browser);
     const r = await page.evaluate(() => importarTexto("Мишка\nПряжа: хлопок розовый, крючок 2,5 мм\n1 ряд: 6 сбн в КА (6)\n2 ряд: 6 пр (12)\n3 ряд: (сбн, пр) х 6 (18)\n4-6 ряды: 18 сбн (18)\nЗакрепить нить, набить.", null, true));
@@ -1311,7 +1387,7 @@ Fasten off and weave in ends.`;
       "10ª fila: 1 cad, 20 pb (20)", "De la 11ª a la 14ª fila: 1 cad, 20 pb (20)", "Hilera 15: 1 cad, 20 pb (20)", "Corta el hilo."].join("\n");
     const r = await page.evaluate(t => { const r = importarTexto(t, null, true); return { pasos: r.pasos, rev: r.revision.map(x => x.estado), reps: r.pasos.map(t => infoPaso(t).reps) }; }, TXT);
     assert.deepEqual(r.pasos, ["Monta 21 cad.", "Fila 1: 1 pb en la 2ª cad y en cada cad, gira (20)", "Fila 2: 1 cad, 20 pb, gira (20)", "Fila 3: 2 cad, 20 pa, gira (20)",
-      "Filas 4 a 6: 1 cad, 20 pb, gira (20)", "Filas 7-9: 1 cad, 20 pb (20)", "Fila 10: 1 cad, 20 pb (20)", "Filas 11 a 14: 1 cad, 20 pb (20)", "Hilera 15: 1 cad, 20 pb (20)"],
+      "Filas 4 a 6: 1 cad, 20 pb, gira (20)", "Filas 7 a 9: 1 cad, 20 pb (20)", "Fila 10: 1 cad, 20 pb (20)", "Filas 11 a 14: 1 cad, 20 pb (20)", "Hilera 15: 1 cad, 20 pb (20)"],
       "la cadeneta de base se queda aunque solo se cojan las filas");
     assert.ok(r.rev.slice(1).every(e => e === "cuadra"), JSON.stringify(r.rev));
     assert.deepEqual(r.reps.slice(4, 8), [3, 3, 1, 4], "«Filas 4 a 6» son 3 filas");

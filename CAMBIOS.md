@@ -368,3 +368,23 @@ Capturas en `tests/capturas/`.
 - Arreglos: el perfil fallaba por una variable repetida; la prueba de la versión instalable entra con una sesión
   guardada (sin cuenta solo sale la pantalla de entrar).
 - `tests/nube.test.cjs`: 16 pruebas.
+
+## 2026-10-11 · Leer PDF mucho mejor (también patrones en ruso)
+
+- Texto de los PDF (`paginasDePDF`, `maquetarPagina`): las líneas se arman por su posición en la hoja, se separan
+  las columnas de la página (una columna entera y luego la otra), las tablas se leen fila a fila aunque una celda
+  ocupe varias líneas («Hilera» / «1:»), se quitan las cabeceras y pies que se repiten en las hojas («© …»,
+  «Página 2 de 5»), el texto girado (marcas de agua), las ligaduras (ﬁ) y los guiones invisibles.
+- Hojas escaneadas dentro de un PDF con texto: si con el texto no salen vueltas, esas hojas se leen como una foto y
+  se ponen en su sitio. Si las letras del PDF no se pueden sacar (`textoLegible`), se lee entero como foto.
+- Lectura de patrones: «R1:», «V5-V9:», «Ronda 3:», «Vta 2», «V.1», «Р4-Р12:» (`prefijoVuelta`); vueltas
+  numeradas sin la palabra («1. 6 pb…», «5-9. 24 сбн», `numerosAVueltas`); «(1 pb, 1 aum) x 6» y «[pb, aum] x6» en
+  cualquier idioma (`retocarPaso`); totales «= 18»; «pb alrededor»; una vuelta solo de pd cuadra; partes escritas
+  sin mayúsculas («Голова», «Хвост») si debajo empieza la vuelta 1 (`esCabeceraSuave`); «Borde:» no se pega a la
+  vuelta de antes; las líneas partidas en ruso, con un paréntesis sin cerrar o con «с/» + «н» se vuelven a juntar.
+- Ruso: «1-й ряд», «5-12-й ряды», «Р.1», «1р:», «= 6 п.», «ст. с/н», «ст. б/н», «в.п.», «соед. ст.»,
+  «полустолбик», «в 3-ю петлю от крючка», «в ту же петлю», «считаются за 1 ст. с/н», «за заднюю стенку»,
+  «Крючок № 3».
+- Fotos a dos columnas: ya no se parte en columnas una hoja donde el «hueco» es solo el espacio entre palabras.
+- Probado con 17 patrones de muchos estilos y 102 PDF hechos con ellos (simple, dos columnas, tabla, cabecera y pie,
+  justificado, ligaduras); el PDF del unicornio sale igual que antes. Nuevas pruebas en `tests/app.test.cjs`.
