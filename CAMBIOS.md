@@ -388,3 +388,26 @@ Capturas en `tests/capturas/`.
 - Fotos a dos columnas: ya no se parte en columnas una hoja donde el «hueco» es solo el espacio entre palabras.
 - Probado con 17 patrones de muchos estilos y 102 PDF hechos con ellos (simple, dos columnas, tabla, cabecera y pie,
   justificado, ligaduras); el PDF del unicornio sale igual que antes. Nuevas pruebas en `tests/app.test.cjs`.
+
+## 2026-10-11 · Móvil (iPhone antiguos) y más PDF raros
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-11-antes-movil.html`.
+- iPhone con iOS anterior al 16.4: la app no llegaba a abrir porque dos expresiones usaban «lookbehind» `(?<!…)`.
+  Reescritas sin él (`cortaSiNo` en `limpiarPegado`, y `ru()`/`ruCambia` para el ruso). Prueba que lo vigila.
+- pdf.js pasa a la versión «legacy» (misma 3.11.174, de `cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/` y en
+  `lib/`): la normal no funciona en iPhone con iOS anterior al 15 ni en Android antiguos.
+- Respaldos para navegadores antiguos: `color-mix` con color de reserva, `crypto.randomUUID` y `createImageBitmap`
+  con alternativa (`abrirImagen`).
+- PDF escaneados largos en el móvil: antes se dibujaban las 20 hojas a la vez (en el iPhone se pasa del límite de
+  memoria y salen en blanco); ahora se dibuja una, se lee y se suelta (`paginasComoImagen` devuelve funciones).
+  Máximo ~4 millones de píxeles por hoja.
+- PDF con la hoja girada (todo el texto en vertical): se lee en la dirección de la mayoría del texto.
+- PDF a tres columnas (hoja apaisada) y columnas cortas que empiezan con vueltas: `partirColumnas` acepta columnas
+  más estrechas cuando el hueco es ancho.
+- PDF con las letras muy separadas («L i t t l e»): esas hojas se leen como foto; un título así se junta («BODY»).
+- PDF con contraseña: la pide (hasta 3 intentos). Archivo que no es PDF: lo dice claro; otro fallo propone la captura.
+- Hojas largas: «Leyendo la página N de M…».
+- Vueltas: «R1 6 sc», «V2 6aum», «(1pb, 1aum)x6», «Vuelta 1 → …», «<18>», «sc across», «Vuelta 1:6» con espacio.
+- Aviso flotante (toast) en pantallas estrechas: ya no se hace una columna altísima que tapa la pantalla.
+- PDF de prueba: 187 (11 estilos); fallan solo los de letras separadas al sacar el texto, que en la app se leen
+  como foto y salen bien. El PDF del unicornio sale igual. 71 pruebas bien.

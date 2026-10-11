@@ -44,7 +44,7 @@ p{margin:0}
 .eyebrow{font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
 
 /* Barra superior */
-header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 header.top .bar{max-width:48rem;margin:0 auto;padding:.5rem 16px;display:flex;align-items:center;gap:.6rem}
 .brand{display:flex;align-items:center;gap:.55rem;flex:1;min-width:0;cursor:pointer;background:none;border:0;color:var(--fg);padding:0;text-align:left;min-height:2.6rem;font-weight:400}
 .brand span{font-family:var(--display);font-size:1.05rem;line-height:1.1}
@@ -67,7 +67,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:var(--a
 button.teal{background:var(--thread);border-color:var(--thread);color:var(--thread-ink)}
 button.soft{background:var(--accent-soft);border-color:transparent;color:var(--fg)}
 button.ghost{background:transparent;border-color:transparent;color:var(--accent);padding-inline:.3rem}
-button.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 35%,transparent);background:var(--surface)}
+button.danger{color:var(--danger);border-color:var(--danger);border-color:color-mix(in srgb,var(--danger) 35%,transparent);background:var(--surface)}
 button.big{min-height:3.5rem;font-size:1.1rem;padding-inline:1.3rem}
 button.block{width:100%}
 button:disabled{opacity:.4;cursor:default}
@@ -109,7 +109,7 @@ button svg{flex:none}
 .action{flex-direction:column;align-items:flex-start;justify-content:flex-start;text-align:left;gap:.5rem;padding:.8rem;min-height:6.2rem;font-weight:700;border-radius:1rem;background:var(--surface);box-shadow:var(--shadow);border-color:transparent;line-height:1.25}
 .action .ic{width:2.4rem;height:2.4rem;border-radius:.7rem;display:grid;place-items:center;background:var(--thread-soft);color:var(--thread)}
 .action.pink .ic{background:var(--accent-soft);color:var(--accent)}
-.action.gold .ic{background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--gold)}
+.action.gold .ic{background:var(--sunk);background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--gold)}
 .action small{font-weight:400;color:var(--muted);font-size:.8rem}
 .tip{background:var(--thread-soft);border-radius:1rem;padding:1rem 1.1rem;display:grid;grid-template-columns:auto 1fr;gap:.8rem;align-items:start}
 .tip svg{color:var(--thread)}
@@ -140,7 +140,7 @@ button svg{flex:none}
 /* Detalle */
 .detail-hero{margin-top:.6rem;display:grid;grid-template-columns:1fr;gap:1rem}
 .detail-hero .thumb{aspect-ratio:16/9;border-radius:1rem}
-.photo-btn{position:absolute;right:.6rem;bottom:.6rem;min-height:2.4rem;font-size:.85rem;background:color-mix(in srgb,var(--surface) 92%,transparent)}
+.photo-btn{position:absolute;right:.6rem;bottom:.6rem;min-height:2.4rem;font-size:.85rem;background:var(--surface);background:color-mix(in srgb,var(--surface) 92%,transparent)}
 .facts{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem}
 @media (max-width:34rem){.facts{grid-template-columns:repeat(2,1fr)}}
 .fact{background:var(--surface);border-radius:.8rem;padding:.6rem .8rem;display:flex;flex-direction:column;gap:.1rem;min-width:0}
@@ -187,7 +187,7 @@ label.f small,.f small{font-weight:400;color:var(--muted)}
 .gloss dt{font-family:var(--display);color:var(--accent);font-size:1.1rem}
 .gloss dd{margin:0}
 .toast-btn{background:transparent;color:inherit;border:2px solid currentColor;border-radius:99px;min-height:2.2rem;padding:0 .8rem;margin-left:.4rem;font-weight:700}
-.toast{position:fixed;left:50%;bottom:calc(var(--tabs) + 1rem + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:.6rem 1.2rem;border-radius:99px;font-weight:700;z-index:20;max-width:calc(100% - 32px);text-align:center}
+.toast{position:fixed;left:50%;bottom:calc(var(--tabs) + 1rem + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:.6rem 1.2rem;border-radius:1.4rem;font-weight:700;z-index:20;width:max-content;max-width:calc(100% - 32px);box-sizing:border-box;text-align:center;line-height:1.3}
 @media (prefers-reduced-motion: no-preference){.counter .num.bump{animation:bump .25s ease}@keyframes bump{50%{transform:scale(1.12)}} .view{animation:fade .18s ease}@keyframes fade{from{opacity:.4;transform:translateY(4px)}}}
 
 /* Gráficos */
@@ -199,9 +199,9 @@ label.f small,.f small{font-weight:400;color:var(--muted)}
 .tool svg{flex:none;color:var(--fg)}
 .tool.sel{border-color:var(--accent);background:var(--accent-soft);font-weight:700;box-shadow:inset 0 0 0 1px var(--accent)}
 .lanabtn{min-height:2.6rem;padding:.2rem .8rem;font-size:.9rem}
-.lanabtn.dot{width:2.6rem;padding:0;border-radius:50%;border-color:color-mix(in srgb,var(--fg) 15%,transparent)}
+.lanabtn.dot{width:2.6rem;padding:0;border-radius:50%;border-color:var(--line);border-color:color-mix(in srgb,var(--fg) 15%,transparent)}
 .lanabtn.sel{outline:3px solid var(--fg);outline-offset:2px}
-.lana{display:inline-block;width:1.4rem;height:1.4rem;border-radius:50%;vertical-align:middle;border:1px solid color-mix(in srgb,var(--fg) 15%,transparent)}
+.lana{display:inline-block;width:1.4rem;height:1.4rem;border-radius:50%;vertical-align:middle;border:1px solid var(--line);border:1px solid color-mix(in srgb,var(--fg) 15%,transparent)}
 .gridwrap{overflow:auto;max-height:75vh;color:var(--fg);background:var(--surface);border-radius:1rem;padding:.5rem;user-select:none;-webkit-user-select:none;box-shadow:var(--shadow)}
 .chart{display:block;margin:0 auto;cursor:crosshair}
 .chart .cell{fill:var(--surface);stroke:var(--line);stroke-width:1}
@@ -245,7 +245,7 @@ th{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.
 .bigtile{flex-direction:column;gap:.6rem;min-height:8rem;font-size:1.12rem;border-radius:1.1rem;background:var(--surface);border-color:transparent;box-shadow:var(--shadow);text-align:center;line-height:1.25;padding:1rem .6rem}
 .bigtile .ic{width:3.6rem;height:3.6rem;border-radius:1rem;display:grid;place-items:center;background:var(--thread-soft);color:var(--thread)}
 .bigtile.pink .ic{background:var(--accent-soft);color:var(--accent)}
-.bigtile.gold .ic{background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--gold)}
+.bigtile.gold .ic{background:var(--sunk);background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--gold)}
 .go-pill{align-self:flex-start;background:var(--accent);color:var(--accent-ink);border-radius:99px;padding:.35rem 1rem;font-weight:700}
 .continue h2{font-size:1.3rem}
 .continue{grid-template-columns:8rem 1fr}
@@ -403,7 +403,7 @@ body.en-sofa header.top, body.en-sofa nav.tabs, body.sin-cuenta nav.tabs{display
 .semana p{margin:.2rem 0 .6rem}
 .barras{display:flex; gap:.4rem; align-items:flex-end; height:5.5rem}
 .barra{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:.25rem}
-.barra span{display:block; width:100%; max-width:2.2rem; background:color-mix(in srgb, var(--accent) 35%, transparent); border-radius:.4rem .4rem .15rem .15rem}
+.barra span{display:block; width:100%; max-width:2.2rem; background:var(--accent-soft);background:color-mix(in srgb, var(--accent) 35%, transparent); border-radius:.4rem .4rem .15rem .15rem}
 .barra.hoy span{background:var(--accent)}
 .barra small{font-size:.8rem; color:var(--muted)}
 #imprimir{display:none}
@@ -2627,6 +2627,8 @@ function traducirIngles(linea, uk){
        .replace(/\bin (each|every) (st|stitch|sc|dc|ch|ch-sp)\b/gi, "en cada punto")
        .replace(/\b(?:in )?(?:the )?(\d+)(?:st|nd|rd|th) (ch|chain) from (the )?hook\b/gi, "en la $1ª cad")
        .replace(/\bin (each|every) (ch|chain)\b/gi, "en cada cad")
+       .replace(/(\d\s*)?\b(sc|dc|hdc|htr|tr|dtr)\s+across\b/gi, (m, n, p) => n ? m : p+" en cada punto")   // sc across
+       .replace(/\s+and\s+across\b/gi, " y en el resto")
        .replace(/\s+across\b/gi, "")
        .replace(/\bin (the )?same (st|stitch)\b/gi, "en el mismo punto")
        .replace(/\bin (the )?next (st|stitch)\b/gi, "en el siguiente")
@@ -2712,8 +2714,11 @@ function traducirLatino(l){
 // Abreviaturas rusas de ganchillo: сбн (столбик без накида) = punto bajo, ссн/с1н = punto alto, пссн = medio alto,
 // с2н = alto doble, вп = cadeneta, сс = punto deslizado, пр = aumento, уб = disminución, КА = anillo mágico.
 // Las palabras rusas no valen con \b, así que los límites se marcan a mano.
-const RU_L = "(?<![а-яёa-z])", RU_R = "(?![а-яёa-z])";
+// Sin «lookbehind» (?<!…): los iPhone con iOS anterior al 16.4 no lo entienden y la app no abriría.
+// El borde izquierdo se captura en el grupo 1 y se devuelve tal cual al reemplazar (ruCambia).
+const RU_L = "(^|[^а-яёa-z])", RU_R = "(?![а-яёa-z])";
 const ru = (patron, flags="giu") => new RegExp(RU_L+"(?:"+patron+")"+RU_R, flags);
+const ruCambia = (t, patron, es) => t.replace(ru(patron), (m, borde, ...g) => borde + es.replace(/\$(\d)/g, (_, n) => g[n-1] ?? ""));
 function esRuso(texto){
   return (texto.match(ru("сбн|ссн|с1н|с2н|пссн|вп|пр|уб|ряд|ряды|круг|петл[а-яё]*|прибав[а-яё]*|убав[а-яё]*|ка")) || []).length >= 2;
 }
@@ -2747,7 +2752,7 @@ function traducirRuso(linea){
     ["за заднюю стенку|за задн[а-яё]* полупетл[а-яё]*", "por la hebra de atrás"], ["за переднюю стенку|за передн[а-яё]* полупетл[а-яё]*", "por la hebra de delante"],
     ["в", "en"], ["и", "y"]
   ];
-  for(const [rx, es] of P) t = t.replace(ru(rx), es);
+  for(const [rx, es] of P) t = ruCambia(t, rx, es);
   t = t.replace(/\s+/g, " ").trim();
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
@@ -2775,8 +2780,10 @@ function lanaDelTexto(lineas){
 function limpiarPegado(texto){
   let t = (texto||"").replace(/\r/g, "").replace(/ /g, " ").replace(/[•●▪◦]\s*/g, "").replace(/[ \t]+/g, " ");
   // Separa las vueltas que vienen pegadas en un mismo párrafo
-  t = t.replace(/([^\n])(?<![-–—]|\b(?:a|al|to))\s+(?=(?:vueltas?|rondas?|filas?|hileras?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*(?:r\s*)?\d+\s*)?[:.)])/gi, "$1\n")
-       .replace(/([^\n])(?<!\b(?:a|al|la|y)|[-–])\s+(?=\d+\s*[ªº°]\s*(?:vueltas?|filas?|hileras?)\s*:)/gi, "$1\n"); // no corta «de la 11ª a la 14ª fila»
+  // Se mira lo de antes a mano (sin «lookbehind», que los iPhone antiguos no entienden).
+  const cortaSiNo = (antes) => (m, c, off, str) => antes.test(str.slice(Math.max(0, off-6), off+1)) ? m : c+"\n";
+  t = t.replace(/([^\n])\s+(?=(?:vueltas?|rondas?|filas?|hileras?|rnds?|rounds?|rows?|r)\s*\d+\s*(?:(?:-|–|a|to)\s*(?:r\s*)?\d+\s*)?[:.)])/gi, cortaSiNo(/(?:[-–—]|(?:^|[^\p{L}\d_])(?:a|al|to))$/iu))
+       .replace(/([^\n])\s+(?=\d+\s*[ªº°]\s*(?:vueltas?|filas?|hileras?)\s*:)/gi, cortaSiNo(/(?:[-–]|(?:^|[^\p{L}\d_])(?:a|al|la|y))$/iu)); // no corta «de la 11ª a la 14ª fila»
   const lineas = [];
   // Pies y cabeceras de página en mayúsculas que se repiten en todas las hojas («MAGIA PARA PEQUES EN SU DÍA»)
   const veces = {}; for(const l of t.split("\n")){ const k = l.trim(); if(k) veces[k] = (veces[k]||0)+1; }
@@ -2850,10 +2857,13 @@ function sugerirArreglo(t){
 // «R1:», «V5-V9:», «Ronda 3:», «Rnd 4 -», «Р4-Р12:», «ряд 2:» → «Vuelta 1:», «Vueltas 5-9:» (antes de traducir)
 const PREF_VUELTA = "(?:rondas?|rounds?|rnds?|rds?|vueltas?|vtas?|ряды?|круги?|v|r|р)";
 const RX_PREF_RANGO = new RegExp("^\\s*"+PREF_VUELTA+"\\s*\\.?\\s*(\\d+)\\s*(?:-|–|—|a|al|to|до)\\s*"+PREF_VUELTA+"?\\s*\\.?\\s*(\\d+)\\s*[:.)\\-–—]\\s*", "iu");
-const RX_PREF_UNA = new RegExp("^\\s*"+PREF_VUELTA+"\\s*\\.?\\s*(\\d+)\\s*[:.)\\-–—]\\s*", "iu");
+const RX_PREF_UNA = new RegExp("^\\s*"+PREF_VUELTA+"\\s*\\.?\\s*(\\d+)\\s*(?:[:.)\\-–—]|→|->|=>)\\s*", "iu");
+// Sin nada entre el número y los puntos, solo en la forma corta pegada: «R1 6 sc», «V2 6 aum», «Rnd3 …»
+const RX_PREF_PEGADA = new RegExp("^\\s*"+PREF_VUELTA+"(\\d+)\\s+(?=[\\d*\\p{L}(\\[])(?!\\(\\s*\\d+\\s*\\)\\s*:)", "iu");
 function prefijoVuelta(l){
   if(RX_PREF_RANGO.test(l)) return l.replace(RX_PREF_RANGO, "Vueltas $1-$2: ");
-  return l.replace(RX_PREF_UNA, "Vuelta $1: ");
+  if(RX_PREF_UNA.test(l)) return l.replace(RX_PREF_UNA, "Vuelta $1: ");
+  return l.replace(RX_PREF_PEGADA, "Vuelta $1: ");
 }
 // Patrones que numeran las vueltas sin decir «vuelta»: «1. 6 pb en AM (6)», «5-9. 24 сбн», «3) 18 sc»
 const RX_NUMERADA = /^\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?\s*[.:)]\s+(?=\S)/;
@@ -2875,8 +2885,12 @@ function retocarPaso(l){
       (m, a, n1, n2, n3) => new RegExp("\\b("+PUNTO_ES+")\\b", "i").test(a) ? "*"+a+"* repetir "+(n1||n2||n3)+" veces" : m)
     // Total con «=» al final de una vuelta: «… = 18», «… = 18 puntos» → «(18)»
     .replace(/^((?:Vueltas?|Filas?|Hileras?)\s.*?\S)\s*=\s*(\d+)\s*(?:puntos|pts?|p|sts?)?\.?\s*$/i, "$1 ($2)")
+    // Total entre ángulos «<18>» → «(18)»
+    .replace(/^((?:Vueltas?|Filas?|Hileras?)\s.*?\S)\s*<\s*(\d+)\s*>\.?\s*$/i, "$1 ($2)")
     // «Vueltas 5-9:» → «Vueltas 5 a 9:»
     .replace(/^(Vueltas|Filas) (\d+)\s*[-–]\s*(\d+):/, "$1 $2 a $3:")
+    // «Vuelta 1:6 pb» → «Vuelta 1: 6 pb»
+    .replace(/^((?:Vueltas?|Filas?|Hileras?) \d+(?: a \d+)?:)(?=\S)/, "$1 ")
     // «pb alrededor» (sin número): un punto en cada punto
     .replace(new RegExp("(^|[:,]\\s*)("+PUNTO_ES+")\\s+alrededor\\b", "gi"), "$1$2 en cada punto alrededor");
 }
@@ -2894,7 +2908,9 @@ function importarTexto(texto, uk, soloVueltas=false){
   const latino = !rus && !ingles && esLatino(texto);
   if(uk==null) uk = ingles && esUK(texto);
   const originales = limpiarPegado(texto);
-  const lineas = numerosAVueltas(originales.map(l0 => { const l = prefijoVuelta(l0); return normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : latino ? traducirLatino(l) : l)
+  // «1pb», «6aum», «(1mp,1au)x6»: número pegado al punto (en español; el inglés y el ruso lo separan al traducir)
+  const PEGADOS = new RegExp("(\\d)("+PUNTO_ES+"|mp|au|dis|var|mv|ap)(?=[\\s,.;)\\]*]|$)", "gi");
+  const lineas = numerosAVueltas(originales.map(l0 => { const l = rus || ingles ? prefijoVuelta(l0) : prefijoVuelta(l0).replace(PEGADOS, "$1 $2"); return normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : latino ? traducirLatino(l) : l)
     .replace(/\bpor cada punto( de la vuelta anterior| de la fila anterior)?/gi, "en cada punto"); })).map(retocarPaso);
   // La primera línea corta y sin números es el título, aunque nombre puntos («Bufanda de punto bajo»)
   const conTitulo = originales.length>1 && originales[0].length<=60 && !/\d|:/.test(originales[0]) && !/^(haz|teje|monta|make|chain|start)\b/i.test(originales[0]);
@@ -2964,7 +2980,8 @@ function cargarScript(src){
   });
 }
 // En la versión instalable (window.TI_LOCAL) las librerías van junto a la app, en lib/, para funcionar sin conexión
-const PDFJS = window.TI_LOCAL ? "lib/" : "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+// pdf.js en su versión «legacy»: la normal no funciona en iPhone con iOS anterior al 15 ni en Android antiguos
+const PDFJS = window.TI_LOCAL ? "lib/" : "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/";
 const TESSERACT = window.TI_LOCAL ? "lib/tesseract.min.js" : "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 // Los datos para leer letras (unos 9 MB) se publican junto a la app en ocr/ y se guardan en el móvil tras el primer uso
 const OCR_DIR = new URL("ocr/", location.href).href;
@@ -2972,7 +2989,19 @@ async function abrirPDF(datos){
   await cargarScript(PDFJS+"pdf.min.js");
   await cargarScript(PDFJS+"pdf.worker.min.js"); // sin worker aparte: corre en la página
   // isEvalSupported:false evita ejecutar código de las fuentes del PDF (CVE-2024-4367)
-  return window.pdfjsLib.getDocument({data:datos, isEvalSupported:false, disableFontFace:true, useSystemFonts:false}).promise;
+  // Si tiene contraseña se pide (hasta 3 intentos). pdf.js se queda con los datos, por eso se pasa una copia cada vez.
+  let password;
+  for(let intento=0; ; intento++){
+    try{
+      return await window.pdfjsLib.getDocument({data:datos.slice(), password, isEvalSupported:false, disableFontFace:true, useSystemFonts:false}).promise;
+    } catch(e){
+      if(!e || e.name!=="PasswordException" || intento>=3) throw e;
+      let escrita = null;
+      try{ escrita = window.prompt(intento ? "Esa contraseña no vale. Prueba otra vez:" : "Este PDF tiene contraseña. Escríbela para abrirlo:"); }catch(e2){}
+      if(escrita==null || escrita==="") throw e;
+      password = escrita;
+    }
+  }
 }
 // ---------- Sacar el texto de un PDF respetando cómo está maquetado ----------
 // pdf.js da trozos de texto con su posición. Se juntan en líneas por su altura, se separan las columnas de la
@@ -3008,22 +3037,31 @@ function lineasDeTrozos(its){
 }
 // Busca el hueco vertical entre dos columnas: ninguna línea lo cruza y a cada lado hay bastante texto y ancho
 function partirColumnas(lineas){
-  if(lineas.length < 3) return null;
+  if(lineas.length < 2) return null;
   const x0 = Math.min(...lineas.map(l=>l.x0)), x1 = Math.max(...lineas.map(l=>l.x1)), ancho = x1-x0;
   if(ancho <= 0) return null;
+  const altos = lineas.map(l=>l.h).sort((a,b)=>a-b), alto = altos[Math.floor(altos.length/2)];
+  const empiezaVuelta = t => pareceVuelta(t) || RX_NUMERADA.test(t);
   let mejor = null;
-  for(let x = x0+ancho*.25; x <= x0+ancho*.75; x += Math.max(1, ancho/200)){
-    let cruzan = 0, izq = 0, der = 0, izqFin = x0, derIni = x1, vueltasDer = 0;
+  for(let x = x0+ancho*.2; x <= x0+ancho*.8; x += Math.max(1, ancho/240)){
+    let cruzan = 0, izq = 0, der = 0, izqFin = x0, derIni = x1, vueltasIzq = 0, vueltasDer = 0, letrasIzq = 0, letrasDer = 0;
     for(const l of lineas){
       if(l.seg.some(s=>s.x < x && s.x1 > x)) { cruzan++; continue; }
       const a = l.seg.filter(s=>s.x1 <= x), b = l.seg.filter(s=>s.x >= x);
-      if(a.length){ izq++; izqFin = Math.max(izqFin, ...a.map(s=>s.x1)); }
-      if(b.length){ der++; derIni = Math.min(derIni, ...b.map(s=>s.x)); if(pareceVuelta(b[0].t) || RX_NUMERADA.test(b[0].t)) vueltasDer++; }
+      if(a.length){ izq++; izqFin = Math.max(izqFin, ...a.map(s=>s.x1)); letrasIzq += a.map(s=>s.t).join(" ").length; if(empiezaVuelta(a[0].t)) vueltasIzq++; }
+      if(b.length){ der++; derIni = Math.min(derIni, ...b.map(s=>s.x)); letrasDer += b.map(s=>s.t).join(" ").length; if(empiezaVuelta(b[0].t)) vueltasDer++; }
     }
-    // Las dos columnas de verdad son anchas; en una tabla la columna del número o del total es estrecha.
+    if(!izq || !der) continue;
+    // Las columnas de verdad son anchas; en una tabla la columna del número o del total es estrecha.
     // Con poco texto, también vale si a la derecha empiezan vueltas («Р.3:», «8р:»): no es la celda de una tabla.
-    const anchoIzq = izqFin-x0, anchoDer = x1-derIni, min = vueltasDer >= Math.max(2, der*.5) ? .15 : .3;
-    if(izq < 2 || der < 2 || anchoIzq < ancho*min || anchoDer < ancho*min) continue;
+    // Y con un hueco ancho entre las dos y líneas largas a los dos lados (tres columnas en una hoja apaisada), también.
+    const anchoIzq = izqFin-x0, anchoDer = x1-derIni, hueco = derIni-izqFin;
+    const vueltasAmbos = vueltasDer === der && vueltasIzq >= Math.max(1, izq*.5);
+    const huecoLargo = hueco >= alto*1.5 && (vueltasAmbos || (letrasIzq/izq >= 15 && letrasDer/der >= 15));
+    const min = huecoLargo ? (vueltasAmbos ? .08 : .12) : vueltasDer >= Math.max(2, der*.5) ? .15 : .3;
+    if(anchoIzq < ancho*min || anchoDer < ancho*min) continue;
+    // Pocas líneas (columnas cortas): solo si las dos columnas empiezan con vueltas
+    if((lineas.length < 3 || izq < 2 || der < 2) && !(huecoLargo && vueltasAmbos)) continue;
     if(cruzan > Math.max(1, lineas.length*.08)) continue;
     if(!mejor || cruzan < mejor.cruzan || (cruzan===mejor.cruzan && Math.abs(x-(x0+ancho/2)) < Math.abs(mejor.x-(x0+ancho/2)))) mejor = {x, cruzan};
   }
@@ -3079,45 +3117,69 @@ function quitarRepetidas(paginas){
   const min = Math.max(2, Math.ceil(paginas.filter(p=>p.some(Boolean)).length/2));
   return paginas.map(p => { const b = new Set(bordes(p)); return p.filter(l => !(b.has(l) && l && veces[clave(l)] >= min && !/^\s*(vueltas?|rnds?|rounds?|rows?|filas?|ряд)\s*\d/i.test(l))); });
 }
-async function paginasDePDF(doc){
+async function paginasDePDF(doc, avisar){
   const paginas = [];
   for(let n=1; n<=doc.numPages; n++){
+    if(avisar && doc.numPages > 4) avisar("Leyendo la página "+n+" de "+doc.numPages+"…", (n-1)/doc.numPages);
     const pag = await doc.getPage(n), cont = await pag.getTextContent();
-    const its = [];
-    for(const it of cont.items){
-      if(typeof it.str!=="string" || !it.str) continue;
-      const [a, b] = it.transform;
-      if(Math.abs(b) > Math.abs(a)*0.1) continue; // texto girado: marcas de agua y textos al margen
-      its.push({t:limpiarUnicode(it.str), x:it.transform[4], y:it.transform[5], w:it.width||0, h:Math.abs(it.transform[3]) || it.height || 10});
-    }
+    // Cada trozo lleva su giro. Se lee el texto que va en la dirección de la mayoría (normalmente derecho; en algunos
+    // PDF toda la hoja está girada) y se descarta el resto: marcas de agua en diagonal y textos al margen.
+    const trozos = cont.items.filter(it => typeof it.str==="string" && it.str && it.transform).map(it => {
+      const [a, b, c, d, x, y] = it.transform, ang = Math.atan2(b, a), q = Math.round(ang/(Math.PI/2));
+      return {it, x, y, h: Math.hypot(c, d) || it.height || 10, q: ((q%4)+4)%4, recto: Math.abs(ang - q*Math.PI/2) < 0.1};
+    });
+    const cuenta = [0,0,0,0]; for(const t of trozos) if(t.recto && t.it.str.trim()) cuenta[t.q] += t.it.str.length;
+    const giro = cuenta[0] >= Math.max(...cuenta)*0.5 ? 0 : cuenta.indexOf(Math.max(...cuenta));
+    const co = Math.round(Math.cos(giro*Math.PI/2)), se = Math.round(Math.sin(giro*Math.PI/2));
+    const its = trozos.filter(t => t.recto && t.q===giro)
+      .map(t => ({t:limpiarUnicode(t.it.str), x: t.x*co + t.y*se, y: -t.x*se + t.y*co, w:t.it.width||0, h:t.h}));
     paginas.push(its.length ? maquetarPagina(its) : []);
     pag.cleanup();
   }
   return quitarRepetidas(paginas);
 }
+// Letra con mucho espacio entre letras («L i t t l e  O c t o p u s»): pdf.js pone un espacio entre cada letra y ya no
+// se sabe dónde acaba cada palabra. Un título así se junta («B O D Y» → «BODY»); una hoja entera así se lee como foto.
+const lineaEspaciada = l => { const ts = l.trim().split(" ").filter(Boolean); return ts.length >= 4 && ts.filter(t=>[...t].length===1).length >= ts.length*.75; };
+const juntarEspaciado = l => lineaEspaciada(l) ? l.trim().replace(/(\S) (?=\S(?: |$))/gu, "$1").replace(/(\S) (?=\S(?: |$))/gu, "$1") : l;
+function paginaEspaciada(t){
+  const ls = t.split("\n").filter(l=>l.trim()), mal = ls.filter(lineaEspaciada);
+  return mal.length >= 2 && mal.join("").length >= ls.join("").length*.4;
+}
 async function textoDePDF(doc){
-  return (await paginasDePDF(doc)).map(p=>p.join("\n").replace(/\n{3,}/g, "\n\n").trim()).join("\n\n");
+  return (await paginasDePDF(doc)).map(p=>p.map(juntarEspaciado).join("\n").replace(/\n{3,}/g, "\n\n").trim()).join("\n\n");
 }
 // ¿El texto sacado del PDF se puede leer? Algunos PDF usan fuentes sin tabla de letras y salen símbolos raros
 function textoLegible(t){
   const letras = (t.match(/[\p{L}\p{N}]/gu)||[]).length, raros = (t.match(/[-�]|[^\p{L}\p{N}\p{P}\p{S}\p{Z}\n\t]/gu)||[]).length;
   return letras >= 30 && raros < letras*0.1;
 }
-async function paginasComoImagen(doc, max, cuales=null){
-  const imgs = [];
-  for(const n of (cuales || Array.from({length:doc.numPages}, (_, i)=>i+1)).slice(0, max)){
+// Devuelve una función por página que la dibuja cuando hace falta. Así solo hay una página dibujada a la vez:
+// en el iPhone, si se dibujan 20 páginas grandes de golpe se pasa del límite de memoria y salen en blanco.
+function paginasComoImagen(doc, max, cuales=null){
+  return (cuales || Array.from({length:doc.numPages}, (_, i)=>i+1)).slice(0, max).map(n => async ()=>{
     const pag = await doc.getPage(n), vp0 = pag.getViewport({scale:1});
-    const vp = pag.getViewport({scale: Math.min(3, 2000/Math.max(vp0.width, vp0.height))});
+    // Unos 2000 px por el lado largo (se lee bien) y nunca más de ~4 millones de píxeles (límite del iPhone)
+    let k = Math.min(3, 2000/Math.max(vp0.width, vp0.height)); k = Math.min(k, Math.sqrt(4e6/(vp0.width*vp0.height)));
+    const vp = pag.getViewport({scale:k});
     const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
     const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0,0,c.width,c.height);
     await pag.render({canvasContext:ctx, viewport:vp}).promise;
-    imgs.push(c); pag.cleanup();
-  }
-  return imgs;
+    pag.cleanup();
+    return c;
+  });
 }
+// Suelta la memoria de un dibujo ya leído (en Safari no se libera sola hasta mucho después)
+const soltarLienzo = c => { try{ if(c && c.getContext){ c.width = 0; c.height = 0; } }catch(e){} };
 // Las fotos del móvil son enormes: se reducen a un tamaño que se lee igual de bien y mucho más rápido
+// (createImageBitmap no existe en iPhone con iOS anterior al 15: ahí se usa una imagen normal)
+async function abrirImagen(archivo){
+  if(window.createImageBitmap){ try{ return await createImageBitmap(archivo); }catch(e){} }
+  const url = URL.createObjectURL(archivo);
+  try{ const img = new Image(); img.src = url; await img.decode(); return img; } finally { setTimeout(()=>URL.revokeObjectURL(url), 1000); }
+}
 async function prepararFoto(archivo){
-  const bmp = await createImageBitmap(archivo);
+  const bmp = await abrirImagen(archivo);
   const k = Math.min(1, 2400/Math.max(bmp.width, bmp.height));
   const c = document.createElement("canvas"); c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
   c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close && bmp.close();
@@ -3141,7 +3203,11 @@ async function leerImagenes(imgs, avisar, porPagina=false){
     // Página en automático: así respeta las columnas (muchos patrones van a dos columnas) en vez de mezclar las líneas
     try{ await worker.setParameters({tessedit_pageseg_mode: "3", preserve_interword_spaces: "1"}); }catch(e){}
     const textos = [];
-    for(; actual<imgs.length; actual++){ const d = (await worker.recognize(imgs[actual], {}, {text:true, blocks:true})).data; let t = null; try{ t = textoEnColumnas(d, imgs[actual].width); }catch(e){} textos.push(t || d.text); }
+    for(; actual<imgs.length; actual++){
+      const img = typeof imgs[actual]==="function" ? await imgs[actual]() : imgs[actual], ancho = img.width;
+      const d = (await worker.recognize(img, {}, {text:true, blocks:true})).data; soltarLienzo(img);
+      let t = null; try{ t = textoEnColumnas(d, ancho); }catch(e){} textos.push(t || d.text);
+    }
     return porPagina ? textos.map(arreglarLectura) : arreglarLectura(textos.join("\n\n"));
   } finally { worker.terminate(); }
 }
@@ -3280,7 +3346,8 @@ VISTAS.importar = V => {
       if(e && e.name==="PasswordException") fallo("Este PDF tiene contraseña y no puedo abrirlo.");
       else if(e && e.message==="sin-conexion") fallo("Necesito internet la primera vez que lees "+(e.foto?"una foto":"un PDF")+". Conéctate y vuelve a probar.");
       else if(e && e.foto) fallo("No he podido leer la foto.", AYUDA_FOTO);
-      else fallo("No he podido abrir este archivo. ¿Es un PDF?");
+      else if(e && /InvalidPDF|MissingPDF/.test(e.name||"")) fallo("Este archivo no es un PDF o está dañado.", "Si lo tienes en el correo o en WhatsApp, prueba a descargarlo otra vez.");
+      else fallo("No he podido leer este PDF.", "Otra forma: haz una captura de pantalla de la hoja del patrón y usa «Foto del patrón».");
     } finally { botones.forEach(b=>b.disabled=false); }
   }
   const conFoto = fn => async ()=>{ try{ return await fn(); } catch(e){ const err = e instanceof Error ? e : new Error(String(e)); err.foto = true; throw err; } };
@@ -3288,25 +3355,29 @@ VISTAS.importar = V => {
     traer(async ()=>{
       avisar("Abriendo «"+f.name+"»…", null);
       const doc = await abrirPDF(new Uint8Array(await f.arrayBuffer()));
-      const paginas = (await paginasDePDF(doc)).map(p=>p.join("\n").trim());
+      const crudas = (await paginasDePDF(doc, avisar)).map(p=>p.join("\n").trim());
+      const paginas = crudas.map(p=>p.split("\n").map(juntarEspaciado).join("\n"));
       const texto = paginas.join("\n\n").trim();
       const vueltas = t => importarTexto(t, null, true).pasos.filter(l=>RX_VUELTA.test(l)).length;
       if(textoLegible(texto)){
         // Hojas sin texto dentro de un PDF con texto: suelen ser el patrón escaneado (o fotos). Si con el texto no
-        // salen vueltas, esas hojas se leen como una foto y se ponen en su sitio.
-        const sinTexto = paginas.map((p, i)=>p.replace(/\s/g,"").length < 30 ? i+1 : 0).filter(Boolean);
-        if(!sinTexto.length || vueltas(texto) >= 3){ doc.destroy(); return texto; }
-        avisar("Algunas hojas son imágenes escaneadas. Las leo como una foto…", null);
-        const imgs = await paginasComoImagen(doc, 20, sinTexto); doc.destroy();
+        // salen vueltas, esas hojas se leen como una foto y se ponen en su sitio. Las hojas con las letras muy
+        // separadas también se leen como foto: así se ve dónde acaba cada palabra.
+        const espaciadas = crudas.map((p, i)=>paginaEspaciada(p) ? i+1 : 0).filter(Boolean);
+        const vacias = paginas.map((p, i)=>p.replace(/\s/g,"").length < 30 ? i+1 : 0).filter(Boolean);
+        const sinTexto = [...espaciadas, ...(vacias.length && vueltas(texto) < 3 ? vacias : [])].sort((a,b)=>a-b);
+        if(!sinTexto.length){ doc.destroy(); return texto; }
+        avisar(espaciadas.length && !vacias.length ? "Este PDF tiene las letras muy separadas. Lo leo como una foto…" : "Algunas hojas son imágenes escaneadas. Las leo como una foto…", null);
+        const imgs = paginasComoImagen(doc, 20, sinTexto);
         let leidas = [];
-        try{ leidas = (await leerImagenes(imgs, avisar, true)); }catch(e){ return texto; }
+        try{ leidas = (await leerImagenes(imgs, avisar, true)); }catch(e){ return texto; } finally { doc.destroy(); }
         sinTexto.slice(0, 20).forEach((n, i)=>{ paginas[n-1] = leidas[i] || paginas[n-1]; });
         return paginas.join("\n\n").trim();
       }
       // PDF escaneado (no tiene texto, solo imágenes de las páginas) o con letras que no se pueden sacar
       avisar(texto.replace(/\s/g,"").length >= 30 ? "No puedo sacar las letras de este PDF. Lo leo como una foto…" : "Este PDF es una imagen escaneada. Lo leo como una foto…", null);
-      const imgs = await paginasComoImagen(doc, 20); doc.destroy();
-      const leido = await conFoto(()=>leerImagenes(imgs, avisar))();
+      const imgs = paginasComoImagen(doc, 20);
+      const leido = await conFoto(()=>leerImagenes(imgs, avisar))().finally(()=>doc.destroy());
       if(!leido.trim()) throw Object.assign(new Error("vacio"), {foto:true});
       return leido;
     }); }});
@@ -4283,7 +4354,7 @@ VISTAS.publicar = V => {
     try{
       let ruta = null;
       if(foto && conFoto.checked){
-        ruta = sesion.uid+"/"+crypto.randomUUID()+".jpg";
+        ruta = sesion.uid+"/"+(crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+"-"+Array.from(crypto.getRandomValues(new Uint8Array(12)), b=>b.toString(16).padStart(2,"0")).join(""))+".jpg";
         await llamar("/storage/v1/object/publicas/"+ruta, {metodo:"POST", cuerpo:await aBlob(foto), cabeceras:{"Content-Type":"image/jpeg"}});
       }
       const patron = p && conPatron.checked ? {v:1, t:p.titulo, p:p.pasos, g:p.ganchillo||"", h:p.hilo||"", n:p.nivel||"", d:p.descripcion||"", o:p.notas||""} : null;

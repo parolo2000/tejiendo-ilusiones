@@ -349,7 +349,7 @@ Fasten off and weave in ends.`;
   async function paginaWeb(opts = {}, datos = null) {
     const page = await nuevaPagina(browser, opts, datos);
     // Las librerías de los CDN, desde copias locales idénticas (el contenedor de pruebas no sale a internet)
-    await page.route(/cdnjs\.cloudflare\.com\/ajax\/libs\/pdf\.js\/3\.11\.174\/(pdf(\.worker)?\.min\.js)$/, (r) => r.fulfill({ path: path.join(VENDOR, r.request().url().split("/").pop()), contentType: "text/javascript" }));
+    await page.route(/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@3\.11\.174\/legacy\/build\/(pdf(\.worker)?\.min\.js)$/, (r) => r.fulfill({ path: path.join(VENDOR, r.request().url().split("/").pop()), contentType: "text/javascript" }));
     await page.route(/cdn\.jsdelivr\.net\/npm\/tesseract\.js@5\.1\.1\/dist\/tesseract\.min\.js$/, (r) => r.fulfill({ path: path.join(VENDOR, "tesseract.min.js"), contentType: "text/javascript" }));
     await page.goto(WEB);
     return page;
@@ -368,7 +368,7 @@ Fasten off and weave in ends.`;
   await fx.setContent(`<img src="data:image/png;base64,${foto.toString("base64")}" style="width:100%">`); const pdfEscaneado = await fx.pdf({ format: "A5" });
   await fx.close();
   const subir = async (page, id, nombre, mimeType, buffer) => page.setInputFiles(id, { name: nombre, mimeType, buffer });
-  const esperarLectura = page => page.waitForFunction(() => document.querySelector("ol.importados li") || document.querySelector(".leyendo:not([hidden])")?.textContent.match(/No he podido|Necesito|contraseña/), null, { timeout: 120000 });
+  const esperarLectura = page => page.waitForFunction(() => document.querySelector("ol.importados li") || document.querySelector(".leyendo:not([hidden])")?.textContent.match(/No he podido|Necesito|contraseña|no es un PDF/), null, { timeout: 120000 });
 
   await prueba("PDF con texto: lee el patrón, cuadran las vueltas y se guarda", async () => {
     const page = await paginaWeb();
@@ -460,6 +460,29 @@ Fasten off and weave in ends.`;
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });
+  await prueba("PDF con la hoja girada, a tres columnas o con las letras separadas", async () => {
+    const fx = await browser.newPage();
+    const L = ["Pelotita", "Vta 1: 6 mp en anillo (6)", "Vta 2: 6 au (12)", "Vta 3: (1 mp, 1 au) x 6 (18)", "Vta 4-6: 18 mp (18)", "Vta 7: (1 mp, 1 dis) x 6 (12)", "Vta 8: 6 dis (6)"];
+    const p = x => `<p style="margin:0 0 5px">${x}</p>`;
+    await fx.setContent(`<style>body{margin:0} .r{position:absolute;top:0;left:0;width:760px;transform-origin:0 0;transform:translate(0,760px) rotate(-90deg);font:13px Arial}</style><div class=r>${L.map(p).join("")}</div>`);
+    const girada = await fx.pdf({ format: "A5" });
+    await fx.setContent(`<style>body{font:11px Arial;margin:20px}</style><h1>${L[0]}</h1><div style="columns:3;column-gap:24px">${L.slice(1).map(p).join("")}</div>`);
+    const tres = await fx.pdf({ format: "A4", landscape: true });
+    await fx.close();
+    const page = await paginaWeb();
+    const leer = pdf => page.evaluate(async a => { const doc = await abrirPDF(new Uint8Array(a)); const t = await textoDePDF(doc); doc.destroy(); return { t, pasos: importarTexto(t, null, true).pasos }; }, [...pdf]);
+    const ESPERADO = ["Vuelta 1: 6 pb en anillo (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)", "Vueltas 4 a 6: 18 pb (18)", "Vuelta 7: *1 pb, 1 dism* repetir 6 veces (12)", "Vuelta 8: 6 dism (6)"];
+    const a = await leer(girada);
+    assert.deepEqual(a.pasos, ESPERADO, "hoja girada\n" + a.t);
+    const b = await leer(tres);
+    assert.deepEqual(b.pasos, ESPERADO, "tres columnas\n" + b.t);
+    // Letras muy separadas: un título se junta y una hoja entera así se manda a leer como foto
+    assert.deepEqual(await page.evaluate(() => [juntarEspaciado("B O D Y"), juntarEspaciado("Rnd 1: 6 sc in MR (6)"),
+      paginaEspaciada("L i t t l e O c t o p u s\nR n d 1 : 6 s c i n M R ( 6 )\nR n d 2 : i n c x 6 ( 1 2 )"), paginaEspaciada("B O D Y\nRnd 1: 6 sc in MR (6)\nRnd 2: inc x6 (12)")]),
+      ["BODY", "Rnd 1: 6 sc in MR (6)", true, false]);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
   await prueba("PDF con texto y una hoja escaneada: esa hoja se lee como una foto", async () => {
     const fx4 = await browser.newPage();
     await fx4.setContent(`<style>body{font:14px Georgia;margin:30px}</style><h1>Bola amigurumi</h1><p>Materiales: algodón y ganchillo de 3 mm.</p>
@@ -482,7 +505,7 @@ Fasten off and weave in ends.`;
     await page.evaluate(() => go({ name: "importar" }));
     await subir(page, "#im-pdf", "roto.pdf", "application/pdf", Buffer.from("esto no es un pdf"));
     await esperarLectura(page);
-    assert.match(await page.locator(".leyendo").textContent(), /No he podido abrir este archivo/);
+    assert.match(await page.locator(".leyendo").textContent(), /Este archivo no es un PDF o está dañado/);
     // Sin los datos del lector publicados (o sin red), la foto da la alternativa de copiar el texto
     await page.route(/\/ocr\//, r => r.fulfill({ status: 404 }));
     await subir(page, "#im-foto", "foto.png", "image/png", foto);
@@ -1085,6 +1108,27 @@ Fasten off and weave in ends.`;
     const en = await page.evaluate(() => importarTexto("Hat\nR4: Ch 1, sc in each st around (48 sts)\nR5 - R14: Ch 1, sc in each st around (48 sts)\nRnds 15-16: sc around (48)", null, true).pasos);
     assert.deepEqual(en, ["Vuelta 4: 1 cad, pb en cada punto alrededor (48)", "Vueltas 5 a 14: 1 cad, pb en cada punto alrededor (48)", "Vueltas 15 a 16: pb en cada punto alrededor (48)"]);
     await page.context().close();
+  });
+  await prueba("más formas de escribir las vueltas: «R1 6 sc», «Vuelta 1 →», «1pb», «<18>», «sc across»", async () => {
+    const page = await nuevaPagina(browser);
+    const pasos = t => page.evaluate(t => { const r = importarTexto(t, null, true); return r.pasos.map((l, i) => r.revision[i].estado + " | " + l); }, t);
+    assert.deepEqual(await pasos("Ball\nR1 6 sc in MR (6)\nR2 inc x6 (12)\nR3 (sc, inc) x6 (18)"),
+      ["cuadra | Vuelta 1: 6 pb en anillo mágico (6)", "cuadra | Vuelta 2: aum x6 (12)", "cuadra | Vuelta 3: *pb, aum* repetir 6 veces (18)"]);
+    assert.deepEqual(await pasos("Bola\nVuelta 1 → 6 pb en anillo (6)\nVuelta 2 → 6 aum (12)"), ["cuadra | Vuelta 1: 6 pb en anillo (6)", "cuadra | Vuelta 2: 6 aum (12)"]);
+    assert.deepEqual(await pasos("Bola\nV1: 6 pb en AM (6)\nV2: 6aum (12)\nV3: (1pb, 1aum)x6 (18)"),
+      ["cuadra | Vuelta 1: 6 pb en AM (6)", "cuadra | Vuelta 2: 6 aum (12)", "cuadra | Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)"]);
+    assert.deepEqual(await pasos("Ball\nRnd 1: 6 sc in MR <6>\nRnd 2: inc x6 <12>"), ["cuadra | Vuelta 1: 6 pb en anillo mágico (6)", "cuadra | Vuelta 2: aum x6 (12)"]);
+    assert.equal((await pasos("Scarf\nRow 1: ch 11, sc in 2nd ch from hook and across, turn. (10)\nRow 2: ch 1, sc across, turn. (10)"))[1], "cuadra | Fila 2: 1 cad, pb en cada punto, gira. (10)");
+    // «Round 1 (6):» no se toca: el total va antes de los dos puntos
+    assert.equal((await pasos("Ball\nRound 1 (6): 6 sc in MR\nRound 2 (12): inc in each st"))[0], "cuadra | Vuelta 1 (6): 6 pb en anillo mágico");
+    await page.context().close();
+  });
+  await prueba("la app abre en iPhone antiguos: sin «lookbehind» en las expresiones (iOS anterior al 16.4 no lo entiende)", async () => {
+    const html = fs.readFileSync(path.join(__dirname, "..", "tejiendo-ilusiones.html"), "utf8");
+    const codigo = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).join("\n").replace(/^\s*\/\/.*$/gm, "");
+    assert.doesNotMatch(codigo, /\(\?<[!=]/, "hay un (?<! o (?<= en el código");
+    // y la versión de pdf.js es la «legacy», que funciona en móviles antiguos
+    assert.match(html, /pdfjs-dist@3\.11\.174\/legacy\/build\//);
   });
   await prueba("importa un patrón en ruso y coge el color de la lana", async () => {
     const page = await nuevaPagina(browser);

@@ -1,4 +1,5 @@
 Copias exactas de las librerías que la app carga desde CDN, para la versión instalable (sin conexión) y los tests.
-pdf.min.js, pdf.worker.min.js   pdfjs-dist 3.11.174 (Apache-2.0)  = cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/
+pdf.min.js, pdf.worker.min.js   pdfjs-dist 3.11.174, versión «legacy» (Apache-2.0) = cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/
+                                 (la «legacy» funciona también en iPhone y Android antiguos)
 tesseract.min.js                tesseract.js 5.1.1 (Apache-2.0)   = cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/
 Si cambias de versión, cambia también PDFJS y TESSERACT en tejiendo-ilusiones.html.
