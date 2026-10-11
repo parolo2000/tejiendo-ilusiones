@@ -20,7 +20,7 @@
 :root{
   --bg:#F2F4EF; --surface:#FFFFFF; --sunk:#E9EDE7; --fg:#1F2B27; --muted:#56655F; --line:#D3DBD5;
   --accent:#8A2F5E; --accent-ink:#FFFFFF; --accent-soft:#F6E3EC; --thread:#2C6A63; --thread-ink:#FFFFFF; --thread-soft:#D9ECE8;
-  --gold:#B07A1E; --ok:#2E7D4F; --ok-soft:#DDF1E4; --danger:#B3261E;
+  --gold:#B07A1E; --ok:#2E7D4F; --ok-soft:#DDF1E4; --danger:#B3261E; --sim-mas:#1F8A4C; --sim-menos:#C2410C;
   --shadow:0 1px 2px rgba(31,43,39,.06),0 6px 20px rgba(31,43,39,.07);
   --display:"Young Serif", Georgia, "Times New Roman", serif;
   --body:"Atkinson Hyperlegible", "Segoe UI", Verdana, sans-serif;
@@ -29,11 +29,11 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#141A18; --surface:#1E2724; --sunk:#18201D; --fg:#EEF2EF; --muted:#A7B5AF; --line:#34413C;
   --accent:#E58DBA; --accent-ink:#2A0F1E; --accent-soft:#3B2431; --thread:#7CC7BD; --thread-ink:#0F2420; --thread-soft:#1D3431;
-  --gold:#E2B45B; --ok:#7FD39F; --ok-soft:#1E3a2a; --danger:#FF8A80; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); color-scheme:dark}}
+  --gold:#E2B45B; --ok:#7FD39F; --ok-soft:#1E3a2a; --danger:#FF8A80; --sim-mas:#6FD69A; --sim-menos:#FFA36E; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#141A18; --surface:#1E2724; --sunk:#18201D; --fg:#EEF2EF; --muted:#A7B5AF; --line:#34413C;
   --accent:#E58DBA; --accent-ink:#2A0F1E; --accent-soft:#3B2431; --thread:#7CC7BD; --thread-ink:#0F2420; --thread-soft:#1D3431;
-  --gold:#E2B45B; --ok:#7FD39F; --ok-soft:#1E3a2a; --danger:#FF8A80; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); color-scheme:dark}
+  --gold:#E2B45B; --ok:#7FD39F; --ok-soft:#1E3a2a; --danger:#FF8A80; --sim-mas:#6FD69A; --sim-menos:#FFA36E; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); color-scheme:dark}
 html{font-size:calc(20px * var(--scale))}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:1rem;line-height:1.5;margin:0;-webkit-tap-highlight-color:transparent}
 .wrap{max-width:48rem;margin:0 auto;padding-inline:16px;padding-block:0 calc(var(--tabs) + 2.5rem + env(safe-area-inset-bottom,0px))}
@@ -206,7 +206,21 @@ label.f small,.f small{font-weight:400;color:var(--muted)}
 .chart{display:block;margin:0 auto;cursor:crosshair}
 .chart .cell{fill:var(--surface);stroke:var(--line);stroke-width:1}
 .chart .cell.alt{fill:var(--sunk)}
-.chart .rowlab{fill:var(--muted);font:700 13px var(--body);font-variant-numeric:tabular-nums}
+.chart .rowlab{fill:var(--fg);font:700 15px var(--body);font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+/* Aumentos en verde y disminuciones en naranja: se ven de un vistazo dónde crece o mengua la labor */
+.chart .sim-aum,.chart .sim-aumpa{stroke:var(--sim-mas)} .chart .sim-dism{stroke:var(--sim-menos)}
+.chart .sim-aum text,.chart .sim-aumpa text{fill:var(--sim-mas)} .chart .sim-dism text{fill:var(--sim-menos)}
+.chart .ahora .sim{stroke:var(--accent)} .chart .ahora .sim text{fill:var(--accent)}
+.leyenda .sim-aum,.leyenda .sim-aumpa{stroke:var(--sim-mas);color:var(--sim-mas)} .leyenda .sim-dism{stroke:var(--sim-menos);color:var(--sim-menos)}
+.leyenda-letra{display:inline-block;min-width:2.2rem;text-align:center}
+.tocable circle.hl{stroke-opacity:.6} .tocable rect.hl{stroke-width:4}
+.chart .letra{stroke:none;fill:var(--fg);font-family:var(--body);font-weight:700}
+.chart .fila-tocada{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+.info-vuelta{background:var(--accent-soft);border-radius:.9rem;padding:.7rem .9rem;font-size:1.05rem}
+.info-vuelta b{color:var(--accent)}
+.ayudas-escribir{display:flex;flex-wrap:wrap;gap:.4rem}
+.ayudas-escribir button{min-height:2.6rem;padding:0 .8rem;font-weight:700}
+.ayudas-escribir button.nueva{background:var(--thread);color:var(--thread-ink);border-color:var(--thread)}
 .chart .hl{fill:none;stroke:var(--accent);stroke-width:3;stroke-opacity:.9}
 .chart circle.hl{stroke-opacity:.25}
 .chart .ahora{color:var(--accent)}
@@ -840,8 +854,17 @@ const SVGNS = "http://www.w3.org/2000/svg";
 function s(tag, attrs){ const el=document.createElementNS(SVGNS,tag); for(const [k,v] of Object.entries(attrs)) el.setAttribute(k,v); return el; }
 
 // Dibuja un símbolo en una caja de lado z con esquina (x,y). La parte de arriba del símbolo es "hacia fuera".
-function simbolo(k, x, y, z, col="currentColor"){
-  const g = s("g",{fill:"none", stroke:col, "stroke-width":Math.max(1.5, z/16), "stroke-linecap":"round", "stroke-linejoin":"round"});
+// Con «letras» en vez de símbolos se escribe la abreviatura (pb, aum…): más fácil para quien no conoce los símbolos
+const LETRAS = {am:"AM", cad:"cad", pd:"pd", pb:"pb", pbt:"pb", mpa:"mpa", pa:"pa", pad:"pad", aum:"aum", aumpa:"aum", dism:"dis", rel:"rel", pina:"piña", garb:"garb", picot:"pic"};
+const conLetras = () => !!(state && state.prefs && state.prefs.grafLetras);
+function simbolo(k, x, y, z, col="currentColor", letras=conLetras()){
+  const g = s("g",{fill:"none", stroke:col, "stroke-width":Math.max(1.5, z/16), "stroke-linecap":"round", "stroke-linejoin":"round", class:"sim sim-"+k});
+  if(letras && LETRAS[k]){
+    const t = LETRAS[k], fs = z*(t.length<=2 ? .5 : t.length===3 ? .4 : .32);
+    const tx = s("text",{x:x+z/2, y:y+z/2+fs*.36, "text-anchor":"middle", class:"letra", "font-size":fs.toFixed(1), stroke:"none", "font-weight":"700", "font-family":"Arial, sans-serif"});
+    if(col!=="currentColor") tx.setAttribute("fill", col);
+    tx.textContent = t; g.append(tx); return g;
+  }
   const X=a=>x+a*z, Y=b=>y+b*z;
   const L=(a,b,c,d)=>g.append(s("line",{x1:X(a),y1:Y(b),x2:X(c),y2:Y(d)}));
   const T=(cx)=>{ L(cx,.18,cx,.85); L(cx-.2,.18,cx+.2,.18); };
@@ -868,7 +891,7 @@ function iconoSimbolo(k, z=34){
   const v = s("svg",{width:z, height:z, viewBox:`0 0 ${z} ${z}`, "aria-hidden":"true"});
   if(k==="goma"){ const g=s("g",{stroke:"currentColor","stroke-width":2,fill:"none"}); g.append(s("rect",{x:z*.2,y:z*.3,width:z*.6,height:z*.4,rx:4})); g.append(s("line",{x1:z*.45,y1:z*.3,x2:z*.45,y2:z*.7})); v.append(g); }
   else if(k==="color"){ const g=s("g",{stroke:"currentColor","stroke-width":2,fill:"none"}); g.append(s("path",{d:`M${z*.25} ${z*.55} L${z*.5} ${z*.25} L${z*.75} ${z*.55} L${z*.5} ${z*.8} Z`})); g.append(s("circle",{cx:z*.82,cy:z*.72,r:z*.08,fill:"currentColor"})); v.append(g); }
-  else v.append(simbolo(k,0,0,z));
+  else v.append(simbolo(k,0,0,z,"currentColor",false));
   return v;
 }
 
@@ -1164,7 +1187,7 @@ function dibujarRedondo(g, {ancho=360, resaltar=-1, exp=false, mini=false, zMini
       const t = s("text",{x:px, y:py+rr*.45, "text-anchor":"middle", class:"ghostplus", style:"font-size:"+(rr*1.3)+"px"}); t.textContent="+"; svg.append(t);
     }
     if(!mini){
-      const lab = s("text",{x:C, y:C-R+4, "text-anchor":"middle", class:"rowlab", style:"font-size:"+Math.min(13, step*.42)+"px"});
+      const lab = s("text",{x:C, y:C-R+4, "text-anchor":"middle", class:"rowlab", style:"font-size:"+Math.min(16, step*.55)+"px"});
       if(exp){ lab.setAttribute("fill",EXP.lab); lab.setAttribute("font-family","Arial, sans-serif"); lab.setAttribute("font-weight","700"); }
       lab.textContent = String(a.k); svg.append(lab);
     }
@@ -1184,7 +1207,7 @@ function dibujarRedondo(g, {ancho=360, resaltar=-1, exp=false, mini=false, zMini
   return {svg, celda};
 }
 function celdaRedonda(v, px, py, rot, zz, parent, ink, ahora=false){
-  const gg = s("g",{transform:`translate(${px.toFixed(1)} ${py.toFixed(1)}) rotate(${rot.toFixed(1)})`});
+  const gg = s("g",{transform:`translate(${px.toFixed(1)} ${py.toFixed(1)})`+(conLetras() && pk(v) && LETRAS[pk(v)] ? "" : ` rotate(${rot.toFixed(1)})`)});
   if(ahora) gg.setAttribute("class","ahora");
   const c = pcol(v);
   if(c>=0) gg.append(s("circle",{cx:0, cy:0, r:zz*.48, fill:LANAS[c][0], "fill-opacity":.75, stroke:"#000", "stroke-opacity":.18, "stroke-width":.8}));
@@ -1435,7 +1458,7 @@ function leyendaDe(g){
   const cuentaL = i => g.celdas.reduce((a,f)=>a+f.filter(v=>pcol(v)===i).length,0);
   if(!usados.length && !lanas.length) return [h("dd",{class:"muted", style:"grid-column:1/-1"},"Todavía no hay puntos. Toca el gráfico para dibujar.")];
   return [
-    ...usados.flatMap(x=>[h("dt",{},iconoSimbolo(x.k,30)), h("dd",{}, x.n+"  ", h("span",{class:"muted"},"× "+cuenta(x.k)))]),
+    ...usados.flatMap(x=>[h("dt",{}, conLetras() && LETRAS[x.k] ? h("b",{class:"leyenda-letra sim-"+x.k}, LETRAS[x.k]) : h("span",{class:"sim-"+x.k}, iconoSimbolo(x.k,30))), h("dd",{}, x.n+"  ", h("span",{class:"muted"},"× "+cuenta(x.k)))]),
     ...lanas.flatMap(([l,i])=>[h("dt",{}, h("span",{class:"lana", style:"background:"+l[0]})), h("dd",{},"Lana "+l[1]+"  ", h("span",{class:"muted"},"× "+cuentaL(i)))])
   ];
 }
@@ -1936,9 +1959,7 @@ VISTAS.patron = V => {
     ...(!graf || !graf.celdas.some(hayPunto) ? [] : [h("div",{class:"section"},
       h("div",{class:"sechead"}, h("h2",{}, parteSel ? "Gráfico · "+nombreParte(view.parte) : "Gráfico"), h("span",{class:"muted", style:"font-size:.85rem"}, graf.vista==="redondo" ? "Se empieza por el centro" : "La vuelta 1 es la de abajo")),
       h("div",{class:"panel stack", style:"gap:.6rem"},
-        h("div",{class:"gridwrap grafico-patron", style:"cursor:pointer", role:"button", tabindex:"0", "aria-label":"Abrir el dibujo en grande", onclick:()=>verGrafico()},
-          (()=>{ const an = Math.max(240, Math.min(window.innerWidth-56, 720)); return encajar(dibujarGrafico(graf, {ancho:an, minZ:16, minStep:12}).svg, an); })()),
-        h("dl",{class:"leyenda"}, ...leyendaDe(graf)),
+        h("div",{class:"grafico-patron"}, graficoTocable(graf, p.grafico && !parteSel ? null : textoParaGrafico((subSel || p).pasos.join("\n")).split("\n"), Math.max(240, Math.min(window.innerWidth-56, 720)))),
         h("button",{onclick:()=>verGrafico()}, icono("rejilla",20), "Ver en grande o cambiarlo")))]),
     h("div",{class:"section"},
       h("div",{class:"sechead"}, h("h2",{},"Instrucciones"), h("span",{class:"muted", style:"font-size:.85rem"},"Toca un paso para ir a él")),
@@ -2598,6 +2619,98 @@ function encajar(svg, ancho){
   if(W <= ancho*1.8){ svg.style.width = "100%"; svg.style.height = "auto"; svg.style.maxWidth = W+"px"; }
   return svg;
 }
+// El gráfico que se puede tocar: al tocar una vuelta se marca y debajo se lee qué dice. Con «Letras» pone pb, aum…
+// en vez de los símbolos. lineas: el texto del que sale el dibujo, para enseñar la línea tal cual está escrita.
+function graficoTocable(g, lineas, ancho, alCambiar){
+  const caja = h("div",{class:"stack", style:"gap:.6rem"});
+  const porLinea = lineas ? filasPorLinea(lineas).map(f=>f.length) : [];
+  const filaALinea = []; porLinea.forEach((n,i)=>{ for(let k=0;k<n;k++) filaALinea.push(i); });
+  const conPuntos = g.celdas.map((f,r)=>hayPunto(f) ? r : -1).filter(r=>r>=0);
+  const desfase = conPuntos.length===filaALinea.length+1 && soloAnillo(g.celdas[conPuntos[0]]) ? 1 : 0;
+  const cuadraMapa = conPuntos.length===filaALinea.length+desfase;
+  const V = /fila|hilera/i.test((lineas||[]).join(" ")) ? "Fila" : "Vuelta";
+  let marcada = -1;
+  const info = h("div",{class:"info-vuelta", "aria-live":"polite"}, "👆 Toca una vuelta del dibujo y aquí te digo qué hay que hacer en ella.");
+  const zona = h("div",{class:"gridwrap", style:"cursor:pointer"});
+  const letras = h("div",{class:"seg", role:"group", "aria-label":"Cómo se ven los puntos"});
+  function pintarLetras(){
+    const L = conLetras();
+    letras.replaceChildren(...[[false,"Símbolos"],[true,"Letras (pb)"]].map(([v,l])=>h("button",{class:L===v?"sel":"", "aria-pressed":String(L===v), onclick:()=>{ state.prefs.grafLetras = v; save(); pintarLetras(); pintar(); if(alCambiar) alCambiar(); }}, l)));
+  }
+  function decir(r){
+    const i = conPuntos.indexOf(r);
+    if(i<0) return;
+    if(soloAnillo(g.celdas[r])){ info.replaceChildren(h("b",{},"El centro: "), "empieza con un anillo mágico."); return; }
+    const baseR = conPuntos.length && esCadenetaBase(g, conPuntos[0]) ? conPuntos[0] : -1;
+    const k = i - (conPuntos.length && soloAnillo(g.celdas[conPuntos[0]]) ? 1 : 0) - (baseR>=0 ? 1 : 0) + 1;
+    const linea = cuadraMapa && lineas ? (lineas[filaALinea[i-desfase]]||"").trim() : "";
+    const txt = linea ? linea.replace(/^\s*(?:vueltas?|filas?|hileras?)\s*[\d\s,ay\-al]*:\s*/i, "") : filaATexto(g.celdas[r]);
+    const rango = linea && /^\s*(?:vueltas|filas|hileras)\s+\d+\s*(?:a|al|-)\s*\d+/i.test(linea) ? linea.match(/^\s*\S+\s+\d+\s*(?:a|al|-)\s*\d+/)[0].trim() : null;
+    info.replaceChildren(h("b",{}, r===baseR ? "Cadeneta de base: " : V+" "+k+": "), txt, rango ? h("small",{class:"muted", style:"display:block;margin-top:.2rem"}, "Es igual en las "+rango.toLowerCase()+".") : null);
+  }
+  function pintar(){
+    const dib = dibujarGrafico(g, {ancho, minZ:16, minStep:12, resaltar: marcada});
+    dib.svg.classList.add("tocable");
+    zona.replaceChildren(encajar(dib.svg, ancho));
+    dib.svg.addEventListener("click", ev=>{ const rc = dib.celda(ev); if(!rc) return;
+      let r = rc[0]; if(r===-1) r = conPuntos.find(x=>soloAnillo(g.celdas[x])) ?? -1; if(r<0) return;
+      marcada = r; pintar(); decir(r); });
+  }
+  pintarLetras(); pintar();
+  caja.append(letras, zona, info, h("dl",{class:"leyenda"}, ...leyendaDe(g)));
+  return caja;
+}
+// Botones para escribir sin pelearse con el teclado del móvil: «＋ Nueva vuelta» pone «Vuelta 4: » con el número
+// que toca, los puntos se añaden donde está el cursor y «Poner el total» cuenta los puntos de esa línea.
+function ayudasEscribir(ta){
+  const meter = txt => {
+    const a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a;
+    const antes = ta.value.slice(0, a), despues = ta.value.slice(b);
+    const t = (antes && !/[\s(*]$/.test(antes) && !/^[,)]/.test(txt) ? " " : "") + txt;
+    ta.value = antes + t + despues; const pos = (antes+t).length;
+    ta.focus(); try{ ta.setSelectionRange(pos, pos); }catch(e){}
+    ta.dispatchEvent(new Event("input", {bubbles:true}));
+  };
+  const nueva = () => {
+    let ultimo = 0, palabra = "Vuelta";
+    for(const l of ta.value.split("\n")){ const m = l.match(/^\s*(vueltas?|filas?|hileras?|rondas?)\s*(\d+)(?:\s*(?:a|al|-)\s*(\d+))?/i);
+      if(m){ ultimo = Math.max(ultimo, +(m[3]||m[2])); palabra = /^f/i.test(m[1]) ? "Fila" : /^h/i.test(m[1]) ? "Hilera" : "Vuelta"; } }
+    const v = ta.value.replace(/\s+$/, "");
+    ta.value = (v ? v+"\n" : "") + palabra+" "+(ultimo+1)+": ";
+    ta.focus(); try{ ta.setSelectionRange(ta.value.length, ta.value.length); }catch(e){}
+    ta.dispatchEvent(new Event("input", {bubbles:true}));
+  };
+  const total = () => {
+    const a = ta.selectionStart ?? ta.value.length;
+    const ini = ta.value.lastIndexOf("\n", a-1)+1, finN = ta.value.indexOf("\n", a), fin = finN<0 ? ta.value.length : finN;
+    const linea = ta.value.slice(ini, fin);
+    const r = revisarLinea(linea.replace(/\s*\(\d+[^)]*\)\s*\.?\s*$/, ""));
+    if(!r.n){ toast("Escribe primero los puntos de la vuelta"); return; }
+    const nueva = linea.replace(/\s*\(\d+[^)]*\)\s*\.?\s*$/, "").replace(/\s+$/, "")+" ("+r.n+")";
+    ta.value = ta.value.slice(0, ini)+nueva+ta.value.slice(fin);
+    ta.focus(); try{ ta.setSelectionRange(ini+nueva.length, ini+nueva.length); }catch(e){}
+    ta.dispatchEvent(new Event("input", {bubbles:true}));
+    toast("Son "+r.n+" puntos");
+  };
+  const b = (txt, fn, cls, aria) => h("button",{type:"button", class:cls||"", "aria-label":aria||null, onmousedown:e=>e.preventDefault(), onclick:fn}, txt);
+  return h("div",{class:"ayudas-escribir", role:"group", "aria-label":"Ayudas para escribir"},
+    b("＋ Nueva vuelta", nueva, "nueva"),
+    ...["pb","aum","dism","pa","mpa","cad","pd"].map(k=>b(k, ()=>meter(k+(k==="cad"||k==="pd"?"":"")), "", "Añadir "+(NOMBRE[k]||k))),
+    b("anillo mágico", ()=>meter("en anillo mágico")),
+    b(", ", ()=>meter(", "), "", "Añadir una coma"),
+    b("Poner el total", total));
+}
+// Vueltas que no cuadran, dichas claro: «La vuelta 3 tiene 17 puntos, pero dice 18»
+function avisosCuadre(pasos){
+  const mal = [];
+  for(const t of pasos){
+    if(esParte(t)) continue;
+    const r = revisarLinea(t); if(r.estado!=="distinto") continue;
+    const n = (t.match(/^\s*(?:vueltas?|filas?|hileras?)\s*(\d+(?:\s*a\s*\d+)?)/i)||[])[1];
+    mal.push(h("p",{class:"note", style:"background:var(--accent-soft)"}, "⚠️ ", h("b",{}, n ? (/fila|hilera/i.test(t) ? "Fila " : "Vuelta ")+n : "Una vuelta"), ": cuento "+r.n+" puntos, pero el patrón dice "+r.obj+". Revisa lo que has escrito."));
+  }
+  return mal.slice(0, 3);
+}
 function previaGrafico(){
   const caja = h("section",{class:"panel previa stack", "aria-live":"polite"});
   let vistaElegida = null, parteSel = null, ultimos = [];
@@ -2615,7 +2728,6 @@ function previaGrafico(){
     }
     const gv = {...g, vista: vistaElegida || g.vista};
     const ancho = Math.max(240, (caja.clientWidth || Math.min(window.innerWidth-32, 720)) - 32);
-    const dib = dibujarGrafico(gv, {ancho, minZ:16, minStep:12});
     const filas = g.celdas.filter((f,r)=>hayPunto(f) && !soloAnillo(f) && !(r===g.celdas.findIndex(hayPunto) && esCadenetaBase(g, r)));
     const puntos = filas.map(f=>f.map(pk).filter(Boolean).reduce((a,k)=>a+anchoDe(k),0));
     const V1 = /fila|hilera/i.test(sub.pasos.join(" ")) ? ["fila","filas"] : ["vuelta","vueltas"];
@@ -2624,11 +2736,10 @@ function previaGrafico(){
       cab,
       partes.length ? h("div",{class:"row", style:"gap:.4rem", role:"group", "aria-label":"Partes"}, partes.map(i=>h("button",{class:"chip-parte"+(i===parteSel?" sel":""), "aria-pressed":String(i===parteSel), onclick:()=>{ parteSel=i; pintar(ultimos); }}, nombreParte(i)))) : null,
       h("div",{class:"seg", role:"group", "aria-label":"Forma del gráfico"}, [["redondo","◎ En redondo"],["filas","▦ En filas"]].map(([v,l])=>h("button",{class:gv.vista===v?"sel":"", "aria-pressed":String(gv.vista===v), onclick:()=>{ vistaElegida=v; pintar(ultimos); }}, l))),
-      h("div",{class:"gridwrap previa-dib", style:"cursor:default"}, encajar(dib.svg, ancho)),
-      h("p",{class:"muted", style:"font-size:.9rem"}, filas.length+" "+(filas.length===1?V1[0]:V1[1])+(puntos.length ? " · de "+Math.min(...puntos)+" a "+Math.max(...puntos)+" puntos" : "")+(gv.vista==="redondo" ? ". Se empieza por el centro." : ". La "+V1[0]+" 1 es la de abajo.")),
-      h("dl",{class:"leyenda"}, ...leyendaDe(gv))
+      h("p",{class:"muted", style:"font-size:.95rem"}, filas.length+" "+(filas.length===1?V1[0]:V1[1])+(puntos.length ? " · de "+Math.min(...puntos)+" a "+Math.max(...puntos)+" puntos" : "")+(gv.vista==="redondo" ? ". Se empieza por el centro." : ". La "+V1[0]+" 1 es la de abajo.")),
+      ...avisosCuadre(sub.pasos),
+      graficoTocable(gv, textoParaGrafico(sub.pasos.join("\n")).split("\n"), ancho)
     ].filter(Boolean));
-    if(gv.vista==="redondo") requestAnimationFrame(()=>{ const w = caja.querySelector(".previa-dib"); if(w) w.scrollLeft = (w.scrollWidth-w.clientWidth)/2; });
   }
   return {caja, pintar};
 }
@@ -2673,7 +2784,7 @@ VISTAS.editar = V => {
       h("label",{class:"f"},"Descripción", f.descripcion),
       h("div",{class:"two"}, h("label",{class:"f"},"Hilo", f.hilo), h("label",{class:"f"},"Ganchillo", f.ganchillo)),
       h("div",{class:"two"}, h("label",{class:"f"},"Dificultad", f.nivel), h("div",{class:"f"},"Color de la ficha", sw)),
-      h("label",{class:"f"},"Pasos", h("small",{},"Escribe cada vuelta o paso en una línea, como en las revistas. Pon el total de puntos entre paréntesis y la app te avisará cuando cuadre."), f.pasos),
+      h("label",{class:"f", for:"ed-pasos"},"Pasos", h("small",{},"Escribe cada vuelta en una línea, como en las revistas. Toca «＋ Nueva vuelta» y luego los puntos. El dibujo sale debajo."), ayudasEscribir(f.pasos), f.pasos),
       prevBtn,
       h("label",{class:"f"},"Notas", f.notas),
       err,
@@ -3683,6 +3794,7 @@ VISTAS.grafico = V => {
       g.modo==="color" ? null : h("div",{class:"panel stack escribe", style:"gap:.5rem"},
         h("label",{class:"f", for:"gr-texto", style:"margin:0"}, "Escribe el patrón y se dibuja solo",
           h("small",{}, "Una vuelta por línea, como en las revistas: «Vuelta 1: 6 pb en anillo mágico (6)». Entiende pb, pa, mpa, cad, aum, dism, repeticiones «(1 pb, 1 aum) x 6» y también inglés y ruso.")),
+        ayudasEscribir(texto),
         texto,
         h("div",{class:"row"}, h("button",{onclick:()=>{ texto.value = graficoATexto(g); g.texto=texto.value; save(); aviso.textContent="He escrito lo que hay dibujado."; }},"Escribir lo que he dibujado")),
         aviso),

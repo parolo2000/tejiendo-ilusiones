@@ -1158,6 +1158,29 @@ Fasten off and weave in ends.`;
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });
+  await prueba("para personas mayores: botones para escribir, tocar una vuelta del gráfico y verlo con letras", async () => {
+    const page = await nuevaPagina(browser);
+    await page.evaluate(() => go({ name: "editar" }));
+    const B = n => page.locator(".ayudas-escribir button", { hasText: n }).first();
+    await B("Nueva vuelta").tap(); await page.keyboard.type("6"); await B("pb").tap(); await B("anillo").tap(); await B("Poner el total").tap();
+    await B("Nueva vuelta").tap(); await page.keyboard.type("6"); await B("aum").tap(); await B("Poner el total").tap();
+    assert.equal(await page.locator("#ed-pasos").inputValue(), "Vuelta 1: 6 pb en anillo mágico (6)\nVuelta 2: 6 aum (12)");
+    await page.waitForFunction(() => document.querySelector(".previa svg.chart"));
+    // Tocar el dibujo dice qué hay que hacer en esa vuelta
+    const svg = page.locator(".previa svg.chart");
+    const caja = await svg.boundingBox();
+    await svg.tap({ position: { x: caja.width / 2, y: caja.height * 0.06 } });
+    assert.match(await page.locator(".previa .info-vuelta").innerText(), /^Vuelta 2: 6 aum \(12\)/);
+    // Con letras se escribe «aum» en vez del símbolo, y se recuerda
+    await page.locator(".previa button", { hasText: "Letras" }).tap();
+    assert.ok(await page.locator(".previa svg.chart text.letra", { hasText: "aum" }).count() >= 6);
+    assert.equal(await page.evaluate(() => state.prefs.grafLetras), true);
+    // Una vuelta que no cuadra se dice claro
+    await page.locator("#ed-pasos").fill("Vuelta 1: 6 pb en anillo mágico (6)\nVuelta 2: 5 aum (12)");
+    await page.waitForFunction(() => /Vuelta 2.*cuento 10 puntos, pero el patrón dice 12/.test(document.querySelector(".previa").innerText));
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
   await prueba("la app abre en iPhone antiguos: sin «lookbehind» en las expresiones (iOS anterior al 16.4 no lo entiende)", async () => {
     const html = fs.readFileSync(path.join(__dirname, "..", "tejiendo-ilusiones.html"), "utf8");
     const codigo = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).join("\n").replace(/^\s*\/\/.*$/gm, "");

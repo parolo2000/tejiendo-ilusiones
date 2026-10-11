@@ -428,3 +428,18 @@ Capturas en `tests/capturas/`.
 - En la ficha de cada patrón, el gráfico entero a la vista con su leyenda.
 - Editor: el gráfico cabe entero en la pantalla al abrirlo (la lupa sigue); la paleta va en «Cambiar puntos a mano»
   y los ＋ para añadir puntos en redondo solo salen con ese panel abierto.
+
+## 2026-10-11 · Gráficos más claros para personas mayores
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-11-antes-mayores.html`.
+- Aumentos en verde y disminuciones en naranja en todos los gráficos (también en la leyenda): se ve de un vistazo
+  dónde crece o mengua la labor. Variables `--sim-mas` / `--sim-menos` con modo oscuro.
+- «Símbolos / Letras (pb)»: con letras se escribe pb, aum, dis… en cada punto (sin girar en redondo). Se recuerda
+  en `state.prefs.grafLetras` (sin valor por defecto: no cambia los datos guardados).
+- Gráfico que se toca (`graficoTocable`): al tocar una vuelta se marca y debajo dice qué hacer («Vuelta 4: 18 pb
+  (18) · Es igual en las vueltas 4 a 6»). En la vista previa y en la ficha del patrón.
+- Números de vuelta más grandes y con contorno para que se lean sobre el dibujo.
+- Botones para escribir (`ayudasEscribir`): «＋ Nueva vuelta» con el número que toca, pb, aum, dism, pa, mpa, cad,
+  pd, anillo mágico, coma y «Poner el total», que cuenta los puntos de la línea. En «Escribir un patrón» y en el
+  editor de gráficos.
+- Vueltas que no cuadran, dichas claro bajo el gráfico: «Vuelta 2: cuento 10 puntos, pero el patrón dice 12».
