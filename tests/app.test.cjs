@@ -1123,6 +1123,41 @@ Fasten off and weave in ends.`;
     assert.equal((await pasos("Ball\nRound 1 (6): 6 sc in MR\nRound 2 (12): inc in each st"))[0], "cuadra | Vuelta 1 (6): 6 pb en anillo mágico");
     await page.context().close();
   });
+  await prueba("gráfico: se escriba como se escriba, sale entero y con los puntos que dice cada vuelta", async () => {
+    const page = await nuevaPagina(browser);
+    const casos = [
+      ["Vuelta 1: 6 pb en anillo mágico (6)\nVuelta 2: 6 aum (12)\nVuelta 3: (1 pb, 1 aum) x 6 (18)\nVuelta 4: (2 pb, 1 aum) x 6 (24)\nVueltas 5 a 8: 24 pb (24)\nVuelta 9: (2 pb, 1 dism) x 6 (18)\nVuelta 10: (1 pb, 1 dism) x 6 (12)", "redondo", [6, 12, 18, 24, 24, 24, 24, 24, 18, 12]],
+      ["Anillo mágico\nV1: 6pb (6)\nV2: 6aum (12)\nV3: (1pb, 1aum)x6 (18)\nV4: [2pb, 1aum] x6 (24)", "redondo", [6, 12, 18, 24]],
+      ["Rnd 1: 6 sc in MR (6)\nRnd 2: inc x6 (12)\nRnd 3: (sc, inc) x6 (18)\nRnd 4: [2 sc, inc] around (24)", "redondo", [6, 12, 18, 24]],
+      ["Ряд 1: 6 сбн в КА (6)\nРяд 2: 6 пр (12)\nРяд 3: (1 сбн, пр) х 6 (18)", "redondo", [6, 12, 18]],
+      ["Vta 1: 6 mp en anillo (6)\nVta 2: 6 au (12)\nVta 3: (1 mp, 1 au) x 6 (18)", "redondo", [6, 12, 18]],
+      ["Vuelta 1: 6 pb en anillo mágico\nVuelta 2: aumentar en todos los puntos\nVuelta 3: 1 pb, 1 aum, repetir 6 veces", "redondo", [6, 12, 18]],
+      ["Vuelta 1: 3 cad (cuenta como 1 pa), 11 pa en anillo, cierra con pd (12)\nVuelta 2: 3 cad, 1 pa en el mismo punto, 2 pa en cada punto (24)", "redondo", [12, 24]],
+      ["Monta 21 cad.\nFila 1: 1 pb en la 2ª cad y en cada cad, gira. (20)\nFila 2: 1 cad, 20 pb, gira. (20)\nFilas 3 a 5: igual que la fila 2. (20)", "filas", [0, 20, 20, 20, 20, 20]],
+    ];
+    for (const [t, vista, puntos] of casos) {
+      const r = await page.evaluate(t => { const g = { cols: 10, celdas: [], vista: "filas" }; graficoDesdeTexto(g, t, true);
+        return { vista: g.vista, puntos: g.celdas.filter(f => hayPunto(f) && !soloAnillo(f)).map(f => f.map(pk).filter(Boolean).reduce((a, k) => a + anchoDe(k), 0)) }; }, t);
+      assert.deepEqual(r, { vista, puntos }, t);
+    }
+    // Escribir un patrón: el gráfico aparece solo mientras se escribe, sin tocar ningún botón
+    await page.evaluate(() => go({ name: "editar" }));
+    await page.locator("#ed-pasos").fill(casos[0][0]);
+    await page.waitForFunction(() => document.querySelector(".previa svg.chart"));
+    assert.match(await page.locator(".previa").innerText(), /10 vueltas/);
+    // Añadir un patrón: al pegar, sale el gráfico de cada parte
+    await page.evaluate(() => go({ name: "importar" }));
+    await page.locator("#im-texto").fill("Osito\nCABEZA\nVuelta 1: 6 pb en anillo mágico (6)\nVuelta 2: 6 aum (12)\nOREJAS (hacer 2)\nVuelta 1: 6 pb en anillo mágico (6)\nVuelta 2: (1 pb, 1 aum) x 3 (9)");
+    await page.waitForFunction(() => document.querySelectorAll(".previa .chip-parte").length === 2);
+    await page.locator(".previa .chip-parte").nth(1).tap();
+    assert.match(await page.locator(".previa").innerText(), /2 vueltas · de 6 a 9 puntos/);
+    // Editor de gráficos: escribir arriba lo dibuja al momento
+    await page.evaluate(() => { const g = nuevoGrafico(); go({ name: "grafico", id: g.id }); });
+    await page.locator("#gr-texto").fill(casos[2][0]);
+    await page.waitForFunction(() => state.graficos[0].vista === "redondo" && state.graficos[0].celdas.filter(f => hayPunto(f) && !soloAnillo(f)).length === 4);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
   await prueba("la app abre en iPhone antiguos: sin «lookbehind» en las expresiones (iOS anterior al 16.4 no lo entiende)", async () => {
     const html = fs.readFileSync(path.join(__dirname, "..", "tejiendo-ilusiones.html"), "utf8");
     const codigo = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).join("\n").replace(/^\s*\/\/.*$/gm, "");
@@ -1221,7 +1256,7 @@ Fasten off and weave in ends.`;
     await page.evaluate(() => { state.patrones.unshift({ id: "m-par", titulo: "Pingüino", color: "#8A9594", pasos: ["Parte: CUERPO · con gris", "Vuelta 1: 18 cad, 1 pd en la primera cad (18)",
       "Parte: PIES (hacer 2) · con anaranjado", "Vuelta 1: 6 pb en anillo mágico (6)", "Vuelta 2: 6 aum (12)"] }); save(); go({ name: "patron", id: "m-par" }); });
     assert.equal(await page.locator(".chip-parte").count(), 2);
-    assert.match(await page.locator(".hero-par figcaption").first().textContent(), /CUERPO.*En filas/);
+    assert.match(await page.locator(".hero-par figcaption").first().textContent(), /CUERPO.*En redondo/);
     await page.locator(".chip-parte", { hasText: "PIES" }).tap();
     assert.match(await page.locator(".hero-par figcaption").first().textContent(), /PIES.*En redondo/);
     await page.getByRole("button", { name: "Ver el gráfico" }).tap();

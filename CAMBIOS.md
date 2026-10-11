@@ -411,3 +411,20 @@ Capturas en `tests/capturas/`.
 - Aviso flotante (toast) en pantallas estrechas: ya no se hace una columna altísima que tapa la pantalla.
 - PDF de prueba: 187 (11 estilos); fallan solo los de letras separadas al sacar el texto, que en la app se leen
   como foto y salen bien. El PDF del unicornio sale igual. 71 pruebas bien.
+
+## 2026-10-11 · Escribir y que salga el gráfico
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-11-antes-graficos.html`.
+- Fallo grave: escrito a mano, «(1 pb, 1 aum) x 6» o «[2 pb, aum] x6» no salía en el gráfico (faltaban vueltas
+  enteras). `lineaAFilas` entiende repeticiones entre paréntesis o corchetes, y el gráfico pasa antes por el mismo
+  lector que «Añadir un patrón» (`textoParaGrafico`): inglés, ruso, mp/au/var, «V1:», «1.», «(1pb, 1aum)x6».
+- «3 cad (cuentan como 1 pa)» se dibuja como el primer pa de la vuelta (también en las vueltas siguientes).
+- «Filas 3 a 10: igual que la fila 2» / «repite la vuelta 2» copia esa fila (`filasPorLinea`).
+- «aumentar en todos los puntos» sin total: usa los puntos de la vuelta anterior.
+- En redondo también si empieza en un anillo de cadenetas o cierra con pd sin girar.
+- La cadeneta de base va abajo con la etiqueta «base» y la fila 1 encima.
+- El gráfico se dibuja solo mientras se escribe: en «Escribir un patrón», en «Añadir un patrón» (también al pegar,
+  con una pestaña por parte) y arriba del todo en el editor de gráficos. Sin botones.
+- En la ficha de cada patrón, el gráfico entero a la vista con su leyenda.
+- Editor: el gráfico cabe entero en la pantalla al abrirlo (la lupa sigue); la paleta va en «Cambiar puntos a mano»
+  y los ＋ para añadir puntos en redondo solo salen con ese panel abierto.

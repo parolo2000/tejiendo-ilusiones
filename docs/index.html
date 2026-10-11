@@ -888,8 +888,11 @@ const SINONIMOS = [
   [/(puntos? )?garbanzos?|\bbobble\b/g,"garb"],
   [/piquitos?|picots?/g,"picot"],
   [/magic ring|\bmr\b/g,"anillo magico"],
-  [/aumentos?|\binc\b/g,"aum"],
-  [/disminuciones?|\bdec\b/g,"dism"],
+  [/aumentos?|aumentar|aumenta\b|aumentando|\binc\b|\bau\b/g,"aum"],
+  [/disminuciones?|disminuir|disminuye\b|disminuyendo|menguados?|\bdec\b|\bdis\b/g,"dism"],
+  // Latinoamérica: mp = medio punto (pb), var = vareta (pa), mv = media vareta (mpa)
+  [/\bmp\b/g,"pb"],[/\bmv\b/g,"mpa"],[/\bvar\b/g,"pa"],
+  [/\ben (todos|todas) (los|las) (puntos|pb|pa|cad|cadenetas)\b|\ben todo el (contorno|aro)\b/g,"en cada punto"],
   [/\bin (each|every) (st|stitch|sc|dc)\b|\bin each\b/g,"en cada punto"],[/\bin (the )?same (st|stitch)\b/g,"en el mismo punto"],[/\bin (the )?next (st|stitch)\b/g,"en el siguiente"],
   [/\brepeat\b/g,"repetir"],[/\btimes\b/g,"veces"],[/\b(round|rnd|row)\b/g,"vuelta"]
 ];
@@ -912,7 +915,7 @@ function segmentoAPuntos(seg, total){
     const dosEnUno = n===2 && !["aum","aumpa","cad","dism","pd"].includes(k);
     // «1 pb en la 2ª cad y en cada cad»: un punto en cada uno desde ahí, igual que «en cada punto»
     if(/^\s*(en ese sitio\s+y\s+)?en cada (punto|pb|pa)/.test(resto) && total){
-      if(dosEnUno){ for(let i=0;i<Math.round(total/2);i++) out.push(k==="pa"?"aumpa":"aum"); }
+      if(dosEnUno){ const ya = out.reduce((x,q)=>x+anchoDe(q),0); for(let i=0;i<Math.round(Math.max(0,total-ya)/2);i++) out.push(k==="pa"?"aumpa":"aum"); }
       else { const ya = out.reduce((x,q)=>x+anchoDe(q),0), cada = (k==="aum"||k==="aumpa")?Math.round(total/2):Math.max(1,total-ya); for(let i=0;i<cada;i++) out.push(k); }
       continue;
     }
@@ -922,14 +925,21 @@ function segmentoAPuntos(seg, total){
   }
   return out;
 }
-function lineaAFilas(linea){
+// previo: puntos de la vuelta anterior, para «aum en cada punto» sin total escrito
+function lineaAFilas(linea, previo=0){
   let t = normalizar(linea);
   let veces = 1;
   const rango = t.match(/(?:vueltas?|filas?|hileras?)\s*(\d+)\s*(?:a|al|-|y)\s*(\d+)/);
   if(rango) veces = Math.max(1, Math.min(60, +rango[2]-(+rango[1])+1));
   t = t.replace(/^\s*(vueltas?|v|filas?|hileras?)\s*[\d\s,ay\-al]*[:.]/,"");
+  // Repeticiones entre paréntesis o corchetes: «(1 pb, 1 aum) x 6», «[2 pb, aum] 6 veces», «(pb, aum) alrededor»
+  const PUNTO_EN = /\b(pbt|pb|mpa|pad|pa|pd|cad|aum|aumpa|dism|rel|pina|garb|picot)\b/;
+  t = t.replace(/[(\[]([^()\[\]]*)[)\]]\s*(?:(?:x|×|por)\s*(\d+)|(\d+)\s*veces|repetir\s*(\d+)\s*veces|(?=(?:alrededor|hasta el final|en toda la vuelta|repetir alrededor)\b))/g,
+    (m, a, n1, n2, n3) => PUNTO_EN.test(a) ? "*"+a+"*"+((n1||n2||n3) ? " repetir "+(n1||n2||n3)+" veces" : " ") : m);
   const totales = [...t.matchAll(/\((\d+)[^)]*\)/g)].map(x=>+x[1]);
-  const total = totales.length ? totales[totales.length-1] : 0;
+  let total = totales.length ? totales[totales.length-1] : 0;
+  if(!total && previo && /en cada punto/.test(t.replace(/\([^)]*\)/g," ")))
+    total = /\baum(pa)?\b[^,;*]*en cada punto|\b2\s*(pb|pa|mpa|pad)\s+en cada punto/.test(t) ? previo*2 : previo;
   t = t.replace(/\([^)]*\)/g," ");
   if(/anillo magico|\bam\b/.test(t) && !/\b(pb|pbt|pa|mpa|pad|cad|pd|aum|aumpa|dism|rel|pina|garb|picot)\b/.test(t)) return [["am"]];
   let fila = [];
@@ -954,7 +964,25 @@ function lineaAFilas(linea){
   if(!fila.length) return [];
   return Array.from({length:veces}, ()=>[...fila]);
 }
-function textoAFilas(texto){ return texto.split("\n").flatMap(l=>l.trim()?lineaAFilas(l):[]); }
+// Líneas que repiten otra vuelta («Filas 3 a 10: igual que la fila 2», «Rows 3-20: repeat row 2») copian sus puntos
+function textoAFilas(texto){ return filasPorLinea(texto.split("\n")).flat(); }
+function filasPorLinea(lineas){
+  const porNumero = {}, out = [];
+  for(const l of lineas){
+    if(!l.trim()){ out.push([]); continue; }
+    const ant = out.flat().pop(), previo = ant && !soloAnillo(ant) ? ant.reduce((a,k)=>a+anchoDe(k),0) || ant.length : 0;
+    let filas = lineaAFilas(l, previo);
+    const t = normalizar(l), num = t.match(/^\s*(?:vueltas?|filas?|hileras?)\s*(\d+)(?:\s*(?:a|al|-)\s*(\d+))?/);
+    const copia = t.match(/(?:igual que|como|repite|repetir|repetimos)\s+(?:la\s+|el\s+)?(?:vuelta|fila|hilera)\s*(\d+)/);
+    if(copia && porNumero[copia[1]] && (!filas.length || /^\s*(?:vueltas?|filas?|hileras?)[\s\d,ay\-al]*[:.]?\s*(?:igual|como|repet|repit)/.test(t))){
+      const veces = num && num[2] ? Math.max(1, Math.min(60, +num[2]-(+num[1])+1)) : 1;
+      filas = Array.from({length:veces}, ()=>[...porNumero[copia[1]]]);
+    }
+    if(num && filas.length) filas.forEach((f, i)=>{ porNumero[+num[1]+i] = f; });
+    out.push(filas);
+  }
+  return out;
+}
 
 // ---------- Gráfico → texto ----------
 const ESCRITO = {am:"anillo mágico", aumpa:"aum de pa", pbt:"pb hebra de atrás", rel:"pa en relieve", pina:"piña", garb:"garbanzo", picot:"picot"};
@@ -1037,6 +1065,10 @@ const EXP = {cell:"#FFFFFF", alt:"#F1F4EF", line:"#C9D2CC", lab:"#56655F", ink:"
 function dibujarGrafico(g, opts={}){ return g.vista==="redondo" ? dibujarRedondo(g,opts) : dibujarFilas(g,opts); }
 function hayPunto(f){ return f.some(v=>pk(v) || pcol(v)>=0); }
 
+function esCadenetaBase(g, r){
+  const ks = g.celdas[r].map(pk).filter(Boolean);
+  return ks.length>1 && ks.every(k=>k==="cad") && g.celdas.slice(r+1).some(f=>f.some(v=>pk(v) && pk(v)!=="cad"));
+}
 function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false, zMini=22, colorHL=false, marcar=null}={}){
   const esHL = r => Array.isArray(resaltar) ? resaltar.includes(r) : r===resaltar;
   const filas = g.celdas.length, cols = g.cols, gut = mini ? 0 : 30;
@@ -1045,11 +1077,13 @@ function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false
   const W = 2*gut + cols*z + 2, H = filas*z + 2;
   const svg = s("svg",{width:W, height:H, viewBox:`0 0 ${W} ${H}`, class:"chart", role:"img", "aria-label":"Gráfico en filas, "+filas+" vueltas"});
   if(exp) svg.setAttribute("color", EXP.ink);
-  let n = 0;
+  let n = 0; const primeraConPuntos = g.celdas.findIndex(hayPunto);
   for(let r=0;r<filas;r++){
     const y = (filas-1-r)*z + 1;   // la vuelta 1 queda abajo, como en las revistas
     const fila = g.celdas[r], am = soloAnillo(fila), tiene = hayPunto(fila);
-    if(!am && tiene) n++;
+    // La cadeneta de base («Monta 21 cad») va debajo de la fila 1 y no lleva número
+    const base = tiene && r===primeraConPuntos && esCadenetaBase(g, r);
+    if(!am && tiene && !base) n++;
     // Modo sofá: en la vuelta de ahora se marcan los puntos hechos, en el orden en que se tejen
     let estadoCol = null;
     if(marcar && marcar.fila===r){
@@ -1058,10 +1092,11 @@ function dibujarFilas(g, {ancho=360, resaltar=-1, minZ=30, exp=false, mini=false
     }
     if(!mini && tiene && !am){
       // El número va en el lado por donde empieza la vuelta: impares a la derecha, pares a la izquierda
-      const der = n%2===1;
+      const der = base || n%2===1;
       const lab = s("text",{x: der ? W-gut+8 : gut-8, y:y+z/2+5, "text-anchor": der?"start":"end", class:"rowlab"});
+      if(base) lab.style.fontSize = Math.min(11, z*.55)+"px";
       if(exp) { lab.setAttribute("fill", EXP.lab); lab.setAttribute("font-family","Arial, sans-serif"); lab.setAttribute("font-size","13"); lab.setAttribute("font-weight","700"); }
-      lab.textContent = String(n); svg.append(lab);
+      lab.textContent = base ? "base" : String(n); svg.append(lab);
     }
     for(let c=0;c<cols;c++){
       const x = gut + c*z + 1, v = fila[c], col = pcol(v);
@@ -1249,7 +1284,7 @@ function trozosDeColor(t, actual){
 function colorearGrafico(g, pasos, inicial){
   let actual = inicial ? lanaIndice(inicial.nombre) : -1;
   if(actual<0 && !pasos.some(t=>esCambioLana(t) || trozosDeColor(t, -1))) return;
-  const porLinea = pasos.map(t=>lineaAFilas(t).length), total = porLinea.reduce((a,b)=>a+b,0);
+  const porLinea = filasPorLinea(pasos).map(f=>f.length), total = porLinea.reduce((a,b)=>a+b,0);
   let fila = g.celdas.length===total+1 && soloAnillo(g.celdas[0]) ? 1 : 0; // anillo del centro puesto por el gráfico
   if(fila) g.celdas[0] = g.celdas[0].map(v=>pk(v) && actual>=0 ? pk(v)+"@"+actual : v);
   const pintar = (row, cols) => row.map((v,i)=>pk(v) && cols[i]>=0 ? pk(v)+"@"+cols[i] : v);
@@ -1352,17 +1387,39 @@ function nuevoGrafico(datos){
   g.id = "g-"+Date.now()+Math.floor(Math.random()*999);
   state.graficos.unshift(g); save(); return g;
 }
-function graficoDesdeTexto(g, texto, cambiarVista){
+// Lo escrito pasa por el mismo lector que «Añadir un patrón»: así el gráfico sale igual escriba como escriba
+// («(1 pb, 1 aum) x 6», «Rnd 3: [sc, inc] x6», «3 ряд: (сбн, пр) х 6», «mp, au»…). Si el patrón tiene partes,
+// se dibuja la primera.
+function textoParaGrafico(texto){
+  let t = texto;
+  try{
+    const pasos = importarTexto(texto, null, false).pasos;
+    const ini = pasos.findIndex(l=>!esParte(l) && lineaAFilas(l).length);
+    if(ini>=0){ let fin = pasos.findIndex((l,i)=>i>ini && esParte(l)); if(fin<0) fin = pasos.length;
+      const n = pasos.slice(ini, fin).join("\n"); if(textoAFilas(n).length >= textoAFilas(texto).length) t = n; }
+  }catch(e){}
+  // «3 cad (cuentan como 1 pa)»: en el gráfico esa cadeneta es el primer pa de la vuelta. Si el patrón lo dice una
+  // vez, vale también para las vueltas siguientes que empiezan igual («Vuelta 2: 3 cad, …»).
+  const como = t.match(/(\d+)\s*cad\s*\(\s*cuentan?\s+como\s+(?:1|un)\s+(pa|pb|mpa|pad)\s*\)/i);
+  if(como) t = t.replace(/(\d+)\s*cad\s*\(\s*cuentan?\s+como\s+(?:1|un)\s+(pa|pb|mpa|pad)\s*\)/gi, "1 $2")
+               .replace(new RegExp("^((?:vueltas?|filas?|hileras?)\\s*\\d+(?:\\s*a\\s*\\d+)?\\s*:\\s*)"+como[1]+"\\s*cad\\s*,", "gim"), "$11 "+como[2]+",");
+  return t;
+}
+function graficoDesdeTexto(g, texto0, cambiarVista){
+  const texto = textoParaGrafico(texto0);
   const filas = textoAFilas(texto);
   if(!filas.length) return false;
   const cols = Math.min(120, Math.max(10, ...filas.map(f=>f.length)));
   g.cols = cols; g.celdas = filas.map(f=>{ const r=f.slice(0,cols); while(r.length<cols) r.push(""); return r; });
   // «Vuelta 1: 6 pb en anillo mágico» también es en redondo: se pone el anillo en el centro
-  const primera = (texto.split("\n").find(l=>l.trim()) || "").toLowerCase();
-  if(cambiarVista && filas[0][0]!=="am" && /anillo\s+m[aá]gico|anillo\s+amigurumi/.test(primera)){
+  const primera = (texto.split("\n").find(l=>l.trim()) || "").toLowerCase() + " " + (texto0.split("\n").find(l=>/\d|anillo|ring|кольц/i.test(l)) || "").toLowerCase();
+  if(cambiarVista && filas[0][0]!=="am" && /anillo\s+m[aá]gico|anillo\s+amigurumi|magic\s+(ring|circle|loop)|\bmr\b|кольц|(?:^|[\s,])ка(?:[\s,.]|$)|\bam\b/.test(primera)){
     g.celdas.unshift(["am", ...Array(cols-1).fill("")]);
   }
-  if(cambiarVista) g.vista = g.celdas[0][0]==="am" ? "redondo" : "filas";
+  // También es en redondo si empieza en un anillo (de cadenetas) o cierra cada vuelta con pd sin girar
+  const principio = texto0.split("\n").filter(l=>l.trim()).slice(0, 4).join(" ").toLowerCase();
+  const anilloCad = /\ben (el )?anillo\b|\bin (the )?ring\b|\bкольц|cierra|ci[eé]rral|\bjoin|соед|\bpd\s*(en|hasta|al|a la)\b|\bpd\s*[.(]|\bpd\s*$/m.test(principio) && !/\bgira\b|\bturn\b|поверн/.test(principio);
+  if(cambiarVista) g.vista = g.celdas[0][0]==="am" || anilloCad ? "redondo" : "filas";
   return true;
 }
 function patronDesdeGrafico(g){
@@ -1875,6 +1932,14 @@ VISTAS.patron = V => {
         pr && pr.notas ? h("div",{class:"note", style:"background:var(--accent-soft)"}, h("strong",{},"Mis apuntes: "), pr.notas) : null
       )
     ),
+    // El gráfico entero, a la vista (el de la parte elegida si tiene partes)
+    ...(!graf || !graf.celdas.some(hayPunto) ? [] : [h("div",{class:"section"},
+      h("div",{class:"sechead"}, h("h2",{}, parteSel ? "Gráfico · "+nombreParte(view.parte) : "Gráfico"), h("span",{class:"muted", style:"font-size:.85rem"}, graf.vista==="redondo" ? "Se empieza por el centro" : "La vuelta 1 es la de abajo")),
+      h("div",{class:"panel stack", style:"gap:.6rem"},
+        h("div",{class:"gridwrap grafico-patron", style:"cursor:pointer", role:"button", tabindex:"0", "aria-label":"Abrir el dibujo en grande", onclick:()=>verGrafico()},
+          (()=>{ const an = Math.max(240, Math.min(window.innerWidth-56, 720)); return encajar(dibujarGrafico(graf, {ancho:an, minZ:16, minStep:12}).svg, an); })()),
+        h("dl",{class:"leyenda"}, ...leyendaDe(graf)),
+        h("button",{onclick:()=>verGrafico()}, icono("rejilla",20), "Ver en grande o cambiarlo")))]),
     h("div",{class:"section"},
       h("div",{class:"sechead"}, h("h2",{},"Instrucciones"), h("span",{class:"muted", style:"font-size:.85rem"},"Toca un paso para ir a él")),
       h("ol",{class:"steps", role:"group", "aria-label":"Pasos"}, p.pasos.map((t,i)=>h("li",{class:"tap "+(esParte(t)?"parte ":"")+(pr ? (i<pr.paso?"done":(i===pr.paso && empezado?"now":"")) : ""), tabindex:"0", role:"button",
@@ -2009,7 +2074,7 @@ function graficoEnCurso(p, pr, rep=null){
   const n = p.pasos.length, terminado = pr.paso>=n;
   const graf = graficoDePatron(p);
   let filasCon = graf ? graf.celdas.map((f,i)=>hayPunto(f)?i:-1).filter(i=>i>=0) : [];
-  let cuentas = p.pasos.map(t=>lineaAFilas(t).length);
+  let cuentas = filasPorLinea(p.pasos).map(f=>f.length);
   // El anillo del centro puesto por el gráfico («6 pb en anillo mágico») no es una vuelta: se ve siempre
   let centro = null;
   if(filasCon.length && soloAnillo(graf.celdas[filasCon[0]]) && cuentas.reduce((x,y)=>x+y,0)===filasCon.length-1){ centro = filasCon[0]; filasCon = filasCon.slice(1); }
@@ -2525,6 +2590,48 @@ VISTAS.contador = V => {
 };
 
 // ---------- Editar patrón ----------
+// ---------- El gráfico mientras se escribe ----------
+// Se dibuja solo con lo que se escribe o se pega: sin botones. Con partes (cabeza, cuerpo…), una pestaña por parte.
+// Si el dibujo es algo más ancho que la pantalla, se encoge para verlo entero de un vistazo; si es muy ancho, se desplaza
+function encajar(svg, ancho){
+  const W = +svg.getAttribute("width");
+  if(W <= ancho*1.8){ svg.style.width = "100%"; svg.style.height = "auto"; svg.style.maxWidth = W+"px"; }
+  return svg;
+}
+function previaGrafico(){
+  const caja = h("section",{class:"panel previa stack", "aria-live":"polite"});
+  let vistaElegida = null, parteSel = null, ultimos = [];
+  function pintar(pasos){
+    ultimos = pasos = (pasos||[]).map(t=>String(t).trim()).filter(Boolean);
+    const base = {id:"previa", pasos};
+    const partes = pasos.map((t,i)=>esParte(t)?i:-1).filter(i=>i>=0);
+    if(partes.length && !partes.includes(parteSel)) parteSel = partes[0];
+    const sub = partes.length ? subPatron(base, parteDe(base, parteSel)) : base;
+    let g = null; try{ g = sub.pasos.length ? graficoDePatron(sub) : null; }catch(e){ g = null; }
+    const cab = h("div",{class:"sechead"}, h("h2",{}, "Tu gráfico"), h("span",{class:"muted", style:"font-size:.85rem"}, "Se dibuja solo"));
+    if(!g || !g.celdas.some(hayPunto)){
+      caja.replaceChildren(cab, h("p",{class:"muted"}, pasos.length ? "Todavía no veo puntos. Escribe una vuelta por línea, por ejemplo: «Vuelta 1: 6 pb en anillo mágico (6)»." : "Escribe la primera vuelta, por ejemplo «Vuelta 1: 6 pb en anillo mágico (6)», y aquí aparece el dibujo."));
+      return;
+    }
+    const gv = {...g, vista: vistaElegida || g.vista};
+    const ancho = Math.max(240, (caja.clientWidth || Math.min(window.innerWidth-32, 720)) - 32);
+    const dib = dibujarGrafico(gv, {ancho, minZ:16, minStep:12});
+    const filas = g.celdas.filter((f,r)=>hayPunto(f) && !soloAnillo(f) && !(r===g.celdas.findIndex(hayPunto) && esCadenetaBase(g, r)));
+    const puntos = filas.map(f=>f.map(pk).filter(Boolean).reduce((a,k)=>a+anchoDe(k),0));
+    const V1 = /fila|hilera/i.test(sub.pasos.join(" ")) ? ["fila","filas"] : ["vuelta","vueltas"];
+    const nombreParte = i => pasos[i].replace(/^parte:\s*/i, "").replace(/\s*·\s*con .+$/, "");
+    caja.replaceChildren(...[
+      cab,
+      partes.length ? h("div",{class:"row", style:"gap:.4rem", role:"group", "aria-label":"Partes"}, partes.map(i=>h("button",{class:"chip-parte"+(i===parteSel?" sel":""), "aria-pressed":String(i===parteSel), onclick:()=>{ parteSel=i; pintar(ultimos); }}, nombreParte(i)))) : null,
+      h("div",{class:"seg", role:"group", "aria-label":"Forma del gráfico"}, [["redondo","◎ En redondo"],["filas","▦ En filas"]].map(([v,l])=>h("button",{class:gv.vista===v?"sel":"", "aria-pressed":String(gv.vista===v), onclick:()=>{ vistaElegida=v; pintar(ultimos); }}, l))),
+      h("div",{class:"gridwrap previa-dib", style:"cursor:default"}, encajar(dib.svg, ancho)),
+      h("p",{class:"muted", style:"font-size:.9rem"}, filas.length+" "+(filas.length===1?V1[0]:V1[1])+(puntos.length ? " · de "+Math.min(...puntos)+" a "+Math.max(...puntos)+" puntos" : "")+(gv.vista==="redondo" ? ". Se empieza por el centro." : ". La "+V1[0]+" 1 es la de abajo.")),
+      h("dl",{class:"leyenda"}, ...leyendaDe(gv))
+    ].filter(Boolean));
+    if(gv.vista==="redondo") requestAnimationFrame(()=>{ const w = caja.querySelector(".previa-dib"); if(w) w.scrollLeft = (w.scrollWidth-w.clientWidth)/2; });
+  }
+  return {caja, pintar};
+}
 VISTAS.editar = V => {
   const existente = view.id ? buscar(view.id) : null;
   const p = existente ? {...existente} : {titulo:"", nivel:"Fácil", hilo:"", ganchillo:"", descripcion:"", notas:"", pasos:[], color:COLORES[state.patrones.length % COLORES.length]};
@@ -2541,8 +2648,10 @@ VISTAS.editar = V => {
   const sw = h("div",{class:"row", role:"group", "aria-label":"Color"});
   function pintarSw(){ sw.replaceChildren(...COLORES.map(c=>h("button",{class:"lanabtn dot"+(c===color?" sel":""), "aria-label":"Color", "aria-pressed":String(c===color), style:"background:"+c, onclick:()=>{color=c; pintarSw();}}))); }
   pintarSw();
-  const prev = h("div",{class:"gridwrap", hidden:true, style:"cursor:default"});
-  const prevBtn = h("button",{onclick:()=>{ const g={cols:10, celdas:[], vista:"filas"}; if(graficoDesdeTexto(g, f.pasos.value, true)){ prev.hidden=false; prev.replaceChildren(dibujarGrafico(g,{ancho:(prev.clientWidth||340)-20, minZ:18}).svg); } else { prev.hidden=false; prev.replaceChildren(h("p",{class:"muted"},"Todavía no reconozco puntos en lo que has escrito.")); } }}, icono("rejilla",20), "Ver cómo queda en gráfico");
+  const previa = previaGrafico(); let previaT;
+  const prevBtn = previa.caja;
+  f.pasos.addEventListener("input", ()=>{ clearTimeout(previaT); previaT = setTimeout(()=>previa.pintar(f.pasos.value.split("\n")), 350); });
+  requestAnimationFrame(()=>previa.pintar(f.pasos.value.split("\n")));
   const err = h("p",{style:"color:var(--danger);font-weight:700", hidden:true});
   function guardar(){
     const titulo=f.titulo.value.trim(); const pasos=f.pasos.value.split("\n").map(x=>x.trim()).filter(Boolean);
@@ -2565,7 +2674,7 @@ VISTAS.editar = V => {
       h("div",{class:"two"}, h("label",{class:"f"},"Hilo", f.hilo), h("label",{class:"f"},"Ganchillo", f.ganchillo)),
       h("div",{class:"two"}, h("label",{class:"f"},"Dificultad", f.nivel), h("div",{class:"f"},"Color de la ficha", sw)),
       h("label",{class:"f"},"Pasos", h("small",{},"Escribe cada vuelta o paso en una línea, como en las revistas. Pon el total de puntos entre paréntesis y la app te avisará cuando cuadre."), f.pasos),
-      prevBtn, prev,
+      prevBtn,
       h("label",{class:"f"},"Notas", f.notas),
       err,
       h("div",{class:"row"},
@@ -3268,7 +3377,7 @@ function tituloDeArchivo(nombre){
   return t.charAt(0).toUpperCase()+t.slice(1);
 }
 VISTAS.importar = V => {
-  const area = h("textarea",{id:"im-texto", style:"min-height:12rem", placeholder:"Rnd 1: 6 sc in magic ring (6)\nRnd 2: 2 sc in each st (12)\n\no en español:\nVuelta 1: 6 pb en el anillo (6)", oninput:e=>{ importarBorrador=e.target.value; }}, importarBorrador);
+  const area = h("textarea",{id:"im-texto", style:"min-height:12rem", placeholder:"Rnd 1: 6 sc in magic ring (6)\nRnd 2: 2 sc in each st (12)\n\no en español:\nVuelta 1: 6 pb en el anillo (6)", oninput:e=>{ importarBorrador=e.target.value; clearTimeout(leerT); leerT = setTimeout(()=>{ if(document.body.contains(area)) leer(); }, 700); }}, importarBorrador);
   const res = h("div",{class:"stack", "aria-live":"polite"});
   const ESTADOS = {
     cuadra: r => ["ok","✓ Cuadra: "+r.n+" puntos"],
@@ -3277,6 +3386,7 @@ VISTAS.importar = V => {
     duda: () => ["aviso","No entiendo bien esta línea. Revísala."],
     texto: () => ["", "Instrucción"]
   };
+  let leerT; const previaImp = previaGrafico();
   function leer(){
     importarBorrador = area.value;
     if(!area.value.trim()){ res.replaceChildren(h("div",{class:"empty"}, h("p",{},"Pega aquí el patrón: copia el texto de la web o del PDF y mantén el dedo en el recuadro para pegarlo."))); return; }
@@ -3309,6 +3419,7 @@ VISTAS.importar = V => {
       hayVueltas ? h("label",{class:"checkline"}, h("input",{type:"checkbox", id:"im-solo", checked:importarSoloVueltas, onchange:e=>{ importarSoloVueltas=e.target.checked; leer(); }}),
         h("span",{}, "Solo las vueltas («Vuelta 1», «Vuelta 2»…)", r.apartadas.length ? h("small",{}, r.apartadas.length===1 ? "1 línea más va a las notas." : r.apartadas.length+" líneas más van a las notas.") : null)) : null,
       h("div",{class:"row"}, h("span",{class:"chip go"}, r.pasos.length+" pasos"), cuenta("cuadra") ? h("span",{class:"chip ok"}, cuenta("cuadra")+" cuadran") : null, revisar ? h("span",{class:"chip mine"}, revisar+" para revisar") : null),
+      previaImp.caja,
       h("div",{class:"two"}, h("label",{class:"f"},"Nombre", nombre), h("label",{class:"f"},"Ganchillo", gan)),
       h("label",{class:"f"}, "Lana", r.colorLana ? h("small",{class:"color-lana"}, h("i",{style:"background:"+r.colorLana.hex}), "Color de la lana: "+r.colorLana.nombre+". La ficha del patrón irá de este color.") : null, hilo),
       h("ol",{class:"steps importados"}, r.pasos.map((t,i)=>{ const [cls,msg] = ESTADOS[r.revision[i].estado](r.revision[i]);
@@ -3326,6 +3437,7 @@ VISTAS.importar = V => {
         h("button",{class:"teal big", onclick:()=>guardar(true)},"Guardar y tejer")),
       h("p",{class:"muted", style:"font-size:.88rem"},"Después de guardarlo puedes cambiar cualquier línea con «Cambiar».")
     ].filter(Boolean));
+    previaImp.pintar(r.pasos);
   }
   const pegar = navigator.clipboard && navigator.clipboard.readText ? h("button",{class:"big", onclick:async()=>{ try{ area.value = await navigator.clipboard.readText(); importarArchivo = ""; leer(); }catch(e){ toast("No me deja pegar. Mantén el dedo en el recuadro y elige Pegar."); } }}, "Pegar lo que he copiado") : null;
   // Abrir un PDF o una foto: el texto leído se pone en el recuadro para revisarlo antes de guardar
@@ -3446,7 +3558,7 @@ VISTAS.grafico = V => {
   const snap = ()=>{ deshacer.push(JSON.stringify({c:g.celdas, n:g.cols})); if(deshacer.length>60) deshacer.shift(); btnUndo.disabled=false; };
   const wrap = h("div",{class:"gridwrap"});
   const leyenda = h("dl",{class:"leyenda"});
-  let dib = null, zoom = 1;
+  let dib = null, zoom = 1, mano = null; // mano: el panel «Cambiar puntos a mano»; los ＋ para añadir solo se ven abierto
   const redondo = ()=> g.vista==="redondo";
   const valor = ()=> herramienta + (lanaSel>=0 ? "@"+lanaSel : "");
   const compacta = f => f.filter(v=>pk(v) || pcol(v)>=0);
@@ -3475,7 +3587,7 @@ VISTAS.grafico = V => {
   function todo(){ save(); dibujar(); }
   function dibujar(){
     const ancho = Math.max(280, (wrap.clientWidth||Math.min(window.innerWidth-40, 900)) - 20);
-    dib = dibujarGrafico(g, {ancho: ancho*zoom, minZ: Math.round((g.modo==="color"?10:34)*Math.min(zoom,1.5)), minStep: 30*zoom, fantasma: redondo() && g.modo!=="color"});
+    dib = dibujarGrafico(g, {ancho: ancho*zoom, minZ: Math.round((g.modo==="color"?10:24)*Math.min(zoom,1.5)), minStep: 16*zoom, fantasma: redondo() && g.modo!=="color" && (!mano || mano.open)});
     wrap.replaceChildren(dib.svg);
     if(redondo()) requestAnimationFrame(()=>{ wrap.scrollLeft = (wrap.scrollWidth-wrap.clientWidth)/2; });
     leyenda.replaceChildren(...leyendaDe(g));
@@ -3533,12 +3645,23 @@ VISTAS.grafico = V => {
   const btnUndo = h("button",{disabled:true, onclick:()=>{ const u=deshacer.pop(); if(!u) return; const o=JSON.parse(u); g.celdas=o.c; g.cols=o.n; save(); dibujar(); btnUndo.disabled=!deshacer.length; }},"↶ Deshacer");
   const texto = h("textarea",{id:"gr-texto", style:"min-height:9rem", placeholder:"Anillo mágico\nVuelta 1: 6 pb (6)\nVuelta 2: 1 aum en cada punto (12)\nVuelta 3: *1 pb, 1 aum* repetir 6 veces (18)"}, g.texto||"");
   const aviso = h("p",{class:"muted", "aria-live":"polite"});
+  let textoT, textoSnap = false, vistaAMano = false;
+  texto.addEventListener("input", ()=>{
+    clearTimeout(textoT);
+    textoT = setTimeout(()=>{
+      if(!texto.value.trim()) return;
+      if(!textoSnap){ snap(); textoSnap = true; setTimeout(()=>textoSnap=false, 4000); }
+      g.texto = texto.value;
+      if(graficoDesdeTexto(g, texto.value, !vistaAMano)){ save(); pintarSegs(); dibujar(); aviso.textContent = ""; }
+      else aviso.textContent = "Todavía no veo puntos. Prueba con algo como: Vuelta 1: 6 pb en anillo mágico (6)";
+    }, 450);
+  });
   const aviso2 = h("p",{class:"muted","aria-live":"polite"});
   const seg = (opciones, actual, fn) => h("div",{class:"seg", role:"group"}, opciones.map(([v,l])=>h("button",{class:actual===v?"sel":"", "aria-pressed":String(actual===v), onclick:()=>fn(v)}, l)));
   const segs = h("div",{class:"row"});
   function pintarSegs(){
     segs.replaceChildren(...[
-      seg([["filas","▦ En filas"],["redondo","◎ En redondo"]], g.vista, v=>{ g.vista=v; if(v==="redondo"){ g.celdas = g.celdas.map(f=>{ const a=compacta(f); while(a.length<g.cols) a.push(""); return a; }); } save(); pintarSegs(); dibujar(); }),
+      seg([["filas","▦ En filas"],["redondo","◎ En redondo"]], g.vista, v=>{ g.vista=v; vistaAMano=true; if(v==="redondo"){ g.celdas = g.celdas.map(f=>{ const a=compacta(f); while(a.length<g.cols) a.push(""); return a; }); } save(); pintarSegs(); dibujar(); }),
       g.modo==="color" ? seg([["simbolos","Símbolos"],["color","Colores"]], g.modo, v=>{ g.modo=v; save(); pintarSegs(); dibujar(); }) : null
     ].filter(Boolean));
   }
@@ -3553,39 +3676,35 @@ VISTAS.grafico = V => {
       : h("div",{class:"row", style:"justify-content:space-between;margin-top:.6rem"},
           g.de && buscar(g.de) ? h("button",{class:"ghost", onclick:()=>atras({name:"patron", id:g.de})},"← Patrón") : h("button",{class:"ghost", onclick:()=>go({name:"graficos"})},"← Gráficos"),
           h("button",{class:"primary", onclick:()=>{ const p=patronDesdeGrafico(g); if(!p){ toast("Dibuja algún punto primero"); return; } toast("Listo para tejer"); tejer(p.id); }}, "Tejer este gráfico")),
-    ...(view.paraPatron ? [h("p",{class:"note", style:"margin-top:.5rem"},"Elige un punto y toca las casillas para ponerlo. Cada fila es una vuelta. Cuando acabes, toca «Guardar como patrón».")] : []),
+    ...(view.paraPatron ? [h("p",{class:"note", style:"margin-top:.5rem"},"Escribe las vueltas y el gráfico se dibuja solo, o toca las casillas para poner puntos. Cuando acabes, toca «Guardar como patrón».")] : []),
     h("div",{class:"stack", style:"margin-top:.2rem;gap:.8rem"},
       h("input",{type:"text", class:"titleinput", id:"gr-nombre", value:g.nombre||"", "aria-label":"Nombre del gráfico", oninput:e=>{ g.nombre=e.target.value; clearTimeout(nomT); nomT=setTimeout(save,600); }}),
+      // Lo primero: escribir el patrón y ver el dibujo al momento
+      g.modo==="color" ? null : h("div",{class:"panel stack escribe", style:"gap:.5rem"},
+        h("label",{class:"f", for:"gr-texto", style:"margin:0"}, "Escribe el patrón y se dibuja solo",
+          h("small",{}, "Una vuelta por línea, como en las revistas: «Vuelta 1: 6 pb en anillo mágico (6)». Entiende pb, pa, mpa, cad, aum, dism, repeticiones «(1 pb, 1 aum) x 6» y también inglés y ruso.")),
+        texto,
+        h("div",{class:"row"}, h("button",{onclick:()=>{ texto.value = graficoATexto(g); g.texto=texto.value; save(); aviso.textContent="He escrito lo que hay dibujado."; }},"Escribir lo que he dibujado")),
+        aviso),
       segs,
-      h("div",{class:"panel", style:"gap:.5rem"}, paleta, elegido,
-        h("details",{class:"colores"}, h("summary",{},"Color de lana (si quieres)"), lanas)),
-      tamBox,
-      ayuda,
       wrap,
       h("div",{class:"row"},
         h("button",{"aria-label":"Ver más pequeño", onclick:()=>{ zoom=Math.max(.6, zoom/1.4); dibujar(); }},"− Lupa"),
         h("button",{"aria-label":"Ver más grande", onclick:()=>{ zoom=Math.min(4, zoom*1.4); dibujar(); }},"＋ Lupa"),
         btnUndo),
       h("div",{class:"section"}, h("h2",{},"Leyenda"), h("div",{class:"panel"}, leyenda)),
+      mano = h("details",{class:"panel cambiar-mano", open: !g.celdas.some(hayPunto) || g.modo==="color" ? true : null, ontoggle:()=>dibujar()},
+        h("summary",{},"Cambiar puntos a mano"),
+        h("div",{class:"stack", style:"gap:.6rem;margin-top:.6rem"},
+          ayuda, paleta, elegido,
+          h("details",{class:"colores"}, h("summary",{},"Color de lana (si quieres)"), lanas),
+          tamBox)),
       h("div",{class:"section"},
         h("div",{class:"tiles"},
           h("button",{class:"bigtile pink", onclick:()=>exportarImagen(g).catch(()=>toast("No he podido crear la imagen."))}, h("span",{class:"ic"}, icono("imagen",30)), "Guardar como imagen"),
           h("button",{class:"bigtile", onclick:()=>{ const p=patronDesdeGrafico(g); if(!p){ aviso2.textContent="Dibuja algún punto primero."; return; } toast("Patrón creado"); go({name:"patron", id:p.id}); }}, h("span",{class:"ic"}, icono("libro",30)), "Guardar como patrón")
         ),
         aviso2
-      ),
-      h("details",{class:"section panel"},
-        h("summary",{},"Escribir el patrón y que se dibuje solo"),
-        h("p",{class:"muted"},"Escribe una vuelta por línea, como en las revistas. Entiende cad, pd, pb, mpa, pa, pad, aum, dism, piña, garbanzo, picot, anillo mágico, repeticiones entre asteriscos y el total entre paréntesis."),
-        texto,
-        h("div",{class:"row"},
-          h("button",{class:"teal", onclick:()=>{
-            snap(); g.texto = texto.value;
-            if(graficoDesdeTexto(g, texto.value, false)){ save(); dibujar(); aviso.textContent="Listo. Revisa el dibujo y corrige lo que haga falta."; wrap.scrollIntoView({behavior:"smooth", block:"center"}); }
-            else { deshacer.pop(); btnUndo.disabled=!deshacer.length; aviso.textContent="No he encontrado puntos en el texto. Prueba con algo como: Vuelta 1: 6 pb"; }
-          }},"Dibujarlo"),
-          h("button",{onclick:()=>{ texto.value = graficoATexto(g); g.texto=texto.value; save(); }},"Escribir lo que he dibujado")),
-        aviso
       ),
       h("div",{class:"section"}, h("div",{class:"row"},
         h("button",{onclick:()=>{ const c = nuevoGrafico({...JSON.parse(JSON.stringify(g)), nombre:(g.nombre||"Gráfico")+" (copia)", de:undefined}); toast("Copia creada"); go({name:"grafico", id:c.id}); }},"Hacer una copia"),

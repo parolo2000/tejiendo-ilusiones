@@ -241,10 +241,28 @@
      "pd"
     ],
     [
+     "pd",
+     "cad",
      "pa",
      "pa",
      "pa",
-     "cad"
+     "cad",
+     "cad",
+     "pa",
+     "pa",
+     "pa",
+     "cad",
+     "cad",
+     "pa",
+     "pa",
+     "pa",
+     "cad",
+     "cad",
+     "pa",
+     "pa",
+     "pa",
+     "cad",
+     "pd"
     ]
    ],
    "objetivos": [
@@ -296,6 +314,34 @@
      "cad"
     ],
     [
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb",
+     "pb"
+    ],
+    [
+     "cad",
      "pb",
      "pb",
      "pb",
@@ -2116,11 +2162,12 @@
    "3 cad, 2 pa, 2 cad, 3 pa, 2 cad, 3 pa, 2 cad, 3 pa, 2 cad, 1 pd (11)",
    "1 pd, 3 cad, 2 pa, 2 cad, 3 pa, 1 cad, 3 pa, 2 cad, 3 pa, 1 cad, 3 pa, 2 cad, 3 pa, 1 cad, 3 pa, 2 cad, 3 pa, 1 cad, 1 pd (23)",
    "1 pd, *1 cad, 3 pa, 1 cad* repetir 4 veces, 1 pd (12)",
-   "3 pa, 1 cad (3)"
+   "1 pd, *1 cad, 3 pa, 1 cad* repetir 4 veces, 1 pd (12)"
   ],
   [
    "26 cad",
    "25 pb (25)",
+   "1 cad, 25 pb (25)",
    "1 cad, 25 pb (25)"
   ],
   [
