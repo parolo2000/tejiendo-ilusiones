@@ -443,3 +443,29 @@ Capturas en `tests/capturas/`.
   pd, anillo mágico, coma y «Poner el total», que cuenta los puntos de la línea. En «Escribir un patrón» y en el
   editor de gráficos.
 - Vueltas que no cuadran, dichas claro bajo el gráfico: «Vuelta 2: cuento 10 puntos, pero el patrón dice 12».
+
+## 2026-10-12 · Traducir un patrón (ruso o inglés → PDF en español)
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-12-antes-traducir.html`.
+- Nueva pantalla `VISTAS.traducir` (Inicio → Otras cosas, Más, y un enlace en «Añadir un patrón»). Abre un PDF o una
+  foto, detecta el idioma (`idiomaDe`), traduce y da un PDF en español para descargar o mandar, con las fotos y los
+  gráficos del original en su sitio y, si se quiere, las hojas originales al final. Antes de descargar se puede
+  corregir cualquier frase («Corregir el texto») y guardarlo en Mis patrones (pasa por «Añadir un patrón»).
+- Puntos y vueltas con reglas (`GLOSARIO_RU`, `GLOSARIO_EN`, `cabeceraVuelta`): siempre igual («сбн» = pb, en
+  inglés de EE. UU. o del Reino Unido, que se puede cambiar). El resto de las frases las traduce el traductor libre
+  de Mozilla (Bergamot, el de Firefox) dentro del navegador: gratis y sin mandar el patrón a ningún sitio. Del ruso
+  pasa por el inglés. Las palabras de ganchillo van como marcas («QXAB») que el traductor no toca.
+- `traductor/`: motor (wasm) y modelos ru→en y en→es comprimidos y partidos en trozos de menos de 12 MB. Se descarga
+  la primera vez que se usa (31 MB para el inglés, 56 MB para el ruso) y queda guardado: caché propia del service
+  worker (`traductor-<huella>`) en la instalada, `ti-traductor-1` sin ella. Sin traductor (sin red la primera vez,
+  móvil antiguo) las vueltas salen igual y las frases van a medias, marcadas en naranja con el original debajo.
+- Lectura (`leerParaTraducir`): texto con su tamaño y posición (`textoDeLineas` guarda ahora `h`, `y`, `x0`, `x1`
+  si se le pasa `info`; `trozosDePagina` sale de `paginasDePDF`), fotos (órdenes de dibujo del PDF) y gráficos
+  hechos con líneas (`figurasDeTrazos`), recortados de la hoja dibujada. Logos repetidos fuera. Hojas escaneadas
+  o sin texto, con el lector de fotos; una hoja casi sin letras va entera como foto. Arreglos de lectura rusa
+  (`arreglarLecturaRusa`: «cóH» → «сбн», «np» → «пр»).
+- PDF con jsPDF (`lib/jspdf.umd.min.js`) y letras de la app recortadas (`lib/fuentes/`, con DejaVu para el ruso).
+  `lib/fflate.min.js` descomprime el traductor en móviles sin `DecompressionStream`.
+- Sin cambios en los datos guardados (nada nuevo en localStorage).
+- Tests: 9 nuevos (reglas sin traductor, PDF ruso con foto y gráfico + PDF descargado, inglés del Reino Unido ↔ EE. UU.,
+  ruso escaneado, sin conexión, patrón ya en español, accesos). 80 bien.

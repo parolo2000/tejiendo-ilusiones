@@ -303,6 +303,19 @@ ol.steps li.parte b{display:none}
 .checkline{display:flex;gap:.7rem;align-items:flex-start;font-weight:700;cursor:pointer}
 .checkline input{width:1.5rem;height:1.5rem;margin-top:.1rem;flex:none;accent-color:var(--accent)}
 .checkline small{display:block;font-weight:400;color:var(--muted)}
+/* Traducir un patrón: así queda el PDF */
+.tr-doc{background:var(--surface);border-radius:1rem;padding:1rem 1.1rem;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:.45rem}
+.tr-b p{margin:0}
+.tr-b textarea{width:100%;min-height:3rem}
+.tr-titulo p{font-family:var(--display);font-size:1.5rem;color:var(--accent);line-height:1.2}
+.tr-parte{margin-top:.6rem}
+.tr-parte p{font-family:var(--display);font-size:1.18rem;color:var(--accent)}
+.tr-vuelta b,.tr-leyenda b{color:var(--accent)}
+.tr-lista p::before{content:"• ";color:var(--accent)}
+.tr-b.revisar{border-left:5px solid #C77700;padding-left:.6rem}
+.tr-orig{display:block;color:var(--muted);font-size:.85rem;margin-top:.15rem}
+.tr-img{margin:.4rem 0;text-align:center}
+.tr-img img{max-width:100%;max-height:22rem;border-radius:.6rem}
 .color-lana{display:flex;gap:.45rem;align-items:center}
 .color-lana i{width:1.1rem;height:1.1rem;border-radius:50%;border:1px solid var(--line);flex:none}
 .partes-sel{display:flex;flex-direction:column;gap:.35rem;margin-top:.6rem}
@@ -745,6 +758,7 @@ const ICONOS = {
   casa:"M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z",
   libro:"M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h6",
   rejilla:"M4 4h16v16H4zM4 10h16M4 15h16M10 4v16M15 4v16",
+  traducir:"M3 5h10M8 3v2M5.5 5c.5 3.5 3 6.5 6.5 8M10.5 5c-.8 3.6-3.4 6.6-7 8M13 21l4-9 4 9M14.4 18h5.2",
   ovillo:"M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM4 9c5 2 11 2 16 0M3.5 14c5 2.5 12 2.5 17 0M9 3.5c3 5 3 12 0 17",
   mas:"M5 12h.01M12 12h.01M19 12h.01",
   lapiz:"M4 20h4L19 9l-4-4L4 16zM14 6l4 4",
@@ -792,7 +806,7 @@ addEventListener("popstate", e => {
 });
 marcar(view, true);
 const TABS = [["inicio","Inicio","casa"],["patrones","Patrones","libro"],["labores","Labores","corazon"],["mas","Más","mas"]];
-const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad", clave:"comunidad", avisos:"comunidad"};
+const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", traducir:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad", clave:"comunidad", avisos:"comunidad"};
 function pintarTabs(){
   const actual = TAB_DE[view.name] || view.name;
   const tabs = nubeActiva() ? [...TABS.slice(0,3), ["comunidad","Gente","gente"], TABS[3]] : TABS;
@@ -1643,6 +1657,7 @@ VISTAS.inicio = V => {
     h("div",{class:"section"},
       h("h2",{},"Otras cosas"),
       h("div",{class:"menu"},
+        h("button",{onclick:()=>go({name:"traducir"})}, h("span",{class:"ic"}, icono("traducir",22)), h("span",{class:"grow"},"Traducir un patrón (ruso o inglés)"), h("span",{class:"muted"},"›")),
         h("button",{onclick:()=>go({name:"herramientas"})}, h("span",{class:"ic"}, icono("circulo",22)), h("span",{class:"grow"},"Hacer un círculo perfecto"), h("span",{class:"muted"},"›")),
         h("button",{onclick:()=>go({name:"graficos"})}, h("span",{class:"ic"}, icono("rejilla",22)), h("span",{class:"grow"},"Dibujar un gráfico"), h("span",{class:"muted"},"›")),
         h("button",{onclick:()=>go({name:"foto"})}, h("span",{class:"ic"}, icono("imagen",22)), h("span",{class:"grow"},"Convertir una foto en gráfico"), h("span",{class:"muted"},"›")),
@@ -3300,9 +3315,11 @@ function ordenarLineas(lineas, prof=0){
 }
 // Tablas: una fila con varias celdas, y una celda que sigue en la línea de debajo («Hilera» / «3:», o el texto de
 // la vuelta que no cabe). Esos trozos van dentro de su celda, y la fila se lee entera: «Hilera 3: … (100)».
-function textoDeLineas(lineas){
+// «info» (opcional) recibe la altura de letra y la posición de cada línea (para «Traducir un patrón»)
+function textoDeLineas(lineas, info=null){
   const out = []; let fila = null, antes = null;
-  const cerrar = () => { if(fila){ out.push(fila.celdas.map(c=>c.t.trim()).join(" ")); fila = null; } };
+  const poner = (t, l) => { out.push(t); if(info) info.push(l ? {h:l.h, y:l.y, x0:l.x0, x1:l.x1} : {}); };
+  const cerrar = () => { if(fila){ poner(fila.celdas.map(c=>c.t.trim()).join(" "), fila.l); fila = null; } };
   for(const l of lineas){
     const hueco = antes ? antes.y - l.y : 0, tol = l.h*0.4;
     if(fila && hueco > 0 && hueco <= l.h*1.6){
@@ -3316,9 +3333,9 @@ function textoDeLineas(lineas){
     }
     cerrar();
     // Entre párrafos separados, una línea en blanco
-    if(antes && (hueco > l.h*1.9 || hueco < 0)) out.push("");
-    if(l.celdas.length >= 2) fila = {celdas: l.celdas.map(c=>({x:c.x, t:c.t})), xs: l.its.filter(it=>it.t.trim()).map(it=>it.x)};
-    else out.push(l.celdas[0].t);
+    if(antes && (hueco > l.h*1.9 || hueco < 0)) poner("", null);
+    if(l.celdas.length >= 2) fila = {celdas: l.celdas.map(c=>({x:c.x, t:c.t})), xs: l.its.filter(it=>it.t.trim()).map(it=>it.x), l};
+    else poner(l.celdas[0].t, l);
     antes = l;
   }
   cerrar();
@@ -3341,22 +3358,26 @@ async function paginasDePDF(doc, avisar){
   const paginas = [];
   for(let n=1; n<=doc.numPages; n++){
     if(avisar && doc.numPages > 4) avisar("Leyendo la página "+n+" de "+doc.numPages+"…", (n-1)/doc.numPages);
-    const pag = await doc.getPage(n), cont = await pag.getTextContent();
-    // Cada trozo lleva su giro. Se lee el texto que va en la dirección de la mayoría (normalmente derecho; en algunos
-    // PDF toda la hoja está girada) y se descarta el resto: marcas de agua en diagonal y textos al margen.
-    const trozos = cont.items.filter(it => typeof it.str==="string" && it.str && it.transform).map(it => {
-      const [a, b, c, d, x, y] = it.transform, ang = Math.atan2(b, a), q = Math.round(ang/(Math.PI/2));
-      return {it, x, y, h: Math.hypot(c, d) || it.height || 10, q: ((q%4)+4)%4, recto: Math.abs(ang - q*Math.PI/2) < 0.1};
-    });
-    const cuenta = [0,0,0,0]; for(const t of trozos) if(t.recto && t.it.str.trim()) cuenta[t.q] += t.it.str.length;
-    const giro = cuenta[0] >= Math.max(...cuenta)*0.5 ? 0 : cuenta.indexOf(Math.max(...cuenta));
-    const co = Math.round(Math.cos(giro*Math.PI/2)), se = Math.round(Math.sin(giro*Math.PI/2));
-    const its = trozos.filter(t => t.recto && t.q===giro)
-      .map(t => ({t:limpiarUnicode(t.it.str), x: t.x*co + t.y*se, y: -t.x*se + t.y*co, w:t.it.width||0, h:t.h}));
+    const pag = await doc.getPage(n), its = trozosDePagina(await pag.getTextContent());
     paginas.push(its.length ? maquetarPagina(its) : []);
     pag.cleanup();
   }
   return quitarRepetidas(paginas);
+}
+function trozosDePagina(cont){
+  // Cada trozo lleva su giro. Se lee el texto que va en la dirección de la mayoría (normalmente derecho; en algunos
+  // PDF toda la hoja está girada) y se descarta el resto: marcas de agua en diagonal y textos al margen.
+  const trozos = cont.items.filter(it => typeof it.str==="string" && it.str && it.transform).map(it => {
+    const [a, b, c, d, x, y] = it.transform, ang = Math.atan2(b, a), q = Math.round(ang/(Math.PI/2));
+    return {it, x, y, h: Math.hypot(c, d) || it.height || 10, q: ((q%4)+4)%4, recto: Math.abs(ang - q*Math.PI/2) < 0.1};
+  });
+  const cuenta = [0,0,0,0]; for(const t of trozos) if(t.recto && t.it.str.trim()) cuenta[t.q] += t.it.str.length;
+  const giro = cuenta[0] >= Math.max(...cuenta)*0.5 ? 0 : cuenta.indexOf(Math.max(...cuenta));
+  const co = Math.round(Math.cos(giro*Math.PI/2)), se = Math.round(Math.sin(giro*Math.PI/2));
+  const its = trozos.filter(t => t.recto && t.q===giro)
+    .map(t => ({t:limpiarUnicode(t.it.str), x: t.x*co + t.y*se, y: -t.x*se + t.y*co, w:t.it.width||0, h:t.h}));
+  its.giro = giro;
+  return its;
 }
 // Letra con mucho espacio entre letras («L i t t l e  O c t o p u s»): pdf.js pone un espacio entre cada letra y ya no
 // se sabe dónde acaba cada palabra. Un título así se junta («B O D Y» → «BODY»); una hoja entera así se lee como foto.
@@ -3614,7 +3635,8 @@ VISTAS.importar = V => {
   const opcion = (cls, ic, titulo, sub, fn) => { const b = h("button",{class:"action "+cls, onclick:fn}, h("span",{class:"ic"}, icono(ic)), h("span",{}, titulo, h("br"), h("small",{}, sub))); botones.push(b); return b; };
   V.append(
     volver("Patrones", {name:"patrones"}),
-    h("div",{class:"page-title"}, h("h1",{},"Añadir un patrón"), h("p",{class:"muted"},"Tráelo de un PDF, de una foto o pegando el texto. Lo separo en pasos y te aviso de lo que no cuadra. Entiende español, inglés y ruso.")),
+    h("div",{class:"page-title"}, h("h1",{},"Añadir un patrón"), h("p",{class:"muted"},"Tráelo de un PDF, de una foto o pegando el texto. Lo separo en pasos y te aviso de lo que no cuadra. Entiende español, inglés y ruso."),
+      h("p",{}, h("button",{class:"ghost", onclick:()=>go({name:"traducir"})}, icono("traducir",20), "¿Lo quieres traducido en un PDF? Traducir un patrón"))),
     h("div",{class:"section"},
       estado,
       h("div",{class:"actions"},
@@ -3629,6 +3651,1191 @@ VISTAS.importar = V => {
       res)
   );
   if(importarBorrador.trim()) leer();
+};
+
+// ---------- Traducir un patrón (ruso o inglés → español) ----------
+// Los puntos y las frases de ganchillo se traducen con reglas (siempre igual y bien: «сбн» es «pb»). El resto del
+// texto (notas, montaje, materiales) lo traduce el traductor libre de Mozilla, el mismo que usa Firefox: funciona
+// dentro del móvil, gratis y sin enviar nada a ningún sitio. Antes de dárselo, las palabras de ganchillo se cambian
+// por marcas («QXA») que el traductor deja tal cual y que luego se vuelven a poner en español.
+// Sin «lookbehind» (iPhone antiguos): el borde izquierdo de las palabras rusas se captura y se devuelve.
+const TR_L = "(^|[^\\p{L}\\p{N}])", TR_R = "(?![\\p{L}\\p{N}])";
+const trRx = (patron, flags="giu") => new RegExp(TR_L+"(?:"+patron+")"+TR_R, flags);
+
+// ¿En qué idioma está? Por las letras rusas y por las palabras más corrientes de cada idioma
+function idiomaDe(texto){
+  const t = String(texto||"");
+  const cir = (t.match(/[а-яё]/giu)||[]).length, lat = (t.match(/[a-zñáéíóú]/giu)||[]).length;
+  if(cir >= 20 && cir >= (cir+lat)*.3) return "ru";
+  const cuenta = rx => (t.match(rx)||[]).length;
+  const en = cuenta(/\b(the|and|with|each|of|in|your|this|you|stitch(es)?|sts?|sc|hdc|rnds?|rounds?|rows?|yarn|hook|repeat|around|chain|into|from|until|work|make)\b/gi);
+  const es = cuenta(/\b(el|la|los|las|y|con|cada|de|del|en|tu|este|esta|puntos?|pb|mpa|vueltas?|filas?|lana|ganchillo|repite|alrededor|cadenetas?|hasta|teje|haz)\b/gi);
+  if(en >= 8 && en > es*1.3) return "en";
+  if(es >= 8 && es >= en) return "es";
+  return en > es ? "en" : es > en ? "es" : "otro";
+}
+// Patrón inglés con términos del Reino Unido («dc» es punto bajo, «tr» es punto alto)
+function esTerminosUK(texto){ return /\b(htr|dtr|uk\s+terms?|british\s+terms?|uk\s+crochet)\b/i.test(texto) || (/\bdc\b/i.test(texto) && /\btr\b/i.test(texto) && !/\bsc\b/i.test(texto)); }
+const NOMBRE_IDIOMA = {ru:"ruso", en:"inglés", es:"español", otro:"otro idioma"};
+
+// ---------- Glosario ----------
+// [patrón, salida, clase]. Clase "m": se cambia por una marca que vuelve como «salida» (en español).
+// Clase "en": se pone en inglés para el traductor (así cuadran el género y el plural). Clase "ru": se cambia por
+// otra palabra rusa que el traductor entiende mejor. El orden importa: primero lo más largo.
+const TN = "(\\d+)"; // número
+// Infinitivo → imperativo («Набить» → «Набейте»): el traductor entiende mucho mejor las órdenes
+const IMPERATIVO_RU = {набить:"наполните", набейте:"наполните", набиваем:"наполняем", набивайте:"наполняйте", набив:"наполнив", набивая:"наполняя", набивать:"наполнять", пришить:"пришейте", вставить:"вставьте", вышить:"вышейте", вязать:"вяжите", провязать:"вяжите", сложить:"сложите",
+  оставить:"оставьте", закрепить:"закрепите", стянуть:"стяните", спрятать:"спрячьте", набрать:"наберите", отрезать:"отрежьте", обрезать:"обрежьте", соединить:"соедините",
+  пришивать:"пришивайте", повторить:"повторите", вывязать:"вывяжите", обвязать:"обвяжите", сшить:"сшейте", приклеить:"приклейте", украсить:"украсьте",
+  нарисовать:"нарисуйте", затонировать:"затонируйте", сменить:"смените", поменять:"поменяйте", продолжить:"продолжите", начать:"начните", вывернуть:"выверните",
+  связать:"свяжите", привязать:"привяжите", перейти:"перейдите", расположить:"расположите", завязать:"завяжите", продеть:"проденьте", протянуть:"протяните",
+  провязываем:"вяжем", провяжите:"вяжите", привязываем:"присоединяем", привяжите:"присоедините", привязать:"присоедините"};
+// Solo al empezar la frase («Набить голову» → «Наполните голову») o tras «и» en una frase que ya da una orden; y si la frase
+// empieza por la pieza («Тело набить плотно»), se pone primero el verbo («Наполните тело плотно»)
+const PIEZAS_RU = "тело|туловище|голову|голова|уши|ушки|ручки|руки|ножки|ноги|лапки|лапы|хвост|хвостик|мордочку|морду|глаза|глазки|нос|носик|деталь|детали|щёчки|щечки|крылья|рожки";
+function imperativosRu(t){
+  const imp = w => IMPERATIVO_RU[w.toLowerCase()];
+  const conMayus = (orig, nuevo) => /^\p{Lu}/u.test(orig) ? nuevo.charAt(0).toUpperCase()+nuevo.slice(1) : nuevo;
+  return t.replace(/([^.!?]+[.!?]?)/gu, frase => {
+    let f = frase.replace(new RegExp("^(\\s*)("+PIEZAS_RU+")\\s+([а-яё]+)(?=[\\s,.]|$)", "iu"), (m, esp, pieza, verbo) => imp(verbo) || Object.values(IMPERATIVO_RU).includes(verbo.toLowerCase())
+      ? esp+conMayus(pieza, imp(verbo) || verbo.toLowerCase())+" "+pieza.toLowerCase() : m);
+    const m0 = f.match(/^(\s*)([а-яё]+)/iu);
+    if(!m0) return f;
+    const primero = imp(m0[2]);
+    if(primero) f = m0[1]+conMayus(m0[2], primero)+f.slice(m0[0].length);
+    if(primero || Object.values(IMPERATIVO_RU).includes(m0[2].toLowerCase()))
+      f = f.replace(/(\s(?:и|затем|потом|после\s+чего)\s+)([а-яё]+)/giu, (m, y, v) => imp(v) ? y+imp(v) : m);
+    return f;
+  });
+}
+const GLOSARIO_RU = [
+  // Nombres de marcas y palabras en letras latinas («Alize Cotton Gold»): se dejan tal cual
+  ["[A-Za-z][A-Za-z0-9'’&+.]*(?:[ -][A-Za-z0-9][A-Za-z0-9'’&+.]*)*", "$0", "m"],
+  ["(?:наберите|набираем|набрать)\\s+(?:цепочку\\s+)?(?:из\\s+)?"+TN+"\\s*(?:вп|в\\.\\s*п\\.?|воздушн[а-яё]*\\s+пет[а-яё]*)", "monta una cadeneta de $1 cad", "m"],
+  ["(?:со|с|в|от)\\s+"+TN+"-?[йиюя]?\\s+(?:петли|петлю|вп|п\\.?)\\s+от\\s+крючка", "empezando en la $1ª cad desde el ganchillo", "m"],
+  ["в\\s+последн(?:юю|ий)\\s+(?:петлю|п\\.?|вп)", "en el último punto", "m"],
+  ["(?:с|по)\\s+другой\\s+стороны\\s+(?:цепочки|цепочке)", "por el otro lado de la cadeneta", "m"],
+  ["(?:вам\\s+)?понадобится|материалы\\s+и\\s+инструменты|материалы", "Materiales", "m"],
+  ["цвет(?:а|ом)?\\s*(?:№\\s*)?"+TN, "color $1", "m"],
+  ["мот(?:ок)", "ovillo", "m"], ["мот(?:ка|ков|ки)", "ovillos", "m"],
+  // Color suelto entre paréntesis («(бежевая)»): el traductor lo deja sin traducir si no se le ayuda
+  ["\\(\\s*(бежев|коричнев|розов|ч[её]рн|красн|голуб|зел[её]н|ж[её]лт|оранжев|фиолетов|сиренев|мятн|горчичн|персиков|бордов|кремов|молочн|бел|сер|син)[а-яё]*\\s*\\)",
+    (m, c) => "("+[["бежев","beige"],["коричнев","marrón"],["розов","rosa"],["черн","negro"],["чёрн","negro"],["красн","rojo"],["голуб","celeste"],["зелен","verde"],["зелён","verde"],["желт","amarillo"],["жёлт","amarillo"],
+      ["оранжев","naranja"],["фиолетов","morado"],["сиренев","lila"],["мятн","menta"],["горчичн","mostaza"],["персиков","melocotón"],["бордов","granate"],["кремов","crema"],["молочн","crudo"],["бел","blanco"],["сер","gris"],["син","azul"]]
+      .find(([k])=>c.toLowerCase().startsWith(k))[1]+")", "m"],
+  // Títulos y frases hechas
+  ["(?:мастер-класс|мк|описание|схема)\\s+(?:по\\s+)?вязани[яю]\\s+игрушки\\s+крючком", "patrón de muñeco a ganchillo", "m"],
+  ["(?:мастер-класс|мк|описание|схема)\\s+(?:по\\s+)?вязани[яю]\\s+крючком", "patrón de ganchillo", "m"],
+  ["сборка(?:\\s+игрушки)?", "montaje", "m"], ["оформление", "acabado", "m"],
+  ["между\\s+"+TN+"\\s*(?:-?м|-?ым)?\\s+и\\s+"+TN+"\\s*(?:-?м|-?ым)?\\s+(?:рядом|рядами|рядах|рядов|кругами|кругом)", "between rounds $1 and $2", "en"],
+  ["между\\s+(?:рядами|кругами)\\s+"+TN+"\\s+и\\s+"+TN, "between rounds $1 and $2", "en"],
+  ["(?:глазки|глаза)\\s+(?:вставить|вставляем|вставьте|вставляются|вставлены)|(?:вставить|вставляем|вставьте)\\s+(?:глазки|глаза)", "coloca los ojos", "m"],
+  ["(?:закрепить|закрепите|закрепляем)\\s+(?:нить|нитку)\\s+и\\s+(?:стянуть|стяните|стягиваем)\\s+(?:отверстие|оставшиеся\\s+петли)", "remata el hilo y cierra el agujero", "m"],
+  ["в\\s+скобках", "in parentheses", "en"], ["по\\s+ходу\\s+вязания|в\\s+процессе\\s+вязания|по\\s+мере\\s+вязания", "as you go", "en"],
+  ...[["зайк|зайчик|зайчонок|зайчих","conejito"],["мишк|медвежонк|медвежонок|мишутк","osito"],["котик|кот[её]нк|кот[её]нок|кошечк|котейк","gatito"],["лисичк|лис[её]нк|лис[её]нок","zorrito"],
+    ["собачк|щенок|щенк|щеночек","perrito"],["единорог|единорожк|единорожек","unicornio"],["слоник|слон[её]нк|слон[её]нок","elefantito"],["мышк|мышонк|мышонок","ratoncito"],["совушк|сов|сов[её]нок|сов[её]нк","búho"],
+    ["пч[её]лк","abejita"],["божь[яе][йю]?\\s+коровк","mariquita"],["[её]жик|[её]жичек","erizo"],["пингвин(?:чик)?","pingüino"],["лягушк|лягуш[её]нок|лягуш[её]нк","rana"],["динозаврик|динозавр","dinosaurio"],
+    ["кукл|куколк","muñeca"],["овечк|барашек|барашк","ovejita"],["пор[о]?с[её]н[о]?к|свинк|хрюшк","cerdito"],["уточк|ут[её]нок|ут[её]нк","patito"],["цыпл[её]нок|цыпл[её]нк","pollito"],["черепашк","tortuga"],
+    ["осьминожк|осьминог","pulpo"],["жирафик|жираф","jirafa"],["льв[её]нок|льв[её]нк","leoncito"],["тигр[её]нок|тигр[её]нк","tigrito"],["пандочк","panda"],["кролик","conejo"],
+    ["енот|енотик","mapache"],["белочк|бельчонок|бельчонк","ardilla"],["ол[её]н[её]нок|ол[её]н[её]нк|олешк","cervatillo"],["дракончик|дракон","dragón"],["кит[ёе]нок|кит[ёе]нк|китик","ballenita"]
+  ].map(([a, b]) => ["(?:"+a+")(?:а|и|у|е|ой|ом|ов|ам|ами|ах|ы|ей|ою)?", b, "m"]),
+  ["(?:вяжем|вязать|вяжите|вязание)\\s+по\\s+спирали", "teje en espiral", "m"],
+  ["по\\s+спирали", "en espiral", "m"],
+  ["не\\s+поворачивая\\s+(?:работу|работы|вязание)", "sin girar la labor", "m"],
+  ["(?:повернуть|поворачиваем|поверните|повернуть)\\s+работу|поворот\\s+работы", "gira la labor", "m"],
+  ["через\\s+обе\\s+(?:стенки|полупетли)|за\\s+обе\\s+(?:стенки|полупетли)", "por las dos hebras", "m"],
+  ["за\\s+(?:задн(?:юю|ие|ей)\\s+(?:стенк[уи]|полупетл[июя]|дольк[уи])|зпс|з\\.с\\.)", "por la hebra de atrás", "m"],
+  ["за\\s+(?:передн(?:юю|ие|ей)\\s+(?:стенк[уи]|полупетл[июя]|дольк[уи])|ппс|п\\.с\\.)", "por la hebra de delante", "m"],
+  ["(?:вп|в\\.\\s*п\\.?|воздушн[а-яё]*\\s+пет[а-яё]*)\\s+подъ[её]ма", "cad para subir", "m"],
+  ["подъ[её]ма", "para subir", "m"],
+  ["в\\s+(?:каждую|каждый)\\s+(?:петлю|столбик|сбн|п\\.?)\\s+(?:по\\s+кругу|ряда|до\\s+конца(?:\\s+ряда)?)", "en cada punto alrededor", "m"],
+  ["в\\s+(?:каждую|каждый)\\s+(?:петлю|столбик|сбн|п\\.?)|в\\s+каждую|в\\s+каждый", "en cada punto", "m"],
+  ["в\\s+(?:ту\\s+же|эту\\s+же|одну)\\s+(?:петлю|п\\.?)|в\\s+ту\\s+же", "en el mismo punto", "m"],
+  ["в\\s+следующ(?:ую|ий)\\s+(?:петлю|п\\.?|столбик)", "en el siguiente punto", "m"],
+  ["в\\s+"+TN+"-?[юйу]?\\s+(?:петлю|вп|п\\.?)\\s+от\\s+крючка", "en la $1ª cad desde el ganchillo", "m"],
+  ["в\\s+(?:кольц[оеа]\\s+амигуруми|волшебн(?:ое|ом)\\s+кольц[оеа]|магическ(?:ое|ом)\\s+кольц[оеа]|ка)", "en el anillo mágico", "m"],
+  ["(?:кольц[оеау]\\s+амигуруми|волшебн[а-яё]*\\s+кольц[а-яё]*|магическ[а-яё]*\\s+кольц[а-яё]*|амигуруми\\s+кольц[а-яё]*)", "anillo mágico", "m"],
+  ["по\\s+кругу", "alrededor", "m"],
+  ["до\\s+конца\\s+ряда|до\\s+конца", "hasta el final de la vuelta", "m"],
+  ["(?:стянуть|стягиваем|стяните)\\s+(?:оставшиеся\\s+петли|отверстие|дырочку)", "cierra el agujero", "m"],
+  ["(?:спрятать|спрячьте|прячем)\\s+(?:конец\\s+нити|кончик\\s+нити|нить|нитку|хвостик|кончик|концы\\s+нитей|концы)", "esconde la hebra", "m"],
+  ["(?:закрепить|закрепите|закрепляем)\\s+(?:и\\s+(?:обрезать|отрезать)\\s+)?(?:нить|нитку)(?:\\s+и\\s+(?:обрезать|отрезать|отрежьте|обрежьте))?", "remata y corta el hilo", "m"],
+  ["(?:оставить|оставьте|оставляем)\\s+(?:длинн[а-яё]+\\s+)?(?:нить|конец\\s+нити|кончик\\s+нити|конец|кончик|хвостик)\\s+(?:для\\s+пришивания|для\\s+сшивания)", "deja una hebra larga para coser", "m"],
+  ["(?:глазки|глаза)\\s+на\\s+(?:безопасном|безопасных)\\s+креплени[яи]|(?:глазки|глаза)\\s+на\\s+заглушках|безопасн[а-яё]*\\s+(?:глазки|глаза)", "ojos de seguridad", "m"],
+  ["сложить\\s+пополам|сложите\\s+пополам|складываем\\s+пополам", "dobla por la mitad", "m"],
+  ["без\\s+изменений|без\\s+прибавок(?:\\s+и\\s+убавок)?", "sin aumentos", "m"],
+  ["меняем\\s+цвет\\s+на|смена\\s+цвета\\s+на|сменить\\s+цвет\\s+на|меняем\\s+нить\\s+на", "cambia al color", "m"],
+  // Nombres completos de los puntos (singular y plural)
+  ["столбик(?:ов|и|ами|ах)\\s+без\\s+накида", "puntos bajos", "m"], ["столбик[ауом]?\\s+без\\s+накида", "punto bajo", "m"],
+  ["полустолбик(?:ов|и|ами)\\s+с\\s+накидом", "medios puntos altos", "m"], ["полустолбик[ауом]?\\s+с\\s+накидом", "medio punto alto", "m"],
+  ["столбик(?:ов|и|ами)?\\s+с\\s+(?:2|двумя)\\s+накидами", "puntos altos dobles", "m"],
+  ["столбик(?:ов|и|ами)\\s+с\\s+(?:1\\s+)?накидом", "puntos altos", "m"], ["столбик[ауом]?\\s+с\\s+(?:1\\s+)?накидом", "punto alto", "m"],
+  ["соединительн[а-яё]*\\s+столбик(?:ов|и|ами)", "puntos deslizados", "m"], ["соединительн[а-яё]*\\s+столбик[ауом]?", "punto deslizado", "m"],
+  ["полустолбик(?:ов|и|ами)", "puntos deslizados", "m"], ["полустолбик[ауом]?", "punto deslizado", "m"],
+  ["воздушн[а-яё]*\\s+петел[ьи]|воздушн(?:ые|ых|ыми)\\s+петл[а-яё]*", "cadenetas", "m"], ["воздушн[а-яё]*\\s+петл[а-яё]*", "cadeneta", "m"],
+  ["рельефн[а-яё]*\\s+столбик[а-яё]*", "punto relieve", "m"], ["пышн[а-яё]*\\s+столбик[а-яё]*", "punto puff", "m"],
+  ["прибав(?:ки|ок|ками|ках)", "aumentos", "m"], ["прибав(?:ка|ку|кой|ке)", "aumento", "m"],
+  ["убав(?:ки|ок|ками|ках)", "disminuciones", "m"], ["убав(?:ка|ку|кой|ке)", "disminución", "m"],
+  ["пико", "picot", "m"],
+  // Abreviaturas
+  ["сбн|ст\\.?\\s*б/н|б/н", "pb", "m"],
+  ["пссн|пс\\s*с/н|пст\\.?\\s*с/н", "mpa", "m"],
+  ["с2н|ст\\.?\\s*с\\s*2\\s*н(?:ак)?\\.?", "pad", "m"],
+  ["ссн|с1н|ст\\.?\\s*с/н|с/н|ст\\.?\\s*с\\.?\\s*н\\.?", "pa", "m"],
+  ["вп|в\\.\\s*п\\.|в/п", "cad", "m"],
+  ["сс|с\\.\\s*с\\.|соед\\.\\s*ст\\.", "pd", "m"],
+  ["КА|К\\.А\\.|Ка", "AM", "m", "gu"],
+  ["пр", "aum", "m"], ["уб", "dism", "m"],
+  ["рлс", "punto relieve", "m"],
+  ["(?:не\\s+набивать|не\\s+набиваем|не\\s+набивайте|набивать\\s+не\\s+нужно|набивать\\s+не\\s+надо)", "no se rellenan", "m"],
+  ["слегка\\s+набив(?:ая)?", "rellenando un poco", "m"], ["набив(?:ая)?", "rellenando", "m"],
+  ["(?:наполните|наполняем)(?=\\s*(?:[.;]|$))", "rellena", "m"],
+  ["(?:вяжите|вяжем|вязать|провяжите|провязываем)(?=\\s+\\d)", "teje", "m"],
+  ["(?:начинаем|начните|начать)\\s+(?:(?:вязать|вяжите|вяжем)\\s+)?(?:с|со)\\s+"+TN+"(?:-?го)?\\s+(?:ряда|круга|р\\.?)", "empieza por la vuelta $1", "m"],
+  // Diminutivos (ушки, носик…): el traductor los entiende mejor en su forma normal (уши, нос…)
+  ...[["ушки","уши"],["ушек","ушей"],["ушками","ушами"],["ушкам","ушам"],["ушках","ушах"],["ушко","ухо"],["ушка","уха"],
+    ["глазки","глаза"],["глазок","глаз"],["глазками","глазами"],["глазкам","глазам"],["глазках","глазах"],
+    ["носик","нос"],["носика","носа"],["носиком","носом"],["носику","носу"],["ротик","рот"],["ротика","рта"],["ротиком","ртом"],
+    ["ручки","руки"],["ручек","рук"],["ручками","руками"],["ручкам","рукам"],["ручка","рука"],["ручку","руку"],["ручкой","рукой"],
+    ["ножки","ноги"],["ножек","ног"],["ножками","ногами"],["ножкам","ногам"],["ножка","нога"],["ножку","ногу"],["ножкой","ногой"],
+    ["лапки","лапы"],["лапок","лап"],["лапками","лапами"],["лапка","лапа"],["лапку","лапу"],["лапкой","лапой"],["лапке","лапе"],["ножке","ноге"],["ручке","руке"],
+    ["щёчки","щёки"],["щечки","щеки"],["щёчек","щёк"],["щечек","щек"],["щёчками","щеками"],["щечками","щеками"],
+    ["хвостик","хвост"],["хвостика","хвоста"],["хвостиком","хвостом"],["головка","голова"],["головку","голову"],["головки","головы"],["головкой","головой"],
+    ["тельце","тело"],["тельца","тела"],["крылышки","крылья"],["крылышек","крыльев"],["рожки","рога"],["рожек","рогов"],["копытца","копыта"]
+  ].map(([a, b]) => [a, b, "ru"]),
+  ["МОРДОЧКА|МОРДА|Мордочка|Морда", "Hocico", "m", "gu"],
+  ["мордочк(?:а|у|и|ой|е)|морд(?:а|у|ы|ой|е)", "muzzle", "en"], ["пятач(?:ок|ка|ком)", "snout", "en"],
+  ["петл(?:и|ями|ях)|петель", "stitches", "en"], ["петл(?:я|ю|ей|е)", "stitch", "en"], ["(\\d+)\\s*п\\.", "$1 stitches", "en"],
+  ["ряд(?:ы|ов|ами|ах)", "rounds", "en"], ["ряд(?:а|у|ом|е)?", "round", "en"], ["круг(?:и|ов|ами)", "rounds", "en"],
+  ["детал(?:и|ей|ями|ях)", "pieces", "en"], ["детал(?:ь|ью)", "piece", "en"],
+  ["(?:вязани[еяю]\\s+)?крючком", "a ganchillo", "m"], ["крюч(?:ок|ка|ке)", "ganchillo", "m"],
+  ["наполнител(?:ь|ем|я)\\s+(?:холлофайбер|синтепух|синтепон)|холлофайбер(?:ом)?|синтепух(?:ом)?|синтепон(?:ом)?", "relleno de fibra", "m"],
+  ["маркер(?:ом|а|ы)?", "marcador", "m"], ["игл(?:а|у|ой)\\s+для\\s+(?:пришивания|сшивания)", "aguja lanera", "m"],
+  ["условные\\s+обозначения|обозначения|сокращения|расшифровка\\s+сокращений", "Abreviaturas", "m"],
+  ["(?:мастер-класс|мк|описание|схема)\\s+(?:по\\s+)?вязани[яю]", "patrón de", "m"],
+  ["мастер-класс(?:а|ом|у)?|описани(?:е|ю|ем|и)", "pattern", "en"], ["описания", "of the pattern", "en"], ["молочн(?:ый|ого|ым|ая|ой)", "cream", "en"],
+  ["провязав", "связав", "ru"]
+];
+
+// Inglés de EE. UU. (o del Reino Unido, que llama «dc» al punto bajo y «tr» al punto alto)
+const PUNTOS_EN_ES = {
+  us: [["sc2tog|sc\\s*2\\s*tog", "dism"], ["dc2tog", "dism de pa"], ["hdc2tog", "dism de mpa"], ["invdec|inv\\s*dec", "dism invisible"],
+       ["dtr", "pad"], ["trc|tr", "pad"], ["hdc", "mpa"], ["dc", "pa"], ["sc", "pb"]],
+  uk: [["dc2tog|dc\\s*2\\s*tog", "dism"], ["tr2tog", "dism de pa"], ["htr2tog", "dism de mpa"], ["invdec|inv\\s*dec", "dism invisible"],
+       ["ttr", "pad"], ["dtr", "pad"], ["htr", "mpa"], ["tr", "pa"], ["dc", "pb"]]
+};
+const GLOSARIO_EN = uk => [
+  ["(?:is\\s+)?work(?:ed|ing)?\\s+in\\s+(?:a\\s+)?(?:continuous\\s+)?(?:spiral|continuous\\s+rounds|rounds\\s+without\\s+joining)", "se teje en espiral", "m"],
+  ["\\(\\s*make\\s+"+TN+"\\s*\\)", "(hacer $1)", "m"],
+  ["abbreviations\\s*\\(\\s*(?:us|american|usa)\\s+terms?\\s*\\)", "Abreviaturas (términos de EE. UU.)", "m"], ["abbreviations\\s*\\(\\s*(?:uk|british)\\s+terms?\\s*\\)", "Abreviaturas (términos del Reino Unido)", "m"],
+  ["\\(\\s*(?:us|american|usa)\\s+terms?\\s*\\)|(?:us|american)\\s+terms", "(términos de EE. UU.)", "m"], ["\\(\\s*(?:uk|british)\\s+terms?\\s*\\)|(?:uk|british)\\s+terms", "(términos del Reino Unido)", "m"],
+  ["abbreviations|stitches\\s+used|stitch\\s+guide", "Abreviaturas", "m"], ["assembly|assembling|construction", "Montaje", "m"], ["finishing", "Acabado", "m"],
+  ["materials|supplies|you\\s+will\\s+need", "Materiales", "m"],
+  ["will\\s+curl", "will roll up", "en"], ["curls?|curling", "rolls up", "en"],
+  ["start(?:ing)?\\s+(?:in|into)\\s+(?:the\\s+)?"+TN+"(?:st|nd|rd|th)\\s+(?:ch|chain)\\s+from\\s+(?:the\\s+)?hook", "empezando en la $1ª cad desde el ganchillo", "m"], ["make\\s+"+TN+"(?=\\s*$)", "hacer $1", "m"],
+  ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+safety\\s+eyes", "ojos de seguridad de $1", "m"], ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+(?:crochet\\s+)?hook", "ganchillo de $1", "m"],
+  ["in\\s+(?:a\\s+)?spiral|in\\s+continuous\\s+rounds", "en espiral", "m"],
+  ["do\\s+not\\s+(?:join|turn)(?:\\s+(?:at\\s+the\\s+end\\s+of\\s+(?:each|the)\\s+(?:round|rnd)|rounds|the\\s+work))?", "no cierres la vuelta", "m"],
+  ["(?:join|close)(?:\\s+the\\s+(?:round|rnd))?\\s+with\\s+(?:a\\s+)?(?:sl\\s*st|ss)\\s+(?:to|in|into)\\s+(?:the\\s+)?(?:first|1st|beg(?:inning)?)\\s+(?:st|stitch|sc|dc|tr|ch)", "cierra con pd en el primer punto", "m"],
+  ["(?:join|close)(?:\\s+the\\s+(?:round|rnd))?\\s+with\\s+(?:a\\s+)?(?:sl\\s*st|ss)", "cierra con pd", "m"],
+  ["(?:to\\s+|in\\s+|into\\s+)?(?:the\\s+)?top\\s+of\\s+(?:the\\s+)?(?:beg(?:inning)?|starting|first)\\s+(?:ch|chain)-?\\s*"+TN, "en la parte superior de las $1 cad iniciales", "m"],
+  ["(?:beg(?:inning)?|starting)\\s+(?:ch|chain)-?\\s*"+TN, "las $1 cad iniciales", "m"],
+  ["(?:ch|chain)-"+TN+"\\s*(?:sps|spaces)", "espacios de $1 cad", "m"], ["(?:ch|chain)-"+TN+"\\s*(?:sp|space)", "espacio de $1 cad", "m"],
+  ["(?:ch|chain)-"+TN+"\\s*(?:lps|loops)", "arcos de $1 cad", "m"], ["(?:ch|chain)-"+TN+"\\s*(?:lp|loop)", "arco de $1 cad", "m"],
+  ["[Jj]oin\\s+(?:yarn\\s+|colou?r\\s+)?([A-F])(?=\\s)", "une el color $1", "m", "gu"], ["(?:[Uu]sing|[Ww]ith)\\s+(?:colou?r\\s+)?([A-F])(?=\\s*,)", "con el color $1", "m", "gu"],
+  ["[Ff]asten\\s+off\\s+([A-F])(?=\\s*[.,;]|$)", "remata el color $1", "m", "gu"],
+  ["do\\s+not\\s+fasten\\s+off|don't\\s+fasten\\s+off", "no remates", "m"],
+  ["(?:through|in|into)\\s+(?:the\\s+)?back\\s+loops?(?:\\s+only)?", "por la hebra de atrás", "m"], ["(?:through|in|into)\\s+(?:the\\s+)?front\\s+loops?(?:\\s+only)?", "por la hebra de delante", "m"],
+  ["(?:through|in|into)\\s+both\\s+loops", "por las dos hebras", "m"],
+  ["tension|gauge", "Muestra", "m"], ["teal", "verde azulado", "m"], ["granny\\s+squares?", "granny square", "m"],
+  ["(?:in\\s+(?:the\\s+)?)?back\\s+loops?\\s+only|in\\s+(?:the\\s+)?blo|blo|in\\s+(?:the\\s+)?back\\s+loops?", "por la hebra de atrás", "m"],
+  ["(?:in\\s+(?:the\\s+)?)?front\\s+loops?\\s+only|in\\s+(?:the\\s+)?flo|flo|in\\s+(?:the\\s+)?front\\s+loops?", "por la hebra de delante", "m"],
+  ["front\\s+loops", "hebras de delante", "m"], ["back\\s+loops", "hebras de atrás", "m"],
+  ["(?:in|into)\\s+(?:a\\s+|the\\s+)?(?:magic\\s+(?:ring|circle|loop)|mr|mc|adjustable\\s+ring)", "en el anillo mágico", "m"],
+  ["magic\\s+(?:ring|circle|loop)|mr|adjustable\\s+ring", "anillo mágico", "m"],
+  ["(?:in|into)\\s+(?:each|every)\\s+(?:st|stitch|sc|dc|hdc)\\s+around", "en cada punto", "m"], ["around(?=\\s*(?:[(,.;]|$))", "alrededor", "m"],
+  ["(?:in|into)\\s+(?:each|every)\\s+(?:st|stitch|sc|dc|hdc)(?:\\s+across)?", "en cada punto", "m"],
+  ["(?:in|into)\\s+(?:each|every)\\s+(?:ch|chain)(?:\\s+across)?", "en cada cadeneta", "m"],
+  ["(?:in|into)\\s+(?:the\\s+)?same\\s+(?:st|stitch)", "en el mismo punto", "m"],
+  ["(?:in|into)\\s+(?:the\\s+)?next\\s+"+TN+"\\s+(?:sts|stitches)", "en los $1 puntos siguientes", "m"],
+  ["(?:in|into)\\s+(?:the\\s+)?next\\s+(?:st|stitch)", "en el siguiente punto", "m"],
+  ["(?:in|into)\\s+(?:the\\s+)?"+TN+"(?:st|nd|rd|th)\\s+(?:ch|chain)\\s+from\\s+(?:the\\s+)?hook", "en la $1ª cad desde el ganchillo", "m"],
+  ["across(?=\\s*(?:[(,.;]|$))", "hasta el final", "m"],
+  ["fasten\\s+off(?:\\s+and\\s+weave\\s+in\\s+(?:the\\s+|all\\s+)?ends?)?|fo", "remata", "m"],
+  ["weave\\s+in\\s+(?:the\\s+|all\\s+|your\\s+)?(?:ends?|tails?)", "esconde las hebras", "m"],
+  ["leav(?:e|ing)\\s+(?:a\\s+)?(?:long\\s+)?(?:tail|end)(?:\\s+for\\s+sewing)?", "deja una hebra larga para coser", "m"],
+  ["safety\\s+eyes", "ojos de seguridad", "m"], ["safety\\s+eye", "ojo de seguridad", "m"],
+  ["(?:fiberfill|fibrefill|polyfill|poly-fil|polyester)(?:\\s+(?:stuffing|fiber|fibre))?|toy\\s+stuffing", "relleno", "m"],
+  ["tapestry\\s+needle|yarn\\s+needle|darning\\s+needle", "aguja lanera", "m"],
+  ["stitch\\s+markers?|markers?", "marcador", "m"],
+  ["crochet\\s+hook|hook", "ganchillo", "m"],
+  ["worsted(?:\\s+weight)?", "medium thickness {(worsted)}", "en"], ["dk(?:\\s+weight)?", "DK", "m"], ["aran(?:\\s+weight)?", "medium thickness {(aran)}", "en"],
+  ["fingering(?:\\s+weight)?", "fine thickness {(fingering)}", "en"], ["sport(?:\\s+weight)", "fine thickness {(sport)}", "en"], ["(?:super\\s+)?(?:bulky|chunky)(?:\\s+weight)?", "thick {(bulky)}", "en"],
+  ["right\\s+side|rs", "derecho", "m"], ["wrong\\s+side|ws", "revés", "m"],
+  ["turning\\s+ch(?:ain)?|t-?ch", "cad para girar", "m"],
+  ["ch-?sp(?:ace)?s|chain\\s+spaces", "espacios de cadenetas", "m"], ["ch-?sp(?:ace)?|chain\\s+space", "espacio de cadenetas", "m"],
+  ["sl\\s*sts|slip\\s+stitches", "pd", "m"], ["sl\\s*st|slip\\s+stitch|ss", "pd", "m"],
+  ["(?:invisible\\s+)?decreases", "disminuciones", "m"], ["(?:invisible\\s+)?decrease", "disminución", "m"],
+  ["increases", "aumentos", "m"], ["increase", "aumento", "m"],
+  ["single\\s+crochets?", uk ? "punto bajo" : "punto bajo", "m"], ["half\\s+(?:double|treble)\\s+crochets?", "medio punto alto", "m"],
+  [uk ? "double\\s+crochets?" : "double\\s+crochets?", uk ? "punto bajo" : "punto alto", "m"], [uk ? "treble\\s+crochets?|trebles?" : "treble\\s+crochets?|trebles?", uk ? "punto alto" : "punto alto doble", "m"],
+  ["chains", "cadenetas", "m"], ["chain", "cadeneta", "m"],
+  ...PUNTOS_EN_ES[uk ? "uk" : "us"].map(([p, es]) => [p, es, "m"]),
+  ["ch", "cad", "m"], ["inc", "aum", "m"], ["dec", "dism", "m"], ["sk|skip", "salta", "m"], ["yo|yarn\\s+over", "lazada", "m"],
+  ["sts", "stitches", "en"], ["st", "stitch", "en"], ["rnds", "rounds", "en"], ["rnd|rd", "round", "en"], ["rep", "repeat", "en"], ["tog", "together", "en"],
+  ["beg", "beginning", "en"], ["approx\\.?", "approximately", "en"], ["rem", "remaining", "en"], ["foll", "following", "en"], ["cont", "continue", "en"],
+  ["lps", "loops", "en"], ["lp", "loop", "en"], ["sp", "space", "en"], ["ea", "each", "en"], ["prev", "previous", "en"], ["pm", "place marker", "en"], ["blo", "back loop", "en"]
+];
+
+// Títulos de las piezas en ruso: con diccionario (el traductor a veces se inventa la palabra si va sola)
+const PIEZAS_ES = [["голов[аыу]|головк[аиу]","Cabeza"],["тел[оа]|тельц[еа]|туловищ[еа]","Cuerpo"],["уши|ушки|ушек","Orejas"],["ух[оа]|ушк[оа]","Oreja"],["руки|ручки|ручек","Brazos"],
+  ["рук[аиу]|ручк[аиу]","Brazo"],["ноги|ножки|ножек","Piernas"],["ног[аиу]|ножк[аиу]","Pierna"],["лапы|лапки|лапок","Patas"],["лап[аиу]|лапк[аиу]","Pata"],["хвост|хвостик","Cola"],
+  ["морд[аы]|мордочк[аи]","Hocico"],["нос|носик","Nariz"],["глаза|глазки","Ojos"],["щ[её]ки|щ[её]чки","Mejillas"],["крылья|крылышки","Alas"],["крыл[оа]|крылышк[оа]","Ala"],
+  ["рога|рожки","Cuernos"],["рог|рожок","Cuerno"],["грив[аы]","Crin"],["ч[её]лк[аи]","Flequillo"],["плать[ея]|платьиц[ея]","Vestido"],["юбк[аи]|юбочк[аи]","Falda"],
+  ["шапк[аи]|шапочк[аи]","Gorro"],["шарф|шарфик","Bufanda"],["штаны|штанишки","Pantalones"],["кофт[аы]|кофточк[аи]","Jersey"],["сборк[аи]","Montaje"],["оформлени[ея]","Acabado"],
+  ["бант|бантик","Lazo"],["цвет(?:ок|очек)","Flor"],["сердц[ея]|сердечк[оа]","Corazón"],["подошв[аы]","Suela"],["стоп[аы]","Pie"],["волосы|прич[её]ск[аи]","Pelo"],["панцир[ья]","Caparazón"],
+  ["плавники","Aletas"],["клюв|клювик","Pico"],["копыта|копытца","Pezuñas"],["ше[яи]","Cuello"],["туфельки|туфли|ботиночки|ботинки","Zapatos"],["пуговицы","Botones"],["основ[аы]","Base"],
+  ["дно|донышко","Fondo"],["руч(?:ка|ки) (?:сумки|корзины)","Asa"],["мордочк[аи] (?:и|с) нос(?:ом|ик)","Hocico y nariz"]];
+function piezaRusa(t){
+  const m = t.trim().match(/^([\p{L} ]+?)\s*(\(.*\))?\s*[:.]?\s*$/u);
+  if(!m) return null;
+  const e = PIEZAS_ES.find(([rx]) => new RegExp("^(?:"+rx+")$", "iu").test(m[1].trim()));
+  return e ? {es: m[1]===m[1].toUpperCase() && m[1].length > 2 ? e[1].toUpperCase() : e[1], resto: m[2]||""} : null;
+}
+
+// Cabecera de una vuelta: «1 ряд:», «Ряд 1.», «2-5 ряды», «Р.3», «Rnd 1:», «Rnds 6-12:», «Row 3», «R1» → «Vuelta 1:»
+const RU_NUM = "(\\d+)(?:\\s*-?\\s*(?:ый|ий|ой|й|я|е|ом))?";
+function cabeceraVuelta(l, idioma){
+  let m;
+  const rango = (a, b, fila) => ({cab: (fila ? "Filas " : "Vueltas ")+a+" a "+b+":", resto: l.slice(m[0].length)});
+  const una = (a, fila) => ({cab: (fila ? "Fila " : "Vuelta ")+a+":", resto: l.slice(m[0].length)});
+  if(idioma==="ru"){
+    if((m = l.match(new RegExp("^\\s*(?:с\\s+)?"+RU_NUM+"\\s*(?:[-–—]|по|до)\\s*"+RU_NUM+"\\s*(?:-?\\s*(?:й|ый|ий))?\\s*(?:рядах|ряды|ряд|ряда|круги|круг|р)\\.?\\s*[:;.)]?\\s*", "iu")))) return rango(m[1], m[2]);
+    if((m = l.match(/^\s*(?:ряды|круги|р\.?)\s*(\d+)\s*[-–—]\s*(?:р\.?\s*)?(\d+)\s*[:;.)]?\s*/iu))) return rango(m[1], m[2]);
+    if((m = l.match(new RegExp("^\\s*"+RU_NUM+"\\s*(?:ряд|круг|р)\\.?\\s*[:;.)]?\\s*", "iu")))) return una(m[1]);
+    if((m = l.match(/^\s*(?:ряд|круг|р)\.?\s*(\d+)\s*[:;.)\-–—]?\s*/iu))) return una(m[1]);
+  }
+  if((m = l.match(/^\s*(rows?)\s*(\d+)\s*(?:-|–|—|to|and|&)\s*(\d+)\s*[:;.)\-–—]?\s*/i))) return rango(m[2], m[3], true);
+  if((m = l.match(/^\s*(?:rnds?|rounds?|rds?|r)\s*(\d+)\s*(?:-|–|—|to|and|&)\s*(?:r\s*)?(\d+)\s*[:;.)\-–—]?\s*/i))) return rango(m[1], m[2]);
+  if((m = l.match(/^\s*(row)\s*(\d+)\s*[:;.)\-–—]?\s*/i))) return una(m[2], true);
+  if((m = l.match(/^\s*(?:rnd|round|rd|r)\s*(\d+)\s*[:;.)\-–—]?\s*/i))) return una(m[1]);
+  // «1. 6 сбн…», «5-9: 24 sc»: vueltas numeradas sin decir «vuelta» (solo si lo que sigue lleva puntos)
+  if((m = l.match(/^\s*(\d{1,3})\s*[-–]\s*(\d{1,3})\s*[.:)]\s+/)) && tienePuntosOrig(l.slice(m[0].length), idioma)) return rango(m[1], m[2]);
+  if((m = l.match(/^\s*(\d{1,3})\s*[.:)]\s+/)) && tienePuntosOrig(l.slice(m[0].length), idioma)) return una(m[1]);
+  return null;
+}
+function tienePuntosOrig(t, idioma){
+  return idioma==="ru" ? /\d\s*(?:сбн|вп|пр|уб|ссн|пссн|сс|с1н|с2н)|(?:^|[^\p{L}])(?:сбн|пр|уб|КА)(?![\p{L}])|кольц/iu.test(t) : /\b(sc|dc|hdc|htr|tr|ch|inc|dec|sl\s*st|mr)\b/i.test(t);
+}
+
+// Cambia las palabras de ganchillo por marcas («QXA», «QXB»…) que el traductor deja tal cual
+const LETRAS_MARCA = "ABCDEFGHJKLMNPRSTUVWZ";
+function marcaTr(n){ return "QX"+LETRAS_MARCA[Math.floor(n/LETRAS_MARCA.length)%LETRAS_MARCA.length]+LETRAS_MARCA[n%LETRAS_MARCA.length]; }
+function proteger(texto, glosario){
+  const marcas = [];
+  let t = " "+texto+" ";
+  for(const [patron, salida, clase, flags] of glosario){
+    const rx = trRx(patron, flags);
+    t = t.replace(rx, (m, borde, ...g) => {
+      const grupos = g.slice(0, -2).filter(x=>typeof x==="string" || x===undefined);
+      const out = typeof salida==="function" ? salida(m.slice(borde.length), ...grupos) : salida.replace(/\$0/g, m.slice(borde.length)).replace(/\$(\d)/g, (_, n) => grupos[n-1] ?? "");
+      if(clase==="ru" && /^\p{Lu}/u.test(m.slice(borde.length)) && !/^\p{Lu}/u.test(out)) return borde+out.charAt(0).toUpperCase()+out.slice(1);
+      if(clase==="en" || clase==="ru") return borde+out.replace(/\{([^}]+)\}/g, (x, es) => { const k = marcaTr(marcas.length); marcas.push(es); return k; });
+      const k = marcaTr(marcas.length); marcas.push(out);
+      return borde+k;
+    });
+  }
+  return {t: t.trim(), marcas};
+}
+// «х 6», «6 раз», «x6» → «x 6»; «(12 п.)» → «(12)»
+function arreglarSignos(t){
+  return t.replace(/^\s*[-–—:]\s*/, "").replace(/(\d)(?=[а-яё])/giu, "$1 ")
+    .replace(/\s*=\s*(\d+)\s*(?:п\.?|петел[ьи]|петля|sts?|stitches)?\.?\s*$/iu, " ($1)").replace(/\b(ch|sc|dc|hdc|htr|tr|sl\s*st)\s+(\d+)\b(?!\s*(?:sts?|stitches|times|ch|sc|dc|hdc|tr)\b)/gi, "$2 $1").replace(/(\d)(sc|dc|hdc|htr|ch|tr|dtr|inc|dec)\b/gi, "$1 $2").replace(/(\d)\s*[хХ×*]\s*(\d)/gu, "$1 x $2").replace(/([)\]])\s*[хХ×*]\s*(\d)/gu, "$1 x $2")
+    .replace(/([)\]])\s*(\d+)\s*(?:раз[а]?|times)(?![\p{L}])/giu, "$1 x $2")
+    .replace(/(\d+)\s+(?:раз[а]?|times)(?![\p{L}])/giu, "$1 veces")
+    .replace(/\(\s*(\d+)\s*(?:п\.?|петел[ьи]|петля|sts?|stitches|puntos)\s*\)/giu, "($1)")
+    .replace(/\s[–—]\s*(\d+)\s*(?:п\.?|петел[ьи]|петля|sts?|stitches)\.?\s*$/iu, " ($1)");
+}
+// ¿Queda algo de texto que haya que traducir? (palabras que no son marcas, números o «x»)
+function quedaTexto(t){ return /[\p{L}]{2,}/u.test(t.replace(/QX[A-Z]{2}/g, " ").replace(/\b(x|veces)\b/gi, " ")); }
+// «antes»: el texto que se mandó al traductor (solo cuenta como perdida una marca que iba en él)
+function devolverMarcas(t, marcas, antes=null){
+  let falta = 0;
+  marcas.forEach((m, i) => {
+    const k = marcaTr(i), rx = new RegExp(k.split("").join("\\s?"), "gi");
+    if(!rx.test(t) && (antes==null || antes.includes(k))) falta++;
+    t = t.replace(rx, m);
+  });
+  return {t, falta};
+}
+
+// ---------- Arreglos del español que da el traductor ----------
+// Términos de ganchillo de España, «tú» en vez de «usted» y verbos al principio de la frase
+const IMPERATIVOS = {Tejer:"Teje", Coser:"Cose", Rellenar:"Rellena", Doblar:"Dobla", Cortar:"Corta", Dejar:"Deja", Insertar:"Coloca", Colocar:"Coloca", Bordar:"Borda",
+  Repetir:"Repite", Cerrar:"Cierra", Girar:"Gira", Hacer:"Haz", Esconder:"Esconde", Fijar:"Remata", Asegurar:"Remata", Cambiar:"Cambia", Unir:"Une", Pegar:"Pega",
+  Atar:"Ata", Tirar:"Tira", Marcar:"Marca", Usar:"Usa", Utilizar:"Usa", Montar:"Monta", Rematar:"Remata", Empezar:"Empieza", Comenzar:"Comienza", Continuar:"Continúa",
+  Terminar:"Termina", Saltar:"Salta", Contar:"Cuenta", Coloque:"Coloca", Inserte:"Coloca", Rellene:"Rellena", Deje:"Deja", Cosa:"Cose", Teja:"Teje", Doble:"Dobla",
+  Corte:"Corta", Utilice:"Usa", Use:"Usa", Gire:"Gira", Asegure:"Remata", Esconda:"Esconde", Tire:"Tira", Repita:"Repite", Cierre:"Cierra", Haga:"Haz", Pegue:"Pega",
+  Añada:"Añade", Añadir:"Añade", Marque:"Marca", Ate:"Ata", Comience:"Empieza", Empiece:"Empieza", Continúe:"Continúa", Termine:"Termina", Salte:"Salta", Cuente:"Cuenta",
+  Bordee:"Borda", Fije:"Remata", Monte:"Monta", Remate:"Remata", Cambie:"Cambia", Ponga:"Pon", Poner:"Pon", Coloquen:"Coloca", Trabaje:"Teje", Trabajar:"Teje",
+  Tejimos:"Tejemos", Recorte:"Recorta", Recortar:"Recorta", Lleve:"Lleva", Mueva:"Mueve", Mover:"Mueve", Pase:"Pasa", Pasar:"Pasa", Inserta:"Coloca", Sujete:"Sujeta",
+  Retire:"Quita", Trabajen:"Teje", Trabaja:"Teje", Marque:"Marca", Destale:"Monta", Llene:"Rellena", Llenar:"Rellena", Llenen:"Rellena", Llenamos:"Rellenamos", Rellenen:"Rellena", Tense:"Tensa", Tensar:"Tensa", Apriete:"Aprieta", Apretar:"Aprieta", Pinte:"Pinta", Pintar:"Pinta", Decore:"Decora", Decorar:"Decora"};
+const ARREGLOS_ES = [
+  [/\bpuntadas\b/g, "puntos"], [/\bpuntada\b/g, "punto"], [/\bPuntadas\b/g, "Puntos"], [/\bPuntada\b/g, "Punto"],
+  [/\b(una|la|esta|esa|cada|otra) punto\b/gi, (m, a) => ({una:"un", la:"el", esta:"este", esa:"ese", cada:"cada", otra:"otro"})[a.toLowerCase()]+" punto"],
+  [/\b(las|unas|estas|esas|otras) puntos\b/gi, (m, a) => ({las:"los", unas:"unos", estas:"estos", esas:"esos", otras:"otros"})[a.toLowerCase()]+" puntos"],
+  [/\bpunto (siguiente|restante)s?\b/g, "punto $1"], [/\bmisma punto\b/g, "mismo punto"], [/\bprimera punto\b/g, "primer punto"], [/\búltima punto\b/g, "último punto"],
+  [/\bpuntos (restant|siguient)es\b/g, "puntos $1es"],
+  [/\brondas\b/g, "vueltas"], [/\bronda\b/g, "vuelta"], [/\bRondas\b/g, "Vueltas"], [/\bRonda\b/g, "Vuelta"],
+  [/\bbucles\b/g, "puntos"], [/\bbucle\b/g, "punto"],
+  [/\bgancho de ganchillo\b/gi, "ganchillo"], [/\bgancho\b/g, "ganchillo"], [/\bGancho\b/g, "Ganchillo"], [/\baguja de crochet\b/gi, "ganchillo"],
+  [/\b(el|del|al|tu|su|este) trabajo\b/gi, (m, a) => ({el:"la", del:"de la", al:"a la", tu:"tu", su:"la", este:"esta"})[a.toLowerCase()]+" labor"],
+  [/\btejer\b(?= (?:la|el|los|las|un|una) )/g, "tejer"],
+  [/\bcrochet\b/gi, "ganchillo"], [/\bganchillo de ganchillo\b/gi, "ganchillo"], [/\bpatrón de ganchillo de amigurumi\b/gi, "patrón de amigurumi"],
+  [/\bclase magistral\b/gi, "patrón"], [/\bdetalles\b(?= *[,)])/g, "piezas"],
+  [/\bhilo de\s+(?=\d)/g, "hilo de "], [/\ben un círculo\b/g, "alrededor"], [/\bfelices? ganchillo\b/gi, "¡Feliz ganchillo"],
+  [/\bjuguetes\b/g, "muñecos"], [/\bjuguete\b/g, "muñeco"], [/\bJuguete\b/g, "Muñeco"], [/\bprefabricad([oa]s?)\b/g, "terminad$1"], [/\bacabad([oa]s?)\b/g, "terminad$1"],
+  [/\b(mientras|a medida que) (trabaja|trabajas|trabajes|trabaje|avanza|avanzas|avances)\b/g, "$1 tejes"],
+  [/(^|[.!?]\s+)Borde (la|el|los|las|un|una)\b/g, "$1Borda $2"], [/(^|[.!?]\s+)Bordear\b/g, "$1Borda"],
+  [/\b(?:su|tu) (cabeza|cola|nariz|boca|labor|pieza|oreja)\b/g, "la $1"], [/\b(?:su|tu) (cuerpo|muñeco|hocico|brazo|ojo)\b/g, "el $1"],
+  [/\b(?:sus|tus) (orejas|piernas|patas|piezas|mejillas|alas)\b/g, "las $1"], [/\b(?:sus|tus) (brazos|ojos|cuernos)\b/g, "los $1"],
+  [/\bparénteses\b/g, "paréntesis"], [/\b(?:de )?(?:mulino|mulina|muline)\b/g, "mouliné"], [/\b([2-9]|\d{2,}) (espacio|arco) de\b/g, "$1 $2s de"], [/\btira (bien|fuerte|con fuerza) de (cerrar|cierre)\b/g, "tira $1 para cerrar"], [/\bplazas\b/g, "cuadrados"], [/\b(la|una|esta|cada) plaza\b/gi, (m, a) => ({la:"el", una:"un", esta:"este", cada:"cada"})[a.toLowerCase()]+" cuadrado"], [/\bplaza\b/g, "cuadrado"], [/\bPlaza\b/g, "Cuadrado"], [/\bcubierta de cojín\b/gi, "funda de cojín"],
+  [/\btrabajar\b/g, "tejer"], [/(^|,\s*)trabajo como\b/g, "$1teje como"], [/\btrabajando\b/g, "tejiendo"], [/\btrabajado\b/g, "tejido"], [/\btrabaja\b/g, "teje"], [/\bÚnete a\b/g, "Une"], [/\b(?:atamos|empatamos)\b/g, "unimos"], [/\bespesor\b/g, "grosor"],
+  [/(\d)\.(\d)\s*(mm|cm|m|g|kg)\b/g, "$1,$2 $3"],
+  [/\s+([,.;:!?)])/g, "$1"], [/([(¿¡])\s+/g, "$1"], [/\s{2,}/g, " "]
+];
+const INFINITIVO_A_TU = Object.fromEntries(Object.entries(IMPERATIVOS).map(([k, v])=>[k.toLowerCase(), v.toLowerCase()]));
+function arreglarEspanol(t, idioma){
+  for(const [rx, r] of ARREGLOS_ES) t = t.replace(rx, r);
+  if(idioma==="ru") t = t.replace(/\bfilas\b/g, "vueltas").replace(/\bfila\b/g, "vuelta").replace(/\bFilas\b/g, "Vueltas").replace(/\bFila\b/g, "Vuelta")
+    .replace(/\bhileras\b/g, "vueltas").replace(/\bhilera\b/g, "vuelta");
+  // Mayúscula al empezar cada frase (las marcas devueltas pueden haber dejado minúscula)
+  t = t.replace(/([.!?]\s+)(\p{Ll})/gu, (m, a, c) => a+c.toUpperCase());
+  // Verbo al principio de cada frase: «Rellene la cabeza» → «Rellena la cabeza»; y los que siguen con «y»: «dobla y tejer» → «dobla y teje»
+  t = t.replace(/(^|[.!?:;]\s+|^\s*[-–•]\s*|\(\s*)([A-ZÁÉÍÓÚ][a-záéíóúñ]+)(?![\p{L}])/gu, (m, a, v) => a+(IMPERATIVOS[v] || v));
+  t = t.replace(/([.!?])\s+/g, "$1\u0001").split("\u0001").map(f => /^[A-ZÁÉÍÓÚ][a-záéíóúñ]*[ae]\b/.test(f) && Object.values(IMPERATIVOS).includes(f.split(/\s/)[0])
+    ? f.replace(/\b(y|luego|después|e)\s+([a-záéíóú]+)\b/g, (m, y, inf) => INFINITIVO_A_TU[inf] ? y+" "+INFINITIVO_A_TU[inf] : m) : f).join(" ");
+  return t;
+}
+const mayuscula = t => t.replace(/^(\s*[-–•*]?\s*[¿¡(«"]?)(\p{Ll})/u, (m, a, c) => a+c.toUpperCase());
+
+// ---------- Leer el texto por bloques ----------
+// Las líneas que el PDF parte se juntan en frases; cada vuelta, cada línea de la leyenda y cada título de parte
+// va por separado. «""» separa párrafos. Cada línea puede llevar su tamaño de letra (h) para encontrar títulos.
+const SECCIONES = /^(materials?|materiales|you will need|supplies|tools|abbreviations|stitches used|notes?|pattern notes|assembly|finishing|instructions|gauge|size|finished size|материалы|инструменты|вам понадобится|понадобится|условные обозначения|обозначения|сокращения|примечани[ея]|сборка|оформление)\s*:?$/iu;
+const RX_VINETA = /^\s*(?:[-–—•●▪◦·]|\d{1,2}[.)](?=\s+\D))\s+/u;
+function esLeyendaOrig(l){ return /^\s*(?:[\p{L}][\p{L}\d.\/-]{0,9}|[\p{L}][\p{L}\d.\/-]{0,5} [\p{L}\d.\/-]{1,6})(?:\s+[-–—]\s+|\s*[–—=:]\s*)\p{L}/u.test(l) && l.length <= 90 && !/^\s*(?:rnds?|rounds?|rows?|ряд|vueltas?)(?![\p{L}])/iu.test(l); }
+// Letras que el lector de fotos confunde en un patrón ruso: «cóH» es «сбн»; en una palabra rusa, una «c» o una «o»
+// latinas son las rusas
+const LATINA_A_RUSA = {a:"а", c:"с", e:"е", o:"о", p:"р", x:"х", y:"у", k:"к", m:"м", A:"А", B:"В", C:"С", E:"Е", H:"Н", K:"К", M:"М", O:"О", P:"Р", T:"Т", X:"Х", "ó":"б", "6":"б"};
+// Abreviaturas que el lector puede leer con letras latinas parecidas («np» por «пр», «y6» por «уб»)
+const ABREV_OCR_RU = new Set(["сбн", "пр", "уб", "вп", "сс", "ссн", "пссн", "ка", "сн", "сбнд"]);
+const LATINA_OCR_RU = {n:"п", p:"р", y:"у", "6":"б", "ó":"б", c:"с", o:"о", H:"н", h:"н", K:"к", k:"к", a:"а", e:"е", x:"х", B:"в", b:"в", C:"с", P:"р", A:"А"};
+function arreglarLecturaRusa(t){
+  return t.replace(/(^|[^\p{L}\d])([A-Za-zó6а-яё]{2,4})(?![\p{L}\d])/gu, (m, a, w) => {
+      if(!/[A-Za-zó]/.test(w)) return m;
+      const ru = [...w].map(c => LATINA_OCR_RU[c] || c).join("");
+      return ABREV_OCR_RU.has(ru.toLowerCase()) && /^[а-яё]+$/i.test(ru) ? a+ru.toLowerCase() : m;
+    })
+    .replace(/[\p{L}]+/gu, w => /[\u0400-\u04FF]/.test(w) && /[A-Za-zó]/.test(w) ? [...w].map(c => LATINA_A_RUSA[c] || c).join("") : w);
+}
+function bloquesDeTexto(lineas, idioma){
+  const ls = lineas.map(l => typeof l==="string" ? {t:l} : l).map(l => idioma==="ru" && l.t ? {...l, t: arreglarLecturaRusa(l.t)} : l);
+  const altos = ls.filter(l=>l.t && l.t.trim() && l.h).map(l=>l.h).sort((a,b)=>a-b), altoNormal = altos[Math.floor(altos.length/2)] || 0;
+  // Largo de una línea llena (para saber si una línea sin punto final sigue en la de abajo)
+  const largos = ls.map(l => (l.t||"").trim().length).filter(n => n > 0).sort((a,b)=>a-b), lleno = largos[Math.floor(largos.length*.8)] || 60;
+  // Con la posición de cada línea (PDF con texto): está llena si llega casi al borde derecho de su columna
+  const llena = ls.map((l, i) => {
+    if(l.x1==null || l.x0==null || !l.t) return null;
+    const borde = Math.max(...ls.filter(o => o.x1!=null && o.pagina===l.pagina && Math.abs(o.x0-l.x0) < 15).map(o => o.x1));
+    return l.x1 >= borde - (l.h||10)*2.2;
+  });
+  const bloques = []; let parrafo = [], maxLargo = 0;
+  const empieza = (l, sig, primera) => {
+    const t = l.t.trim();
+    if(cabeceraVuelta(t, idioma)) return "vuelta";
+    if(esLeyendaOrig(t)) return "leyenda";
+    if(RX_VINETA.test(t)) return "lista";
+    // (lo que empieza en minúscula o con paréntesis sigue la frase de arriba: no es un título)
+    const corta = t.length <= 45 && !/[.,;!?]$/.test(t) && /\p{L}{3}/u.test(t) && !/^[\p{Ll}(\[]/u.test(t);
+    const grande = altoNormal && l.h >= altoNormal*1.25;
+    const sigVuelta = sig && cabeceraVuelta(sig.t.trim(), idioma);
+    const letras = t.replace(/[^\p{L}]/gu, "");
+    if(corta && (grande || (letras.length >= 3 && letras===letras.toUpperCase()) || /:\s*$/.test(t) || sigVuelta)) return "parte";
+    // «Сборка» / «Assembly» sola en su línea, al empezar un párrafo, y debajo el texto
+    if(corta && SECCIONES.test(t.replace(/\s*\([^)]*\)\s*:?$/, ""))) return "parte";
+    const sinPar = t.replace(/\([^)]*\)/g, "").trim();
+    if(corta && primera && sinPar.split(/\s+/).length <= 4 && !/\d/.test(sinPar) && sig && (/^[\p{Lu}\d(]/u.test(sig.t.trim()) || RX_VINETA.test(sig.t)) && sig.t.trim().length > t.length*1.3) return "parte";
+    return null;
+  };
+  for(let i=0; i<ls.length; i++){
+    const l = ls[i], t = (l.t||"").trim();
+    // Una foto o un dibujo del patrón: va tal cual, en su sitio
+    if(l.img){ bloques.push({tipo:"imagen", t:"", img:l.img, pagina:l.pagina}); parrafo = []; maxLargo = 0; continue; }
+    if(!t){ parrafo = []; maxLargo = 0; continue; }
+    let sig = null; for(let j=i+1; j<ls.length; j++) if((ls[j].t||"").trim()){ sig = ls[j]; break; }
+    const primera = !parrafo.length, tipo = empieza(l, sig, primera), prev = parrafo[parrafo.length-1];
+    // Sigue la frase de la línea anterior: no acaba en punto, o la anterior llena la línea (texto partido)
+    const sigue = prev && !tipo && prev.tipo!=="parte" && (
+      /[,;\-–(/]$|\p{L}-$/u.test(prev.t) || /^[\p{Ll}(]/u.test(t) ||
+      // la primera palabra de esta línea no cabía en la de arriba: es la misma frase partida
+      (!/[.!?:)]$/.test(prev.t) && (prev.ultLlena!=null ? prev.ultLlena : prev.ultLargo >= lleno*.6 && prev.ultLargo+1+t.split(/\s/)[0].length >= lleno*.9)));
+    if(sigue && !(prev.tipo==="leyenda" && !/^[\p{Ll}(]/u.test(t))){
+      prev.t = /\p{L}-$/u.test(prev.t) && /^\p{Ll}/u.test(t) ? prev.t.slice(0, -1)+t : prev.t+" "+t;
+      prev.ultLargo = t.length; prev.ultLlena = llena[i]; maxLargo = Math.max(maxLargo, t.length);
+      continue;
+    }
+    const b = {tipo: tipo || "texto", t, h: l.h||0, y: l.y, pagina: l.pagina, ultLargo: t.length, ultLlena: llena[i]};
+    bloques.push(b); parrafo.push(b); maxLargo = Math.max(maxLargo, t.length);
+  }
+  const out = bloques.map(({tipo, t, h, y, img, pagina}) => ({tipo, t, h, y, img, pagina}));
+  // El título: el primer bloque corto, si va con la letra más grande de la primera hoja (o es lo primero de todo)
+  const primero = out.findIndex(b => b.tipo!=="imagen");
+  if(primero >= 0){
+    const b = out[primero], maxH = Math.max(0, ...out.filter(x => x.tipo!=="imagen" && (x.pagina||1)===(b.pagina||1)).map(x => x.h||0));
+    if(b.t.length <= 90 && b.tipo!=="vuelta" && b.tipo!=="leyenda" && !/[.;]$/.test(b.t) && (!maxH || (b.h||0) >= maxH*.9 || b.tipo==="parte")) b.tipo = "titulo";
+  }
+  return out;
+}
+
+// ---------- Traducir ----------
+// La leyenda de abreviaturas se rehace en español con las que de verdad salen en el patrón traducido
+const ABREV_ES = {AM:"anillo mágico", cad:"cadeneta", pd:"punto deslizado", pb:"punto bajo", mpa:"medio punto alto", pa:"punto alto", pad:"punto alto doble",
+  aum:"aumento: 2 puntos en el mismo punto", dism:"disminución: 2 puntos tejidos juntos"};
+function leyendaConocida(texto, glosario){
+  const m = texto.match(/^\s*(.{1,15}?)(?:\s+[-–—]\s+|\s*[–—=:]\s*)(.+)$/u);
+  if(!m) return null;
+  const izq = m[1].replace(/[.:]$/, "").trim();
+  if(izq.replace(/\s/g, "").length <= 6 && glosario.some(([pat, sal, clase, fl]) => clase==="en" && new RegExp("^(?:"+pat+")$", fl ? fl.replace("g","") : "iu").test(izq))) return {omitir:true};
+  const p = proteger(izq, glosario);
+  if(!/^QX[A-Z]{2}$/.test(p.t.trim()) || p.marcas.length!==1) return null;
+  const es = p.marcas[0];
+  if(!ABREV_ES[es]) return izq.replace(/\s/g, "").length <= 6 ? {omitir:true} : null;
+  const extra = (m[2].match(/\(([^()]{3,})\)\s*\.?$/)||[])[1] || "";
+  return {abrev: es, extra};
+}
+// Concordancia de las palabras que vuelven de las marcas («el ojos de seguridad» → «los ojos de seguridad»)
+const PLURALES = {ojos:"m", puntos:"m", aumentos:"m", "puntos bajos":"m", cuadrados:"m", cadenetas:"f", disminuciones:"f", hebras:"f", piezas:"f"};
+function concordar(t){
+  for(const [n, g] of Object.entries(PLURALES)){
+    t = t.replace(new RegExp("\\b(el|la|las|los|un|una|unos|unas|este|esta|estos|estas)\\s+"+n+"\\b", "gi"), (m, a) => {
+      const k = a.toLowerCase().replace(/^(est)[ae]s?$/, "$1e").replace(/^l[ao]s?$|^el$/, "el").replace(/^un[ao]?s?$/, "un");
+      const pl = {el:g==="m"?"los":"las", un:g==="m"?"unos":"unas", este:g==="m"?"estos":"estas"}[k];
+      return (a[0]===a[0].toUpperCase() ? pl.charAt(0).toUpperCase()+pl.slice(1) : pl)+" "+n; });
+  }
+  return t;
+}
+// «traductor» es una función async que recibe un texto y devuelve su traducción (el de Mozilla), o null si no hay
+async function traducirBloques(bloques, {idioma, uk=false, traductor=null, avisar=null}){
+  const glosario = idioma==="ru" ? GLOSARIO_RU : GLOSARIO_EN(uk);
+  const traduce = idioma==="ru" || idioma==="en";
+  const trabajo = bloques.map(b => {
+    if(b.tipo==="imagen") return {b, imagen:true};
+    if(!traduce) return {b, listo: b.t};
+    let cab = "", resto = b.t, ley = null;
+    if(b.tipo==="leyenda"){ ley = leyendaConocida(b.t, glosario); if(ley && ley.omitir) return {b, omitir:true}; if(ley) resto = ley.extra; }
+    const cv = !ley && cabeceraVuelta(b.t, idioma);
+    if(cv){ cab = cv.cab; resto = cv.resto; }
+    const pz = idioma==="ru" && (b.tipo==="parte" || b.tipo==="titulo") && piezaRusa(b.t);
+    if(pz){ cab = pz.es; resto = pz.resto; if(!resto) return {b, cab, listo:"", p:{t:"", marcas:[]}}; }
+    let p = proteger(arreglarSignos(idioma==="ru" ? imperativosRu(resto) : resto), glosario), cola = "";
+    // Lo de entre paréntesis al final que no hay que traducir («(18)», «(hacer 8)») se aparta para que el traductor no lo mueva
+    const mc = p.t.match(/\s*\((?:[\d\s,.x+]|QX[A-Z]{2})+\)\s*\.?$/);
+    const mt = !mc && p.t.match(/\s*(QX[A-Z]{2})\s*\.?$/), valor = mt && p.marcas[LETRAS_MARCA.indexOf(mt[1][2])*LETRAS_MARCA.length+LETRAS_MARCA.indexOf(mt[1][3])];
+    if(mc && quedaTexto(p.t.slice(0, mc.index))){ cola = devolverMarcas(mc[0], p.marcas).t; p = {t: p.t.slice(0, mc.index), marcas: p.marcas}; }
+    else if(valor && /^\(.*\)$/.test(valor) && quedaTexto(p.t.slice(0, mt.index))){ cola = valor; p = {t: p.t.slice(0, mt.index), marcas: p.marcas}; }
+    const r = {b, cab, p, ley, cola};
+    if(!quedaTexto(p.t)) r.listo = devolverMarcas(idioma==="ru" ? palabraAPalabra(p.t, "ru") : p.t, p.marcas).t;
+    return r;
+  });
+  const pendientes = trabajo.filter(r => r.listo==null && !r.omitir && !r.imagen);
+  for(let i=0; i<pendientes.length; i++){
+    const r = pendientes[i];
+    if(avisar) avisar(i, pendientes.length);
+    let mt = null;
+    if(traductor){ try{ mt = await traductor(r.p.t); }catch(e){ mt = null; } }
+    if(mt){ const d = devolverMarcas(mt, r.p.marcas, r.p.t); if(!d.falta){ r.listo = d.t; continue; } }
+    // Sin traductor (o se ha comido alguna marca): reglas palabra a palabra, y se marca para revisar
+    r.listo = devolverMarcas(palabraAPalabra(r.p.t, idioma), r.p.marcas).t; r.revisar = true;
+  }
+  const out = [], leyenda = {};
+  let dondeLeyenda = -1;
+  for(const r of trabajo){
+    if(r.imagen){ out.push({tipo:"imagen", t:"", original:"", img:r.b.img, pagina:r.b.pagina}); continue; }
+    if(r.omitir || r.ley){ if(dondeLeyenda < 0) dondeLeyenda = out.length; if(r.ley && r.ley.abrev) leyenda[r.ley.abrev] = r.listo ? concordar(arreglarEspanol(r.listo, idioma)).trim() : ""; continue; }
+    let t = r.listo;
+    if(traduce) t = concordar(arreglarEspanol(t, idioma));
+    if(r.cola) t = t.replace(/\s*\.?\s*$/, "")+" "+r.cola.trim();
+    if(idioma==="ru" && (r.b.tipo==="parte" || r.b.tipo==="titulo")) t = t.replace(/^\s*(?:El|La|Los|Las)\s+(?=\p{L})/u, "");
+    t = t.trim();
+    if(r.cab && !/^(pb|pa|mpa|pad|pd|cad|aum|dism)\b|^\(/.test(t)) t = mayuscula(t);
+    t = (r.cab ? r.cab+" " : "")+t;
+    // Las abreviaturas van en minúscula («6 pb…»); el resto empieza con mayúscula
+    if(!/^(pb|pa|mpa|pad|pd|cad|aum|dism)\b/.test(t)) t = mayuscula(t);
+    t = t.replace(/\s{2,}/g, " ").trim();
+    const queda = idioma==="ru" && /[а-яё]{2,}/iu.test(t);
+    out.push({tipo: r.b.tipo, t, original: r.b.t, revisar: !!r.revisar || queda, h: r.b.h, y: r.b.y, pagina: r.b.pagina});
+  }
+  if(!traduce) return out;
+  // La leyenda: las abreviaturas que salen en el patrón traducido, con lo que decía el original si añadía algo
+  const usadas = Object.keys(ABREV_ES).filter(k => out.some(b => new RegExp("(^|[^\\p{L}])"+k+"(?![\\p{L}])", "u").test(b.t)));
+  if(usadas.length){
+    const lineas = usadas.map(k => ({tipo:"leyenda", t: k+" – "+(leyenda[k] ? ABREV_ES[k].replace(/:.*$/, "")+" ("+leyenda[k].replace(/^\(|\)$/g, "")+")" : ABREV_ES[k]), original:"", revisar:false}));
+    if(dondeLeyenda < 0){
+      const v = out.findIndex(b => b.tipo==="vuelta");
+      // (la leyenda nueva va antes de la primera vuelta, y antes del título de su pieza o de su foto)
+      dondeLeyenda = v < 0 ? out.length : v;
+      while(dondeLeyenda > 0 && (out[dondeLeyenda-1].tipo==="parte" || out[dondeLeyenda-1].tipo==="imagen")) dondeLeyenda--;
+      if(dondeLeyenda===0 && out[0] && out[0].tipo==="titulo") dondeLeyenda = 1;
+      lineas.unshift({tipo:"parte", t:"Abreviaturas", original:"", revisar:false, nuevo:true});
+    }
+    out.splice(dondeLeyenda, 0, ...lineas);
+  }
+  return out;
+}
+
+// Sin el traductor: lo que se pueda con un diccionario corto (se avisa de que hay que revisarlo)
+const PALABRAS_RU = [["и","y"],["в","en"],["на","en"],["с","con"],["по","por"],["из","de"],["до","hasta"],["между","entre"],["затем","después"],["далее","después"],["потом","después"],
+  ["вяжем|вязать|вяжите|связать","teje"],["наполните|наполняем|набейте|набиваем|набить","rellena"],["закрепите|закрепить|закрепляем","remata"],["стяните|стянуть","cierra"],
+  ["вышейте|вышить|вышиваем","borda"],["оставьте|оставить","deja"],["сложите|сложить","dobla"],["повторите|повторить","repite"],["голов[ауеы]","cabeza"],["отверстие","agujero"],["глаза|глазки","ojos"],["щ[её]ки|щ[её]чки","mejillas"],["пришить|пришиваем|пришейте","cose"],["вставить|вставляем|вставьте","coloca"],["отрезать|обрезать","corta"],["цвет[а-яё]*","color"],
+  ["белы[йм]|бел[ао][йя]|белого","blanco"],["ч[её]рн[а-яё]*","negro"],["розов[а-яё]*","rosa"],["головой","cabeza"],["тел[оау]|телом","cuerpo"],["нос","nariz"],
+  ["уши","orejas"],["руки","brazos"],["ноги","piernas"],["хвост","cola"],["сборка|сборке","montaje"],["материалы","materiales"],["размер","tamaño"],["пряж[а-яё]*","lana"],
+  ["нит[ьию]|нитк[а-яё]*","hilo"],["игрушк[а-яё]*","muñeco"],["автор","autora"],["см","cm"],["мм","mm"],["г","g"],["м","m"]];
+const PALABRAS_EN_TR = {the:"el", a:"un", and:"y", with:"con", of:"de", in:"en", into:"en", to:"a", for:"para", each:"cada", head:"cabeza", body:"cuerpo", arms:"brazos", legs:"piernas",
+  ears:"orejas", eyes:"ojos", nose:"nariz", tail:"cola", sew:"cose", stuff:"rellena", stitches:"puntos", stitch:"punto", rounds:"vueltas", round:"vuelta", rows:"filas", row:"fila",
+  repeat:"repite", times:"veces", yarn:"lana", color:"color", white:"blanco", black:"negro", pink:"rosa", blue:"azul", make:"haz", together:"juntos", then:"después", next:"siguiente"};
+function palabraAPalabra(t, idioma){
+  if(idioma==="ru"){ for(const [p, es] of PALABRAS_RU) t = t.replace(trRx(p), (m, b) => b+es); return t; }
+  return t.replace(/\b[a-z]+\b/gi, w => { const es = PALABRAS_EN_TR[w.toLowerCase()]; return es==null ? w : (w[0]===w[0].toUpperCase() ? es.charAt(0).toUpperCase()+es.slice(1) : es); });
+}
+
+// Del ruso se pasa primero al inglés y luego al español. En medio se corrigen las palabras de ganchillo que el
+// traductor del ruso suele poner mal («loops» son puntos, «rows» son vueltas, «knit» es tejer a ganchillo)
+const ARREGLOS_EN = [
+  [/\bEmbroide\b/g, "Embroider"], [/\bembroide\b/g, "embroider"], [/\bspout\b/gi, "nose"], [/\bfiller\b/g, "stuffing"], [/\bFiller\b/g, "Stuffing"],
+  [/\bloops\b/g, "stitches"], [/\bloop\b/g, "stitch"], [/\bLoops\b/g, "Stitches"], [/\brows\b/g, "rounds"], [/\brow\b/g, "round"], [/\bRows\b/g, "Rounds"], [/\bRow\b/g, "Round"],
+  [/\b[Mm]aster ?class\b/g, "pattern"], [/\btoy\b/g, "toy"], [/\bsynthetic winterizer\b/gi, "stuffing"], [/\bhollofiber\b/gi, "stuffing"]
+];
+function arreglarIngles(t){ for(const [rx, r] of ARREGLOS_EN) t = t.replace(rx, r); return t; }
+
+// ---------- El traductor libre de Mozilla, dentro del navegador ----------
+// Va en traductor/ junto a la app. La primera vez se descarga (unos 51 MB para el ruso, 31 MB para el inglés) y se
+// guarda en el móvil; después funciona sin conexión. Los modelos van comprimidos y partidos en trozos de menos de 12 MB.
+const TRAD_DIR = new URL("traductor/", location.href).href;
+const PARES_TR = {
+  ruen: {de:"ru", a:"en", modelo:["ruen-modelo-0.bin","ruen-modelo-1.bin"], lex:"ruen-lex.bin", vocab:"ruen-vocab.bin", mb:25.4},
+  enes: {de:"en", a:"es", modelo:["enes-modelo-0.bin","enes-modelo-1.bin"], lex:"enes-lex.bin", vocab:"enes-vocab.bin", mb:25.4}
+};
+const MB_MOTOR_TR = 5.3; // el motor (bergamot-translator-worker.wasm)
+const CACHE_TR = "ti-traductor-1";
+let trad = null;
+const mbTraductor = idioma => Math.round(MB_MOTOR_TR + (idioma==="ru" ? PARES_TR.ruen.mb+PARES_TR.enes.mb : PARES_TR.enes.mb));
+function trLlamar(t, name, args, transfer=[], plazo=0){
+  return new Promise((ok, mal) => {
+    if(t.roto) return mal(new Error("roto"));
+    const id = ++t.id; let reloj = null;
+    t.pend[id] = [v => { clearTimeout(reloj); ok(v); }, e => { clearTimeout(reloj); mal(e); }];
+    // Si tarda demasiado (móvil sin memoria) se para y se sigue con las reglas
+    if(plazo) reloj = setTimeout(() => { delete t.pend[id]; romperTraductor(t); mal(new Error("tarde")); }, plazo);
+    t.worker.postMessage({id, name, args}, transfer);
+  });
+}
+function romperTraductor(t){
+  if(!t || t.roto) return;
+  t.roto = true;
+  try{ t.worker.terminate(); }catch(e){}
+  for(const p of Object.values(t.pend)) p[1](new Error("roto"));
+  t.pend = {};
+  if(trad===t) trad = null;
+}
+// Descarga un trozo (o lo saca de lo guardado). Con la app instalada lo guarda su service worker; si no, se guarda aquí.
+async function bajarTr(archivo, alBajar){
+  const url = TRAD_DIR+archivo;
+  let cache = null;
+  try{ if(window.caches && !(navigator.serviceWorker && navigator.serviceWorker.controller)) cache = await caches.open(CACHE_TR); }catch(e){ cache = null; }
+  if(cache){
+    const g = await cache.match(url).catch(()=>null);
+    if(g){ const b = await g.arrayBuffer(); alBajar(b.byteLength); return b; }
+  }
+  let r;
+  try{ r = await fetch(url); }catch(e){ throw new Error("sin-conexion"); }
+  if(!r.ok) throw new Error("sin-conexion");
+  let datos;
+  if(r.body && r.body.getReader){
+    const lector = r.body.getReader(), trozos = []; let n = 0;
+    for(;;){ const {done, value} = await lector.read(); if(done) break; trozos.push(value); n += value.length; alBajar(value.length); }
+    datos = new Uint8Array(n); let k = 0; for(const t of trozos){ datos.set(t, k); k += t.length; }
+  } else { datos = new Uint8Array(await r.arrayBuffer()); alBajar(datos.length); }
+  if(cache){ try{ await cache.put(url, new Response(datos.slice(0))); }catch(e){} }
+  return datos.buffer;
+}
+async function descomprimirTr(buf){
+  if(window.DecompressionStream && window.Blob && Blob.prototype.stream)
+    return await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+  // Móviles antiguos: una librería pequeña que hace lo mismo
+  await cargarScript(window.TI_LOCAL ? "lib/fflate.min.js" : "https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js");
+  const u = window.fflate.gunzipSync(new Uint8Array(buf));
+  return u.buffer.slice(u.byteOffset, u.byteOffset+u.byteLength);
+}
+const juntarBuffers = bs => { const u = new Uint8Array(bs.reduce((a, b)=>a+b.byteLength, 0)); let k = 0; for(const b of bs){ u.set(new Uint8Array(b), k); k += b.byteLength; } return u.buffer; };
+// Devuelve una función que traduce un texto (ruso o inglés) al español, o null si en este aparato no se puede
+async function prepararTraductor(idioma, avisar){
+  if(!window.Worker || !window.WebAssembly) return null;
+  const pares = idioma==="ru" ? ["ruen","enes"] : ["enes"];
+  if(!trad){
+    // Sin conexión (y sin el traductor guardado) no se intenta: se avisa de que hace falta internet
+    // (con GET y no HEAD: el service worker de la app instalada solo contesta a GET desde lo guardado)
+    const hay = await fetch(TRAD_DIR+"translator-worker.js").then(r => r.ok).catch(() => false);
+    if(!hay) throw new Error("sin-conexion");
+    const t = {worker: new Worker(TRAD_DIR+"translator-worker.js"), pend:{}, id:0, pares:new Set(), roto:false, usos:0};
+    t.worker.onmessage = ({data}) => { const p = t.pend[data && data.id]; if(!p) return; delete t.pend[data.id]; data.error ? p[1](data.error) : p[0](data.result); };
+    t.worker.onerror = () => romperTraductor(t);
+    trad = t;
+    await trLlamar(t, "initialize", [{cacheSize:0}], [], 180000);
+  }
+  const t = trad, faltan = pares.filter(p => !t.pares.has(p));
+  if(faltan.length){
+    const total = faltan.reduce((a, p)=>a+PARES_TR[p].mb, 0)*1e6; let bajado = 0;
+    const alBajar = n => { bajado += n; avisar("Preparando el traductor (solo la primera vez: unos "+mbTraductor(idioma)+" MB). Mejor con wifi.", Math.min(1, bajado/total)); };
+    avisar("Preparando el traductor…", 0);
+    for(const p of faltan){
+      const d = PARES_TR[p];
+      const [m0, m1, lex, vocab] = await Promise.all([...d.modelo, d.lex, d.vocab].map(f => bajarTr(f, alBajar)));
+      avisar("Preparando el traductor…", null);
+      const modelo = await descomprimirTr(juntarBuffers([m0, m1])), shortlist = await descomprimirTr(lex), voc = await descomprimirTr(vocab);
+      await trLlamar(t, "loadTranslationModel", [{from:d.de, to:d.a}, {model:modelo, shortlist, vocabs:[voc]}], [modelo, shortlist, voc], 180000);
+      t.pares.add(p);
+    }
+  }
+  const uno = async (de, a, texto) => {
+    // La primera frase tarda más (el motor se pone en marcha)
+    const r = await trLlamar(t, "translate", [{models:[{from:de, to:a}], texts:[{text:texto, html:false}]}], [], t.usos++ ? 60000 : 120000);
+    return r && r[0] && r[0].target ? r[0].target.text : null;
+  };
+  return async texto => {
+    if(idioma!=="ru") return uno("en", "es", texto);
+    const en = await uno("ru", "en", texto);
+    return en==null ? null : uno("en", "es", arreglarIngles(en));
+  };
+}
+// Lo ya traducido se recuerda (al cambiar EE. UU. / Reino Unido no se vuelve a traducir todo)
+const memoTr = new Map();
+function conMemoria(idioma, motor){
+  return async texto => {
+    const k = idioma+"|"+texto;
+    if(memoTr.has(k)) return memoTr.get(k);
+    if(!motor) return null;
+    const r = await motor(texto);
+    if(r) memoTr.set(k, r);
+    return r;
+  };
+}
+
+// ---------- Leer el patrón para traducirlo: el texto con su tamaño de letra, y sus fotos en su sitio ----------
+// Las fotos y dibujos se buscan en las órdenes de dibujo de la hoja (dónde pinta cada imagen) y se recortan de
+// la hoja dibujada, tal como se ven.
+const multMatriz = (a, b) => [a[0]*b[0]+a[2]*b[1], a[1]*b[0]+a[3]*b[1], a[0]*b[2]+a[2]*b[3], a[1]*b[2]+a[3]*b[3], a[0]*b[4]+a[2]*b[5]+a[4], a[1]*b[4]+a[3]*b[5]+a[5]];
+// Los dibujos hechos con líneas (gráficos de símbolos, esquemas) no son imágenes: se buscan los trazos que se pintan
+// juntos en un sitio sin apenas letras alrededor
+const cajaDe = (m, x0, y0, x1, y1) => {
+  const ps = [[x0,y0],[x1,y0],[x0,y1],[x1,y1]].map(([x, y]) => [m[0]*x+m[2]*y+m[4], m[1]*x+m[3]*y+m[5]]);
+  const xs = ps.map(p=>p[0]), ys = ps.map(p=>p[1]);
+  return {x0:Math.min(...xs), x1:Math.max(...xs), y0:Math.min(...ys), y1:Math.max(...ys)};
+};
+async function cajasDeImagenes(pag){
+  const OPS = window.pdfjsLib.OPS, lista = await pag.getOperatorList();
+  const PINTA = new Set([OPS.fill, OPS.eoFill, OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke].filter(x => x!=null));
+  let m = [1,0,0,1,0,0], camino = null; const pila = [], cajas = [], trazos = [];
+  for(let i=0; i<lista.fnArray.length; i++){
+    const fn = lista.fnArray[i], args = lista.argsArray[i];
+    if(fn===OPS.save) pila.push(m);
+    else if(fn===OPS.restore) m = pila.pop() || [1,0,0,1,0,0];
+    else if(fn===OPS.transform) m = multMatriz(m, args);
+    else if(fn===OPS.paintFormXObjectBegin){ pila.push(m); if(args && Array.isArray(args[0]) && args[0].length===6) m = multMatriz(m, args[0]); }
+    else if(fn===OPS.paintFormXObjectEnd) m = pila.pop() || [1,0,0,1,0,0];
+    else if(fn===OPS.paintImageXObject || fn===OPS.paintInlineImageXObject || fn===OPS.paintImageMaskXObject || fn===OPS.paintJpegXObject)
+      cajas.push({...cajaDe(m, 0, 0, 1, 1), id: typeof args[0]==="string" ? args[0] : ""});
+    else if(fn===OPS.constructPath){ const mm = args && args[2]; camino = mm && mm.length >= 4 && isFinite(mm[0]) && isFinite(mm[2]) ? cajaDe(m, mm[0], mm[1], mm[2], mm[3]) : null; }
+    else if(PINTA.has(fn)){ if(camino && trazos.length < 8000) trazos.push(camino); camino = null; }
+    else if(fn===OPS.endPath) camino = null;
+  }
+  return {cajas, trazos};
+}
+// Junta las cajas que se tocan (con «hueco» de margen) en una sola
+function juntarCajas(cs, hueco){
+  cs = cs.map(c => ({...c, n: c.n || 1, ids: c.ids || [c.id||""]}));
+  for(let junto = true; junto; ){
+    junto = false;
+    cs.sort((a, b) => a.x0-b.x0);
+    const out = [];
+    for(const c of cs){
+      const k = out.findIndex(o => o.x0 <= c.x1+hueco && c.x0 <= o.x1+hueco && o.y0 <= c.y1+hueco && c.y0 <= o.y1+hueco);
+      if(k < 0){ out.push(c); continue; }
+      const o = out[k];
+      out[k] = {x0:Math.min(o.x0,c.x0), x1:Math.max(o.x1,c.x1), y0:Math.min(o.y0,c.y0), y1:Math.max(o.y1,c.y1), n:o.n+c.n, ids:[...o.ids, ...c.ids], vector:o.vector||c.vector};
+      junto = true;
+    }
+    cs = out;
+  }
+  return cs;
+}
+function figurasDeTrazos(trazos, its, vista){
+  const area = vista[2]*vista[3];
+  const cs = juntarCajas(trazos.filter(c => (c.x1-c.x0)*(c.y1-c.y0) < area*.4 && (c.x1-c.x0) < vista[2]*.9), 6);
+  const letrasDentro = c => its.reduce((a, it) => { const cx = it.x+it.w/2, cy = it.y+it.h/3; return cx > c.x0 && cx < c.x1 && cy > c.y0 && cy < c.y1 ? a+(it.t.match(/\p{L}/gu)||[]).length : a; }, 0);
+  return cs.filter(c => c.n >= 8 && c.x1-c.x0 >= 60 && c.y1-c.y0 >= 40 && (c.x1-c.x0)*(c.y1-c.y0) >= area*.02 && letrasDentro(c) <= 60)
+    .map(c => ({...c, x0:c.x0-4, x1:c.x1+4, y0:c.y0-4, y1:c.y1+4, vector:true, ids:[]}));
+}
+// Junta las imágenes que se tocan (un collage es una sola foto) y quita las que no son fotos del patrón
+function cajasUtiles(cajas, vista){
+  const area = vista[2]*vista[3];
+  const cs = juntarCajas(cajas.map(c => ({...c, x0:Math.max(c.x0, vista[0]), x1:Math.min(c.x1, vista[0]+vista[2]), y0:Math.max(c.y0, vista[1]), y1:Math.min(c.y1, vista[1]+vista[3])}))
+    .filter(c => c.x1-c.x0 >= 30 && c.y1-c.y0 >= 30), 4);
+  return cs.map(c => ({...c, fondo: (c.x1-c.x0)*(c.y1-c.y0) >= area*.85}))
+    .filter(c => c.fondo || ((c.x1-c.x0) >= 45 && (c.y1-c.y0) >= 45 && (c.x1-c.x0)*(c.y1-c.y0) >= area*.015));
+}
+// Dibuja la hoja una vez: de ahí salen los recortes de las fotos y la copia de la hoja para el final del PDF
+async function dibujarHoja(pag, ladoMax=1800){
+  const vp0 = pag.getViewport({scale:1});
+  let k = Math.min(3, ladoMax/Math.max(vp0.width, vp0.height)); k = Math.min(k, Math.sqrt(4e6/(vp0.width*vp0.height)));
+  const vp = pag.getViewport({scale:k});
+  const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  await pag.render({canvasContext:ctx, viewport:vp}).promise;
+  return {c, vp};
+}
+function lienzoAJpeg(c, ladoMax, calidad=.82, sx=0, sy=0, sw=c.width, sh=c.height){
+  const k = Math.min(1, ladoMax/Math.max(sw, sh));
+  const o = document.createElement("canvas"); o.width = Math.max(1, Math.round(sw*k)); o.height = Math.max(1, Math.round(sh*k));
+  const ctx = o.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, o.width, o.height);
+  ctx.drawImage(c, sx, sy, sw, sh, 0, 0, o.width, o.height);
+  const url = o.toDataURL("image/jpeg", calidad), r = {url, w:o.width, h:o.height};
+  soltarLienzo(o);
+  return r;
+}
+// Quita cabeceras y pies repetidos sin perder qué línea es cada una (quitarRepetidas trabaja con el texto solo)
+function quitarRepetidasConInfo(paginas){
+  const limpias = quitarRepetidas(paginas.map(p => p.lineas));
+  paginas.forEach((p, i) => {
+    const quedan = limpias[i], info = []; let k = 0;
+    const lineas = p.lineas.filter((l, j) => { if(k < quedan.length && quedan[k]===l){ k++; info.push(p.info[j]); return true; } return false; });
+    p.lineas = lineas; p.info = info;
+  });
+  return paginas;
+}
+const MAX_HOJAS_TR = 40;
+async function leerParaTraducir(archivo, avisar){
+  const esPDF = /pdf/i.test(archivo.type||"") || /\.pdf$/i.test(archivo.name||"");
+  if(!esPDF){
+    avisar("Preparando la foto…", null);
+    const c = await prepararFoto(archivo);
+    const original = lienzoAJpeg(c, 1600);
+    let texto = "";
+    try{ texto = await leerImagenes([c], avisar); }catch(e){ const err = e instanceof Error ? e : new Error(String(e)); err.foto = true; throw err; }
+    return {paginas:[{lineas: texto.split("\n"), info: [], imagenes: [], leidaComoFoto: true}], originales:[original], foto:true};
+  }
+  avisar("Abriendo «"+archivo.name+"»…", null);
+  const doc = await abrirPDF(new Uint8Array(await archivo.arrayBuffer()));
+  try{
+    const n = Math.min(doc.numPages, MAX_HOJAS_TR), paginas = [], originales = [], vecesId = {};
+    for(let i=1; i<=n; i++){
+      avisar("Leyendo la página "+i+" de "+n+"…", (i-1)/n);
+      const pag = await doc.getPage(i), info = [];
+      let its = trozosDePagina(await pag.getTextContent()), cajas = [];
+      const vista = pag.view.length===4 ? [pag.view[0], pag.view[1], pag.view[2]-pag.view[0], pag.view[3]-pag.view[1]] : [0, 0, 612, 792];
+      try{
+        const d = await cajasDeImagenes(pag), figuras = its.giro ? [] : figurasDeTrazos(d.trazos, its, vista);
+        // Las letras de dentro de un gráfico (números, símbolos) van con el dibujo, no con el texto
+        if(figuras.length){ const giro = its.giro; its = its.filter(it => !figuras.some(c => it.x+it.w/2 > c.x0 && it.x+it.w/2 < c.x1 && it.y+it.h/3 > c.y0 && it.y+it.h/3 < c.y1)); its.giro = giro; }
+        cajas = cajasUtiles([...d.cajas, ...figuras], vista);
+      }catch(e){ cajas = []; }
+      const lineas = its.length ? textoDeLineas(ordenarLineas(lineasDeTrozos(its)), info) : [];
+      for(const id of new Set(cajas.flatMap(c => c.ids))) if(id) vecesId[id] = (vecesId[id]||0)+1;
+      const {c, vp} = await dibujarHoja(pag);
+      const imagenes = cajas.map(cj => {
+        const [ax, ay, bx, by] = vp.convertToViewportRectangle([cj.x0, cj.y0, cj.x1, cj.y1]);
+        const sx = Math.max(0, Math.floor(Math.min(ax, bx))), sy = Math.max(0, Math.floor(Math.min(ay, by)));
+        const sw = Math.min(c.width-sx, Math.ceil(Math.abs(bx-ax))), sh = Math.min(c.height-sy, Math.ceil(Math.abs(by-ay)));
+        if(sw < 20 || sh < 20) return null;
+        return {...cj, anchoPt: cj.x1-cj.x0, altoPt: cj.y1-cj.y0, ...lienzoAJpeg(c, 1400, .85, sx, sy, sw, sh)};
+      }).filter(Boolean);
+      originales.push(lienzoAJpeg(c, 1500, .78));
+      soltarLienzo(c); pag.cleanup();
+      paginas.push({n:i, lineas, info, imagenes, giro: its.giro||0});
+    }
+    // Un logo o un adorno que sale en varias hojas no es una foto del patrón
+    const repetidas = id => id && vecesId[id] >= 2 && n >= 2;
+    for(const p of paginas) p.imagenes = p.imagenes.filter(im => im.fondo || !im.ids.some(repetidas));
+    quitarRepetidasConInfo(paginas);
+    // Hojas que hay que leer como una foto: sin letras (escaneadas o solo fotos), con las letras separadas o ilegibles
+    const crudo = p => p.lineas.join("\n");
+    const todo = paginas.map(crudo).join("\n");
+    const ilegible = !textoLegible(todo);
+    const leerComoFoto = paginas.filter(p => ilegible || paginaEspaciada(crudo(p)) || crudo(p).replace(/\s/g, "").length < 30);
+    if(leerComoFoto.length){
+      avisar(leerComoFoto.length===paginas.length ? "Este PDF es una imagen escaneada. Lo leo como una foto…" : "Algunas hojas son imágenes. Las leo como una foto…", null);
+      let leidas = [];
+      try{ leidas = await leerImagenes(paginasComoImagen(doc, MAX_HOJAS_TR, leerComoFoto.map(p=>p.n)), avisar, true); }
+      catch(e){ if(leerComoFoto.length===paginas.length){ const err = e instanceof Error ? e : new Error(String(e)); err.foto = true; throw err; } }
+      leerComoFoto.forEach((p, i) => {
+        const t = leidas[i];
+        if(t==null) return;
+        const letras = t.replace(/[^\p{L}]/gu, "").length;
+        // Casi sin letras: es una hoja de fotos. Va entera como imagen.
+        if(letras < 40){ if(!p.imagenes.length || p.imagenes.every(im => im.fondo)) p.imagenes = [{...originales[p.n-1], hoja:true, y1:Infinity, x0:-Infinity, x1:Infinity}]; p.lineas = []; p.info = []; return; }
+        p.lineas = t.split("\n"); p.info = []; p.leidaComoFoto = true;
+        p.imagenes = p.imagenes.filter(im => !im.fondo);
+      });
+    }
+    for(const p of paginas) p.imagenes = p.imagenes.filter(im => !im.fondo || im.hoja);
+    return {paginas, originales, total: doc.numPages};
+  } finally { doc.destroy(); }
+}
+// Todas las líneas del patrón en orden, con las fotos donde van (debajo del texto que tienen encima)
+function lineasDelDocumento(leido){
+  const out = [];
+  for(const p of leido.paginas){
+    const lineas = p.lineas.map((t, i) => ({t: juntarEspaciado(t||""), ...(p.info[i]||{}), pagina:p.n||1}));
+    const antes = lineas.map(()=>[]), despues = lineas.map(()=>[]), alFinal = [];
+    const conSitio = !p.giro && !p.leidaComoFoto;
+    const cruza = (l, im) => l.x0==null || (l.x0 < im.x1 && l.x1 > im.x0);
+    for(const im of p.imagenes.slice().sort((a, b) => b.y1-a.y1)){
+      const x = {img: {url: im.url, w: im.w, h: im.h, anchoPt: im.anchoPt, hoja: !!im.hoja}, pagina:p.n||1};
+      // Delante de la primera línea que tiene debajo (en su columna); si no hay, detrás de la última que tiene encima
+      let k = conSitio && isFinite(im.y1) ? lineas.findIndex(l => l.t && l.y!=null && l.y + (l.h||0)*.3 < im.y1 && cruza(l, im)) : -1;
+      if(k >= 0){ antes[k].push(x); continue; }
+      let j = -1; if(conSitio && isFinite(im.y1)) lineas.forEach((l, i) => { if(l.t && l.y!=null && l.y > im.y1 - (l.h||0) && cruza(l, im)) j = i; });
+      (j >= 0 ? despues[j] : alFinal).push(x);
+    }
+    // Entre hojas, un párrafo nuevo, salvo que la frase siga en la hoja siguiente
+    const ult = out.filter(l => l.t).pop(), prim = lineas.find(l => l.t);
+    if(out.length && !(ult && prim && !/[.!?:)]$/.test(ult.t) && /^\p{Ll}/u.test(prim.t))) out.push({t:""});
+    lineas.forEach((l, i) => { for(const im of antes[i]) out.push({t:""}, im, {t:""}); out.push(l); for(const im of despues[i]) out.push({t:""}, im, {t:""}); });
+    for(const im of alFinal) out.push({t:""}, im, {t:""});
+  }
+  return out;
+}
+
+// ---------- El PDF traducido ----------
+const FUENTES_PDF = [["atkinson-400","Atkinson","normal"], ["atkinson-700","Atkinson","bold"], ["young-serif","YoungSerif","normal"], ["dejavu-cirilico","DejaVu","normal"]];
+let fuentesPDF = null;
+const aBase64 = u => { let s = ""; for(let i=0; i<u.length; i+=0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i+0x8000)); return btoa(s); };
+async function cargarFuentesPDF(){
+  if(fuentesPDF) return fuentesPDF;
+  const out = {};
+  await Promise.all(FUENTES_PDF.map(async ([f]) => {
+    try{ const r = await fetch(new URL("lib/fuentes/"+f+".ttf", location.href).href); if(r.ok) out[f] = aBase64(new Uint8Array(await r.arrayBuffer())); }catch(e){}
+  }));
+  if(Object.keys(out).length===FUENTES_PDF.length) fuentesPDF = out;
+  return out;
+}
+async function cargarJsPDF(){
+  await cargarScript(window.TI_LOCAL ? "lib/jspdf.umd.min.js" : "https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js");
+  return window.jspdf.jsPDF;
+}
+// Letras que llevan las fuentes del PDF; lo demás se cambia por algo parecido
+const LETRA_PDF_RARA = /[^\n\x20-\x7E -ÿıŒœ–—‘’“”•…€™]/g;
+const CAMBIOS_PDF = {"‚":",", "„":"\"", "″":"\"", "′":"'", "−":"-", "‐":"-", "‑":"-", "‒":"-", "→":"->", "←":"<-", "≈":"~", "№":"n.º", "⁄":"/", "∙":"·", "●":"•", "▪":"•", "◦":"•", "✓":"v", "♥":"", "❤":""};
+const limpiarPDF = (t, cirilico=false) => String(t||"").normalize("NFC").replace(/\t/g, " ").replace(LETRA_PDF_RARA, c => cirilico && /[\u0400-\u04FF\u2116]/.test(c) ? c : CAMBIOS_PDF[c] ?? "");
+const tieneCirilico = t => /[Ѐ-ӿ]/.test(t||"");
+async function hacerPDFTraducido(tr, conOriginal){
+  const jsPDF = await cargarJsPDF(), fuentes = await cargarFuentesPDF();
+  const doc = new jsPDF({unit:"mm", format:"a4", compress:true});
+  for(const [f, nombre, estilo] of FUENTES_PDF) if(fuentes[f]){ doc.addFileToVFS(f+".ttf", fuentes[f]); doc.addFont(f+".ttf", nombre, estilo); }
+  const F = {texto: fuentes["atkinson-400"] ? "Atkinson" : "helvetica", negrita: fuentes["atkinson-700"] ? "Atkinson" : "helvetica",
+    titulo: fuentes["young-serif"] ? "YoungSerif" : "times", ruso: fuentes["dejavu-cirilico"] ? "DejaVu" : null};
+  const W = 210, H = 297, M = 18, ANCHO = W-M*2, PT = 0.3528, ABAJO = H-M-6;
+  const TINTA = [33,37,35], GRIS = [96,108,103], MARCA = [138,47,94], NARANJA = [199,119,0];
+  let y = M;
+  const fuente = (f, estilo, tam, color=TINTA) => { doc.setFont(f, estilo); doc.setFontSize(tam); doc.setTextColor(...color); };
+  const nueva = () => { doc.addPage(); y = M; };
+  const sitio = alto => { if(y + alto > ABAJO){ nueva(); return true; } return false; };
+  // Escribe un texto partido en líneas; devuelve las líneas para saber cuánto ocupa
+  const partir = (t, ancho, f) => doc.splitTextToSize(limpiarPDF(t, !!F.ruso && f===F.ruso), ancho);
+  const alto = (tam, inter=1.4) => tam*PT*inter;
+  function escribir(t, {x=M, ancho=ANCHO, f=F.texto, estilo="normal", tam=12.5, color=TINTA, inter=1.4, barra=null}={}){
+    if(f!==F.ruso && tieneCirilico(t) && F.ruso){ f = F.ruso; estilo = "normal"; }
+    fuente(f, estilo, tam, color);
+    const ls = partir(t, ancho, f), a = alto(tam, inter);
+    for(const l of ls){
+      sitio(a);
+      if(barra){ doc.setFillColor(...barra); doc.rect(M-4.5, y, 1.4, a, "F"); }
+      doc.text(l, x, y + tam*PT*.95, {baseline:"alphabetic"});
+      y += a;
+    }
+    return ls.length;
+  }
+  const altoTexto = (t, ancho, tam=12.5, inter=1.4, f=F.texto) => { fuente(f, "normal", tam); return partir(t, ancho, f).length*alto(tam, inter); };
+  const bloques = tr.bloques;
+  const titulo = (bloques.find(b => b.tipo==="titulo") || {}).t || tr.tituloArchivo || "Patrón traducido";
+  // Cabecera: el título, de dónde viene y cómo leer las marcas naranjas
+  fuente(F.titulo, "normal", 24, MARCA);
+  for(const l of partir(titulo, ANCHO)){ doc.text(l, M, y + 24*PT*.9); y += alto(24, 1.25); }
+  y += 1.5;
+  escribir("Traducido del "+NOMBRE_IDIOMA[tr.idioma]+" al español con Tejiendo Ilusiones"+(tr.idioma==="en" ? (tr.uk ? " (términos del Reino Unido)" : " (términos de EE. UU.)") : "")+".", {tam:10.5, color:GRIS});
+  if(tr.archivo) escribir("Patrón original: "+tr.archivo, {tam:10.5, color:GRIS});
+  if(bloques.some(b => b.revisar)){ y += 1; escribir("Las frases con una raya naranja a la izquierda conviene revisarlas: debajo va el texto original.", {tam:10.5, color:GRIS, barra:NARANJA}); }
+  y += 2; doc.setDrawColor(...MARCA); doc.setLineWidth(.5); doc.line(M, y, M+30, y); y += 6;
+  // Ancho de la columna de «Vuelta 12:»
+  fuente(F.negrita, "bold", 12.5);
+  const cabs = bloques.filter(b => b.tipo==="vuelta").map(b => (b.t.match(/^(?:Vueltas?|Filas?) \d+(?: a \d+)?:/)||[""])[0]).filter(Boolean);
+  const colVuelta = Math.min(40, Math.max(0, ...cabs.map(c => doc.getTextWidth(c)))+3);
+  let antes = null;
+  for(let i=0; i<bloques.length; i++){
+    const b = bloques[i];
+    if(b.tipo==="titulo" && b.t===titulo && !bloques.slice(0, i).some(x => x.tipo==="titulo")) continue;
+    const barra = b.revisar ? NARANJA : null;
+    if(b.tipo==="imagen"){
+      const im = b.img; if(!im || !im.url) continue;
+      let w = im.hoja ? ANCHO : Math.min(ANCHO, (im.anchoPt || im.w*.5)*PT*1.1), h = w*im.h/im.w;
+      const maxH = im.hoja ? ABAJO-M : 115;
+      if(h > maxH){ h = maxH; w = h*im.w/im.h; }
+      y += 2; sitio(h+2);
+      try{ doc.addImage(im.url, "JPEG", M+(ANCHO-w)/2, y, w, h, undefined, "FAST"); }catch(e){}
+      y += h+4; antes = b; continue;
+    }
+    if(b.tipo==="parte" || b.tipo==="titulo"){
+      y += antes ? 4 : 0;
+      // El título de una parte no se queda solo al final de la hoja
+      const sig = bloques[i+1], conSig = sig && sig.tipo!=="imagen" ? Math.min(altoTexto(sig.t, ANCHO), 14) : 0;
+      sitio(alto(15, 1.3)+conSig+2);
+      escribir(b.t, {f:F.titulo, tam:15, color:MARCA, inter:1.3, barra});
+      y += 1.5; antes = b;
+    } else if(b.tipo==="vuelta"){
+      const cab = (b.t.match(/^(?:Vueltas?|Filas?) \d+(?: a \d+)?:/)||[""])[0], resto = b.t.slice(cab.length).trim();
+      const ancho = ANCHO-colVuelta, f = tieneCirilico(resto) && F.ruso ? F.ruso : F.texto;
+      fuente(f, "normal", 12.5);
+      const ls = partir(resto || " ", ancho, f), a = alto(12.5, 1.38);
+      if(ls.length*a < 40) sitio(ls.length*a);
+      ls.forEach((l, k) => {
+        sitio(a);
+        if(barra){ doc.setFillColor(...barra); doc.rect(M-4.5, y, 1.4, a, "F"); }
+        if(k===0 && cab){ fuente(F.negrita, "bold", 12.5, MARCA); doc.text(cab, M, y + 12.5*PT*.95); }
+        fuente(f, "normal", 12.5); doc.text(l, M+colVuelta, y + 12.5*PT*.95);
+        y += a;
+      });
+      y += 1.2; antes = b;
+    } else if(b.tipo==="leyenda"){
+      const m = b.t.match(/^(.{1,14}?)\s+[–—-]\s+(.+)$/);
+      // La leyenda entera en la misma hoja, si cabe
+      if(!antes || antes.tipo!=="leyenda"){
+        let alto0 = 0; for(let j=i; j<bloques.length && bloques[j].tipo==="leyenda"; j++) alto0 += altoTexto(bloques[j].t, ANCHO-24, 12, 1.35)+.6;
+        if(alto0 < 70) sitio(alto0);
+      }
+      if(m){
+        fuente(F.texto, "normal", 12);
+        const ls = partir(m[2], ANCHO-24), a = alto(12, 1.35);
+        sitio(ls.length*a);
+        ls.forEach((l, k) => {
+          sitio(a);
+          if(barra){ doc.setFillColor(...barra); doc.rect(M-4.5, y, 1.4, a, "F"); }
+          if(k===0){ fuente(F.negrita, "bold", 12, MARCA); doc.text(limpiarPDF(m[1]), M, y + 12*PT*.95); }
+          fuente(F.texto, "normal", 12); doc.text(l, M+24, y + 12*PT*.95);
+          y += a;
+        });
+      } else escribir(b.t, {tam:12, barra});
+      y += .6; antes = b;
+    } else if(b.tipo==="lista"){
+      const t = b.t.replace(RX_VINETA, "");
+      const ini = y; let pag = doc.getNumberOfPages();
+      escribir(t, {x:M+6, ancho:ANCHO-6, barra});
+      // la viñeta va en la primera línea de este punto
+      if(doc.getNumberOfPages()===pag){ fuente(F.texto, "normal", 12.5, MARCA); doc.text("•", M+1, ini + 12.5*PT*.95); }
+      y += 1; antes = b;
+    } else {
+      if(antes && antes.tipo!=="texto" && antes.tipo!=="imagen") y += 1.5;
+      escribir(b.t, {barra});
+      y += 2.5; antes = b;
+    }
+    if(b.revisar && b.original && b.original!==b.t){
+      escribir("Original: "+b.original, {tam:9.5, color:GRIS, f:F.ruso || F.texto, inter:1.3, barra});
+      y += 2;
+    }
+  }
+  // Al final, las hojas del patrón original tal como eran (para mirar las fotos o comprobar una frase)
+  if(conOriginal && tr.originales && tr.originales.length){
+    nueva();
+    fuente(F.titulo, "normal", 18, MARCA); doc.text("El patrón original", M, y + 18*PT*.9); y += alto(18, 1.3);
+    escribir("Así era el patrón antes de traducirlo.", {tam:10.5, color:GRIS}); y += 3;
+    tr.originales.forEach((o, k) => {
+      let w = ANCHO, h = w*o.h/o.w;
+      const maxH = ABAJO - (k===0 ? y : M);
+      if(h > maxH){ h = maxH; w = h*o.w/o.h; }
+      if(k > 0) nueva();
+      try{ doc.addImage(o.url, "JPEG", M+(ANCHO-w)/2, y, w, h, undefined, "FAST"); }catch(e){}
+      doc.setDrawColor(200, 205, 200); doc.setLineWidth(.2); doc.rect(M+(ANCHO-w)/2, y, w, h);
+      y += h;
+    });
+  }
+  // Pie de cada hoja: el nombre del patrón y el número de hoja
+  const total = doc.getNumberOfPages();
+  for(let p=1; p<=total; p++){
+    doc.setPage(p); fuente(F.texto, "normal", 9, GRIS);
+    doc.text(limpiarPDF(titulo).slice(0, 70), M, H-10);
+    doc.text("Página "+p+" de "+total, W-M, H-10, {align:"right"});
+  }
+  doc.setProperties({title: limpiarPDF(titulo)+" (en español)", subject:"Patrón de ganchillo traducido al español", creator:"Tejiendo Ilusiones"});
+  return doc.output("blob");
+}
+// Entregar el PDF: descargarlo (o compartirlo con el botón del móvil)
+async function entregarArchivo(blob, nombre, compartir){
+  if(compartir && navigator.canShare){
+    const archivo = new File([blob], nombre, {type: blob.type});
+    if(navigator.canShare({files:[archivo]})){
+      try{ await navigator.share({files:[archivo], title:nombre}); return true; }
+      catch(e){ if(e && e.name==="AbortError") return false; }
+    }
+  }
+  try{
+    const dl = window.claude?.use ? await claude.use("downloads") : null;
+    if(dl){ await dl.save({filename:nombre, data:blob}); toast("PDF guardado"); return true; }
+  }catch(e){ if(e && e.code==="declined") return false; }
+  const url = URL.createObjectURL(blob);
+  const a = h("a",{href:url, download:nombre, hidden:true});
+  document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  toast(window.TI_LOCAL ? "PDF guardado en Descargas" : "PDF listo");
+  return true;
+}
+// (sin tildes ni eñes: algunos navegadores cambian por «download» un nombre de archivo con letras así)
+const nombreArchivoTr = tr => ((((tr.bloques.find(b=>b.tipo==="titulo")||{}).t || tr.tituloArchivo || "Patron").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 _-]/g, "").replace(/\s+/g, " ").trim().slice(0, 60)) || "Patron")+" (en espanol).pdf";
+// El patrón traducido como texto, para guardarlo en «Mis patrones»
+const textoTraducido = tr => tr.bloques.filter(b => b.tipo!=="imagen").map((b, i, bs) => (i && (b.tipo==="parte" || (b.tipo!==bs[i-1].tipo && b.tipo!=="vuelta")) ? "\n" : "")+b.t).join("\n").trim();
+
+// ---------- Pantalla «Traducir un patrón» ----------
+let traduccion = null; // lo último traducido (se queda mientras la app está abierta)
+async function traducirLeido(tr, avisar){
+  const motor = tr.motor || null;
+  const n0 = Date.now();
+  tr.bloques = await traducirBloques(tr.bloquesOrig, {idioma: tr.idioma, uk: tr.uk, traductor: conMemoria(tr.idioma, motor),
+    avisar: (i, n) => { if(n > 3 && (i===0 || Date.now()-n0 > 300)) avisar("Traduciendo… "+(i+1)+" de "+n, i/n); }});
+  return tr;
+}
+VISTAS.traducir = V => {
+  const estado = h("div",{class:"note stack leyendo", "aria-live":"polite", hidden:true});
+  const res = h("div",{class:"stack"});
+  const botones = [];
+  const avisar = (msg, frac) => {
+    if(estado.hidden){ estado.hidden = false; estado.scrollIntoView({behavior:"smooth", block:"center"}); }
+    estado.replaceChildren(...[h("p",{style:"font-weight:700"}, msg), frac==null ? null : h("div",{class:"prog"}, h("i",{style:"width:"+Math.round(frac*100)+"%"}))].filter(Boolean));
+  };
+  const fallo = (...partes) => { estado.hidden = false; estado.replaceChildren(...partes.map(t=>h("p",{},t))); estado.scrollIntoView({behavior:"smooth", block:"center"}); };
+  let conOriginal = true;
+  async function empezar(archivo){
+    botones.forEach(b=>b.disabled=true);
+    traduccion = null; res.replaceChildren();
+    try{
+      const leido = await leerParaTraducir(archivo, avisar);
+      const lineas = lineasDelDocumento(leido), texto = lineas.map(l => l.t||"").join("\n");
+      if(!texto.replace(/\s/g, "")){ fallo("No he encontrado texto en este patrón.", AYUDA_FOTO); return; }
+      const idioma = idiomaDe(texto);
+      const tr = {archivo: archivo.name, tituloArchivo: tituloDeArchivo(archivo.name), idioma, uk: idioma==="en" && esTerminosUK(texto), originales: leido.originales,
+        bloquesOrig: bloquesDeTexto(lineas, idioma), texto, recortado: leido.total > MAX_HOJAS_TR};
+      if(idioma==="es" || idioma==="otro"){ traduccion = tr; estado.hidden = true; pintar(); return; }
+      try{ tr.motor = await prepararTraductor(idioma, avisar); }catch(e){ tr.motor = null; tr.sinMotor = e && e.message==="sin-conexion" ? "red" : "aparato"; }
+      if(!tr.motor && !tr.sinMotor) tr.sinMotor = "aparato";
+      await traducirLeido(tr, avisar);
+      if(!document.body.contains(res)) return;
+      traduccion = tr; estado.hidden = true; pintar();
+      toast("Patrón traducido");
+      res.scrollIntoView({behavior:"smooth", block:"start"});
+    } catch(e){
+      if(e && e.name==="PasswordException") fallo("Este PDF tiene contraseña y no puedo abrirlo.");
+      else if(e && e.message==="sin-conexion") fallo("Necesito internet para leer "+(e.foto?"esta foto":"este patrón")+" la primera vez. Conéctate y vuelve a probar.");
+      else if(e && e.foto) fallo("No he podido leer la foto.", "Prueba con una foto más cerca, recta y con buena luz.");
+      else if(e && /InvalidPDF|MissingPDF/.test(e.name||"")) fallo("Este archivo no es un PDF o está dañado.", "Si lo tienes en el correo o en WhatsApp, prueba a descargarlo otra vez.");
+      else fallo("No he podido traducir este patrón.", "Prueba otra vez. Si sigue sin ir, haz una foto de la hoja y usa «Foto del patrón».");
+    } finally { botones.forEach(b=>b.disabled=false); }
+  }
+  async function cambiarUK(uk){
+    const tr = traduccion; if(!tr || tr.uk===uk) return;
+    tr.uk = uk;
+    botones.forEach(b=>b.disabled=true);
+    try{ await traducirLeido(tr, avisar); estado.hidden = true; }catch(e){}
+    finally { botones.forEach(b=>b.disabled=false); }
+    pintar();
+  }
+  async function pdf(compartir, boton){
+    const tr = traduccion; if(!tr) return;
+    const txt = boton.textContent; boton.disabled = true; boton.textContent = "Preparando el PDF…";
+    try{ await entregarArchivo(await hacerPDFTraducido(tr, conOriginal), nombreArchivoTr(tr), compartir); }
+    catch(e){ toast(e && e.message==="sin-conexion" ? "Necesito internet la primera vez para hacer el PDF" : "No he podido hacer el PDF. Prueba otra vez."); }
+    finally { boton.disabled = false; boton.textContent = txt; }
+  }
+  function aMisPatrones(texto){
+    importarBorrador = texto; importarUK = null; importarSoloVueltas = true; importarArreglos = {}; importarArchivo = traduccion ? traduccion.archivo : "";
+    go({name:"importar"});
+  }
+  // Antes de hacer el PDF se puede corregir cualquier frase: con «Corregir el texto» cada frase pasa a un recuadro
+  let editando = false;
+  function bloqueVista(b){
+    if(b.tipo==="imagen") return h("figure",{class:"tr-img"}, h("img",{src:b.img.url, alt:"Foto del patrón", loading:"lazy"}));
+    if(editando){
+      const antes = b.t;
+      return h("div",{class:"tr-b tr-"+b.tipo}, h("textarea",{rows:Math.min(8, Math.ceil(b.t.length/32)+1), "aria-label":"Frase del patrón", oninput:e=>{ const t = e.target.value.trim(); if(t){ b.t = t; if(t!==antes) b.revisar = false; } }}, b.t));
+    }
+    const cab = b.tipo==="vuelta" ? (b.t.match(/^(?:Vueltas?|Filas?) \d+(?: a \d+)?:/)||[""])[0] : "";
+    return h("div",{class:"tr-b tr-"+b.tipo+(b.revisar?" revisar":"")},
+      h("p",{}, cab ? h("b",{}, cab) : null, cab ? " "+b.t.slice(cab.length).trim() : b.t),
+      b.revisar && b.original && b.original!==b.t ? h("small",{class:"tr-orig"}, "Revisa esta frase. Original: "+b.original) : null);
+  }
+  function pintar(){
+    const tr = traduccion;
+    if(!tr){ res.replaceChildren(); return; }
+    if(tr.idioma==="es"){
+      res.replaceChildren(h("div",{class:"note stack"}, h("p",{style:"font-weight:700"}, "Este patrón ya está en español."), h("p",{}, "No hace falta traducirlo. Puedes guardarlo en tus patrones para tejerlo vuelta a vuelta."),
+        h("button",{class:"primary big", onclick:()=>aMisPatrones(tr.texto)}, "Guardar en Mis patrones")));
+      return;
+    }
+    if(tr.idioma==="otro"){
+      res.replaceChildren(h("div",{class:"note stack"}, h("p",{style:"font-weight:700"}, "No sé en qué idioma está este patrón."), h("p",{}, "Sé traducir patrones en ruso y en inglés. Si está en otro idioma, todavía no puedo con él.")));
+      return;
+    }
+    const revisar = tr.bloques.filter(b => b.revisar).length, fotos = tr.bloques.filter(b => b.tipo==="imagen").length;
+    const vueltas = tr.bloques.filter(b => b.tipo==="vuelta").length;
+    const descargar = h("button",{class:"primary big", onclick:e=>pdf(false, e.currentTarget)}, icono("pdf"), "Descargar el PDF en español");
+    const puedeCompartir = (()=>{ try{ return !!(navigator.canShare && navigator.canShare({files:[new File(["x"], "a.pdf", {type:"application/pdf"})]})); }catch(e){ return false; } })();
+    res.replaceChildren(...[
+      h("div",{class:"note stack", style:"gap:.4rem"},
+        h("p",{style:"font-weight:700"}, "✓ Traducido del "+NOMBRE_IDIOMA[tr.idioma]+" al español"),
+        h("p",{}, [vueltas ? vueltas+(vueltas===1?" vuelta":" vueltas") : null, fotos ? fotos+(fotos===1?" foto":" fotos") : null].filter(Boolean).join(" y ")+(vueltas||fotos ? ". " : "")+"Los puntos van con los nombres de aquí: pb, mpa, pa, aum, dism…"),
+        revisar ? h("p",{}, revisar===1 ? "Hay 1 frase en naranja: revísala, debajo tienes el original." : "Hay "+revisar+" frases en naranja: revísalas, debajo tienes el original.") : null,
+        tr.sinMotor==="red" ? h("p",{}, "Sin internet no he podido preparar el traductor de las frases largas: van traducidas a medias. Conéctate y vuelve a abrir el patrón para que salgan mejor.") : null,
+        tr.sinMotor==="aparato" ? h("p",{}, "En este aparato no funciona el traductor de las frases largas: van traducidas a medias. Las vueltas y los puntos sí están bien.") : null,
+        tr.recortado ? h("p",{}, "El PDF es muy largo: he traducido las primeras "+MAX_HOJAS_TR+" hojas.") : null),
+      tr.idioma==="en" ? h("div",{class:"stack", style:"gap:.5rem"},
+        h("p",{}, "¿De dónde es el patrón? Cambia el nombre de los puntos:"),
+        h("div",{class:"seg", role:"group"}, [["us","EE. UU."],["uk","Reino Unido"]].map(([k, l]) => h("button",{class:(tr.uk?"uk":"us")===k?"sel":"", "aria-pressed":String((tr.uk?"uk":"us")===k), onclick:()=>cambiarUK(k==="uk")}, l))),
+        h("p",{class:"muted", style:"font-size:.88rem"}, "En el Reino Unido «dc» es punto bajo y «tr» es punto alto.")) : null,
+      h("div",{class:"stack", style:"gap:.7rem"},
+        descargar,
+        puedeCompartir ? h("button",{class:"big", onclick:e=>pdf(true, e.currentTarget)}, "Enviarlo por WhatsApp o correo") : null,
+        h("label",{class:"checkline"}, h("input",{type:"checkbox", checked:conOriginal, onchange:e=>{ conOriginal = e.target.checked; }}),
+          h("span",{}, "Añadir al final las hojas del patrón original", h("small",{}, "Para ver las fotos grandes o comprobar una frase."))),
+        h("button",{class:"teal big", onclick:()=>aMisPatrones(textoTraducido(tr))}, icono("libro"), "Guardar en Mis patrones")),
+      h("div",{class:"sechead"}, h("h2",{}, "Así queda"),
+        h("button",{class:editando ? "primary" : "", "aria-pressed":String(editando), onclick:()=>{ editando = !editando; pintar(); if(!editando) toast("Cambios guardados"); }}, editando ? "Ya está" : "Corregir el texto")),
+      h("p",{class:"muted", style:"font-size:.9rem"}, editando ? "Cambia lo que quieras en los recuadros y toca «Ya está»." : "Si ves algo mal, toca «Corregir el texto» y cámbialo antes de descargar el PDF."),
+      h("div",{class:"tr-doc"}, tr.bloques.map(bloqueVista)),
+      editando ? h("button",{class:"primary big", onclick:()=>{ editando = false; pintar(); toast("Cambios guardados"); }}, "Ya está") : null
+    ].filter(Boolean));
+  }
+  const elegir = h("input",{type:"file", accept:"application/pdf,.pdf", hidden:true, id:"tr-pdf", onchange:e=>{ const f = e.target.files[0]; e.target.value = ""; if(f) empezar(f); }});
+  const elegirFoto = h("input",{type:"file", accept:"image/*", hidden:true, id:"tr-foto", onchange:e=>{ const f = e.target.files[0]; e.target.value = ""; if(f) empezar(f); }});
+  const opcion = (cls, ic, titulo, sub, fn) => { const b = h("button",{class:"action "+cls, onclick:fn}, h("span",{class:"ic"}, icono(ic)), h("span",{}, titulo, h("br"), h("small",{}, sub))); botones.push(b); return b; };
+  V.append(
+    volver("Más", {name:"mas"}),
+    h("div",{class:"page-title"}, h("h1",{},"Traducir un patrón"),
+      h("p",{class:"muted"},"Abre un patrón en ruso o en inglés y te lo devuelvo en español, en un PDF para guardar o imprimir, con sus fotos.")),
+    h("div",{class:"section"},
+      estado,
+      h("div",{class:"actions"},
+        opcion("", "pdf", "Abrir un PDF", "En ruso o en inglés", ()=>elegir.click()),
+        opcion("pink", "foto", "Foto del patrón", "De una revista o un libro", ()=>elegirFoto.click())),
+      elegir, elegirFoto,
+      h("p",{class:"muted", style:"font-size:.88rem"}, "Se traduce dentro del móvil, gratis y sin mandar el patrón a ningún sitio. La primera vez se descarga el traductor (unos "+mbTraductor("en")+" MB para el inglés y "+mbTraductor("ru")+" MB para el ruso): mejor con wifi.")),
+    h("div",{class:"section"}, res)
+  );
+  pintar();
 };
 
 // ---------- Gráficos ----------
@@ -4624,6 +5831,7 @@ VISTAS.mas = V => {
   V.append(
     h("div",{class:"page-title"}, h("h1",{},"Más")),
     h("div",{class:"section"}, h("div",{class:"menu"},
+      item("traducir","Traducir un patrón","Del ruso o del inglés al español, en PDF", ()=>go({name:"traducir"})),
       item("rejilla","Gráficos","Dibuja con símbolos, en filas o en redondo", ()=>go({name:"graficos"})),
       item("ovillo","Mis lanas","Los ovillos que tienes en casa", ()=>go({name:"lanas"})),
       item("circulo","Círculo perfecto","Patrón y gráfico de un círculo plano", ()=>go({name:"herramientas"})),
