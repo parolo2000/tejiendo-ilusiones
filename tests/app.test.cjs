@@ -785,6 +785,38 @@ Fasten off and weave in ends.`;
     servidorWeb.close();
   }
 
+  await prueba("versión web en el móvil: botón para instalarla o, si no se puede, qué tocar exactamente", async () => {
+    const UA = {
+      android: "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36",
+      iphone: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      whatsapp: "Mozilla/5.0 (Linux; Android 14; SM-A546B Build/UP1A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/129.0.0.0 Mobile Safari/537.36 WhatsApp/2.24",
+    };
+    const abrir = async ua => {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, userAgent: ua });
+      await ctx.addInitScript(() => { window.TI_LOCAL = true; });
+      const page = await ctx.newPage(); page.errores = []; page.on("pageerror", e => page.errores.push(e.message));
+      await page.route(/fonts\.(googleapis|gstatic)\.com|supabase\.co/, r => r.abort());
+      await page.goto(URL); return page;
+    };
+    // Android con Chrome: el navegador avisa de que se puede instalar y el botón lo hace con un toque
+    const a = await abrir(UA.android);
+    await a.evaluate(() => { const e = new Event("beforeinstallprompt"); e.prompt = () => { window.pedida = true; }; e.userChoice = Promise.resolve({ outcome: "accepted" }); window.dispatchEvent(e); });
+    await a.getByRole("button", { name: "Instalar la app" }).tap();
+    assert.equal(await a.evaluate(() => window.pedida), true, "abre la ventana de instalar del móvil");
+    await a.waitForFunction(() => !document.querySelector(".instalar"));
+    assert.deepEqual(a.errores, []); await a.context().close();
+    // iPhone: no hay botón posible, dice qué tocar en Safari
+    const i = await abrir(UA.iphone);
+    assert.match(await i.locator(".instalar").innerText(), /Añadir a pantalla de inicio/);
+    await i.screenshot({ path: path.join(CAPTURAS, "instalar-iphone.png") });
+    await i.context().close();
+    // Dentro de WhatsApp: hay que abrirla en Chrome primero
+    const w = await abrir(UA.whatsapp);
+    assert.match(await w.locator(".instalar").innerText(), /Abrir en Chrome/);
+    await w.getByRole("button", { name: "Ahora no" }).tap();
+    assert.equal(await w.locator(".instalar").count(), 0, "se puede quitar");
+    await w.context().close();
+  });
   await prueba("en claude.ai invita a instalar la app y se puede quitar el aviso", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);
     assert.match(await page.locator("main").textContent(), /Ponla en tu móvil como una app/);

@@ -469,3 +469,11 @@ Capturas en `tests/capturas/`.
 - Sin cambios en los datos guardados (nada nuevo en localStorage).
 - Tests: 9 nuevos (reglas sin traductor, PDF ruso con foto y gráfico + PDF descargado, inglés del Reino Unido ↔ EE. UU.,
   ruso escaneado, sin conexión, patrón ya en español, accesos). 80 bien.
+
+## 2026-10-12 · Botón para instalar la app en el móvil
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-12-antes-boton-instalar.html`.
+- En la versión web sin instalar (Inicio y pantalla de entrar), `tarjetaInstalar()`: en Android con Chrome o Samsung,
+  botón «Instalar la app» (guarda el `beforeinstallprompt`); en iPhone, los pasos de Safari; dentro de WhatsApp,
+  del correo, etc., cómo abrirla en el navegador primero. Se oculta si ya está instalada; «Ahora no» usa `prefs.avisoApp`.
+- Test nuevo (Android con botón, iPhone, WhatsApp). 81 bien.

@@ -487,6 +487,11 @@ nav.tabs button{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:min
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script>
+// El navegador avisa (Chrome y Samsung en Android) de que la app se puede instalar: se guarda el aviso para el
+// botón «Instalar la app», que la instala con un toque
+let avisoInstalacion = null, yaInstalada = false;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); avisoInstalacion = e; if(typeof render==="function" && typeof view!=="undefined" && ["inicio","entrar","mas"].includes(view.name)) render(); });
+window.addEventListener("appinstalled", () => { avisoInstalacion = null; yaInstalada = true; if(typeof render==="function") render(); });
 // ---------- Patrones incluidos ----------
 const BASE = [
   {id:"b-posavasos", titulo:"Posavasos redondo", nivel:"Muy fácil", hilo:"Algodón medio, un color", ganchillo:"3,5 mm", color:"#2F6F68",
@@ -1643,7 +1648,7 @@ VISTAS.inicio = V => {
     h("div",{class:"hero"}, h("p",{class:"eyebrow"}, saludo), h("h1",{}, ult ? "¿Seguimos?" : "¿Qué tejemos hoy?")),
     ult ? h("div",{class:"section"}, tarjetaContinuar(ult)) : null,
     tocaRecordarCopia() ? avisoCopia() : null,
-    !window.TI_LOCAL && state.prefs.avisoApp ? avisoInstalar() : null,
+    !window.TI_LOCAL && state.prefs.avisoApp ? avisoInstalar() : tarjetaInstalar(),
     tuSemana(),
     h("div",{class:"section"},
       h("div",{class:"tiles"},
@@ -1687,6 +1692,39 @@ function avisoInstalar(){
       h("li",{}, "Abre en el móvil ", h("a",{href:APP_URL, target:"_blank", rel:"noopener"}, APP_URL.replace("https://",""))),
       h("li",{}, "Instálala desde el menú del navegador y, dentro, recupera la copia.")),
     h("button",{class:"ghost", style:"align-self:flex-start", onclick:()=>{ state.prefs.avisoApp=false; save(); caja.remove(); }},"No volver a mostrar")));
+  return caja;
+}
+// En la versión web (fuera de claude.ai) y sin instalar: botón para ponerla en el móvil como una app. Donde el
+// navegador no deja instalar con un botón (iPhone, o dentro de WhatsApp o del correo), dice exactamente qué tocar.
+const instalada = () => { try{ return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone===true; }catch(e){ return false; } };
+function comoInstalar(){
+  const ua = navigator.userAgent || "";
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const dentro = /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Line\/|MicroMessenger|GSA\/|Twitter|TikTok|Telegram/i.test(ua) || (/Android/.test(ua) && /; wv\)/.test(ua));
+  if(avisoInstalacion) return "boton";
+  if(dentro) return ios ? "dentro-ios" : "dentro-android";
+  if(ios) return /CriOS|FxiOS|EdgiOS/.test(ua) ? "ios-otro" : "ios";
+  return /Android/.test(ua) ? "android" : "ordenador";
+}
+function tarjetaInstalar(){
+  if(!window.TI_LOCAL || yaInstalada || instalada() || !state.prefs.avisoApp) return null;
+  const forma = comoInstalar();
+  if(forma==="ordenador" && !avisoInstalacion) return null;
+  const PASOS = {
+    ios: ["Toca el botón de compartir de abajo (el cuadrado con una flecha hacia arriba).", "Baja y toca «Añadir a pantalla de inicio».", "Toca «Añadir». Ya tienes el ovillo en la pantalla."],
+    "ios-otro": ["Toca el botón de compartir (el cuadrado con una flecha hacia arriba), arriba o abajo.", "Toca «Añadir a pantalla de inicio». Si no sale, ábrela en Safari y hazlo allí."],
+    android: ["Toca los tres puntos ⋮ de arriba a la derecha.", "Toca «Instalar aplicación» o «Añadir a pantalla de inicio».", "Toca «Instalar». Ya tienes el ovillo en la pantalla."],
+    "dentro-android": ["Ahora mismo estás dentro de otra app (WhatsApp, el correo…), y ahí no se puede instalar.", "Toca los tres puntos ⋮ de arriba y elige «Abrir en Chrome» (o «Abrir en el navegador»).", "En Chrome te saldrá aquí mismo el botón «Instalar la app»."],
+    "dentro-ios": ["Ahora mismo estás dentro de otra app (WhatsApp, el correo…), y ahí no se puede instalar.", "Toca el botón de compartir o los tres puntos y elige «Abrir en Safari».", "En Safari te diré qué tocar."]
+  };
+  const caja = h("div",{class:"section"}, h("div",{class:"note stack instalar", style:"gap:.6rem"},
+    h("h2",{style:"margin:0"}, "Ponla en tu móvil como una app"),
+    h("p",{}, "Así se abre con un toque desde la pantalla de inicio y funciona sin internet."),
+    forma==="boton"
+      ? h("button",{class:"primary big", onclick:async()=>{ const a = avisoInstalacion; if(!a) return; a.prompt(); try{ const r = await a.userChoice; if(r && r.outcome==="accepted"){ avisoInstalacion = null; yaInstalada = true; toast("Instalada. Búscala en la pantalla de inicio."); render(); } }catch(e){} }}, icono("casa"), "Instalar la app")
+      : h("ol",{class:"pasos-instalar"}, PASOS[forma].map(t => h("li",{}, t))),
+    forma==="ios" ? h("p",{class:"muted", style:"font-size:.88rem"}, "Si no ves el botón de compartir, toca una vez la barra de abajo para que aparezca.") : null,
+    h("button",{class:"ghost", style:"align-self:flex-start", onclick:()=>{ state.prefs.avisoApp=false; save(); caja.remove(); }},"Ahora no")));
   return caja;
 }
 // ---------- Que no se pierda nada ----------
@@ -5573,6 +5611,7 @@ VISTAS.entrar = V => {
   V.append(
     h("div",{class:"hero"}, h("p",{class:"eyebrow"},"Bienvenida"), h("h1",{},"Tejiendo Ilusiones")),
     h("div",{class:"section"}, h("p",{},"Tus patrones vuelta a vuelta, tus labores y la comunidad de tejedoras, en cualquier móvil y sin perder nada nunca.")),
+    tarjetaInstalar(),
     h("div",{class:"section"}, panelEntrar(null)));
 };
 
