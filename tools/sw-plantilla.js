@@ -4,6 +4,7 @@
 const VERSION = "__VERSION__";
 const APP = "app-" + VERSION;
 const OCR = "ocr-__VERSION_OCR__";
+const TRADUCTOR = "traductor-__VERSION_TRADUCTOR__";
 const FUENTES = "fuentes-1";
 const BASE = __BASE__;
 
@@ -13,7 +14,7 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys()
-    .then((claves) => Promise.all(claves.filter((k) => ![APP, OCR, FUENTES].includes(k)).map((k) => caches.delete(k))))
+    .then((claves) => Promise.all(claves.filter((k) => ![APP, OCR, TRADUCTOR, FUENTES].includes(k)).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -45,6 +46,7 @@ self.addEventListener("fetch", (e) => {
   if (req.mode === "navigate" && url.origin === location.origin) return e.respondWith(redPrimero(req));
   if (url.origin === location.origin) {
     if (url.pathname.includes("/ocr/")) return e.respondWith(guardadoPrimero(req, OCR));
+    if (url.pathname.includes("/traductor/")) return e.respondWith(guardadoPrimero(req, TRADUCTOR));
     return e.respondWith(guardadoPrimero(req, APP));
   }
   if (/^fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return e.respondWith(guardadoPrimero(req, FUENTES));

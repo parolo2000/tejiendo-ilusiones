@@ -53,7 +53,7 @@ const estado = page => page.evaluate(() => JSON.parse(localStorage.getItem("rinc
   // Servidor local: la app se prueba desde una dirección web, como en el artifact y en GitHub Pages (con file://
   // el lector de fotos no funciona y Chromium a veces pierde localStorage al recargar)
   const RAIZ = path.resolve(__dirname, "..");
-  const TIPOS = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".gz": "application/gzip", ".pdf": "application/pdf", ".png": "image/png" };
+  const TIPOS = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".gz": "application/gzip", ".pdf": "application/pdf", ".png": "image/png", ".wasm": "application/wasm", ".ttf": "font/ttf" };
   const servidor = http.createServer((req, res) => {
     const f = path.join(RAIZ, decodeURIComponent(new globalThis.URL(req.url, "http://x").pathname));
     if (!f.startsWith(RAIZ) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
@@ -351,6 +351,8 @@ Fasten off and weave in ends.`;
     // Las librerías de los CDN, desde copias locales idénticas (el contenedor de pruebas no sale a internet)
     await page.route(/cdn\.jsdelivr\.net\/npm\/pdfjs-dist@3\.11\.174\/legacy\/build\/(pdf(\.worker)?\.min\.js)$/, (r) => r.fulfill({ path: path.join(VENDOR, r.request().url().split("/").pop()), contentType: "text/javascript" }));
     await page.route(/cdn\.jsdelivr\.net\/npm\/tesseract\.js@5\.1\.1\/dist\/tesseract\.min\.js$/, (r) => r.fulfill({ path: path.join(VENDOR, "tesseract.min.js"), contentType: "text/javascript" }));
+    await page.route(/cdn\.jsdelivr\.net\/npm\/jspdf@4\.2\.1\/dist\/jspdf\.umd\.min\.js$/, (r) => r.fulfill({ path: path.join(VENDOR, "jspdf.umd.min.js"), contentType: "text/javascript" }));
+    await page.route(/cdn\.jsdelivr\.net\/npm\/fflate@0\.8\.2\/umd\/index\.js$/, (r) => r.fulfill({ path: path.join(VENDOR, "fflate.min.js"), contentType: "text/javascript" }));
     await page.goto(WEB);
     return page;
   }
@@ -1528,11 +1530,164 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  console.log("Traducir un patrón");
+  // Patrones de prueba: uno ruso con foto (imagen) y gráfico de símbolos (líneas), y uno inglés del Reino Unido
+  const fxT = await browser.newPage();
+  await fxT.setViewportSize({ width: 300, height: 220 });
+  await fxT.setContent(`<body style="margin:0;background:#f3e9df"><div style="width:140px;height:140px;border-radius:50%;background:#e9b8c8;margin:40px auto"></div></body>`);
+  const fotoMuneco = "data:image/png;base64," + (await fxT.screenshot()).toString("base64");
+  let simbolos = ""; for (let r = 1; r <= 3; r++) for (let k = 0; k < r * 6; k++) { const a = k / (r * 6) * 6.283, x = 100 + Math.cos(a) * r * 25, y = 100 + Math.sin(a) * r * 25; simbolos += `<line x1="${x}" y1="${y - 6}" x2="${x}" y2="${y + 6}" stroke="#000"/><line x1="${x - 6}" y1="${y}" x2="${x + 6}" y2="${y}" stroke="#000"/>`; }
+  const RUSO = `<style>body{font:13px Arial;margin:36px} h1{font-size:26px} h3{margin:14px 0 4px} p{margin:0 0 4px}</style>
+<h1>Зайка Мия</h1><img src="${fotoMuneco}" style="width:200px"><p>Мастер-класс по вязанию игрушки крючком</p>
+<h3>Материалы:</h3><p>- пряжа YarnArt Jeans, цвет 62 (молочный);</p><p>- крючок 2,5 мм;</p><p>- глазки на безопасном креплении 8 мм.</p>
+<h3>Условные обозначения:</h3><p>КА – кольцо амигуруми</p><p>сбн – столбик без накида</p><p>пр – прибавка</p><p>уб – убавка</p>
+<p>Схема головы:</p><svg width="200" height="200"><circle cx="100" cy="100" r="8" fill="none" stroke="#000"/>${simbolos}</svg>
+<h3>Голова</h3><p>1 ряд: 6 сбн в КА (6)</p><p>2 ряд: 6 пр (12)</p><p>3 ряд: (1 сбн, пр) х 6 (18)</p><p>4-8 ряды: 18 сбн</p>
+<p>Глазки вставить между 6 и 7 рядом.</p><p>9 ряд: (1 сбн, уб) х 6 (12)</p><p>10 ряд: 6 уб (6)</p><p>Набейте голову. Закрепите нить и стяните отверстие.</p>`;
+  const INGLES_UK = `<style>body{font:13px Arial;margin:36px} p{margin:0 0 4px}</style><h1>Granny Coaster</h1><p>UK terms</p>
+<p>Abbreviations</p><p>ch - chain</p><p>dc - double crochet</p><p>tr - treble crochet</p><p>ss - slip stitch</p>
+<p>Round 1: 6 dc into a magic ring, join with ss (6)</p><p>Round 2: 2 dc in each st around (12)</p><p>Round 3: ch 3 (counts as first tr), 2 tr in each st around (24)</p><p>Fasten off and weave in the ends.</p>`;
+  await fxT.setViewportSize({ width: 800, height: 600 });
+  await fxT.setContent(RUSO); const pdfRuso = await fxT.pdf({ format: "A4" });
+  await fxT.setContent(INGLES_UK); const pdfIngles = await fxT.pdf({ format: "A5" });
+  // El ruso escaneado: la hoja como una foto dentro del PDF
+  await fxT.setViewportSize({ width: 800, height: 1130 }); await fxT.setContent(RUSO.replace("13px Arial", "16px Arial"));
+  const hojaRusa = (await fxT.screenshot()).toString("base64");
+  await fxT.setContent(`<style>body{margin:0}</style><img src="data:image/png;base64,${hojaRusa}" style="width:100%">`);
+  const pdfRusoEscaneado = await fxT.pdf({ format: "A4", margin: { top: 0, bottom: 0, left: 0, right: 0 } });
+  await fxT.close();
+  const esperarTraduccion = page => page.waitForFunction(() => (traduccion && (traduccion.bloques || traduccion.idioma === "es" || traduccion.idioma === "otro")) || document.querySelector(".leyendo:not([hidden])")?.textContent.match(/No he|Necesito|contraseña|no es un PDF/), null, { timeout: 300000 });
+  await prueba("traductor (reglas): las vueltas rusas y los puntos salen bien aunque no haya traductor", async () => {
+    const page = await paginaWeb();
+    const r = await page.evaluate(async () => {
+      const lineas = ["Голова", "1 ряд: 6 сбн в КА (6)", "2-4 ряды: 12 сбн", "Р.5: (1 сбн, уб) х 6 (12)", "", "Набейте голову."];
+      return (await traducirBloques(bloquesDeTexto(lineas, "ru"), { idioma: "ru", traductor: null })).map(b => [b.tipo, b.t, !!b.revisar]);
+    });
+    assert.deepEqual(r.filter(b => b[0] === "vuelta").map(b => b[1]), ["Vuelta 1: 6 pb en el anillo mágico (6)", "Vueltas 2 a 4: 12 pb", "Vuelta 5: (1 pb, dism) x 6 (12)"]);
+    assert.ok(r.some(b => /parte|titulo/.test(b[0]) && /^Cabeza/.test(b[1])), JSON.stringify(r));
+    assert.ok(r.some(b => b[0] === "texto" && b[2] && /rellena/i.test(b[1])), "sin traductor, las frases se traducen a medias y se marcan para revisar");
+    assert.ok(r.filter(b => b[0] === "vuelta").every(b => !b[2]), "las vueltas no hay que revisarlas");
+    assert.ok(r.some(b => b[0] === "leyenda" && /^pb – punto bajo/.test(b[1])), "pone la leyenda de las abreviaturas");
+    assert.deepEqual(await page.evaluate(() => [idiomaDe("Vuelta 1: 6 pb en el anillo mágico (6)\nVuelta 2: 6 aum (12)\nRemata y esconde las hebras con la aguja lanera de la labor"), idiomaDe("Round 1: 6 sc in the magic ring (6)\nRound 2: inc in each st around (12)\nFasten off and weave in the ends with your hook"), idiomaDe("1 ряд: 6 сбн в кольцо амигуруми, затем вяжем по кругу без прибавок до конца")]), ["es", "en", "ru"]);
+    assert.equal(await page.evaluate(() => arreglarLecturaRusa("2 ряд; (3 cóH, np) х 6, y6")), "2 ряд; (3 сбн, пр) х 6, уб", "letras que el lector de fotos confunde");
+    await page.context().close();
+  });
+  await prueba("traducir un PDF ruso: texto en español, fotos y gráfico en su sitio, y un PDF para descargar", async () => {
+    const page = await paginaWeb({ acceptDownloads: true });
+    await page.evaluate(() => go({ name: "traducir" }));
+    await subir(page, "#tr-pdf", "zaika.pdf", "application/pdf", pdfRuso);
+    await esperarTraduccion(page);
+    const tr = await page.evaluate(() => ({ idioma: traduccion.idioma, sinMotor: traduccion.sinMotor, bloques: traduccion.bloques.map(b => ({ tipo: b.tipo, t: b.t, revisar: !!b.revisar })) }));
+    const textos = tr.bloques.filter(b => b.tipo !== "imagen");
+    assert.equal(tr.idioma, "ru"); assert.equal(tr.sinMotor, undefined, "el traductor de Mozilla funciona");
+    assert.equal(tr.bloques[0].tipo, "titulo"); assert.match(tr.bloques[0].t, /Conejit/);
+    assert.deepEqual(tr.bloques.filter(b => b.tipo === "vuelta").map(b => b.t), ["Vuelta 1: 6 pb en el anillo mágico (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: (1 pb, aum) x 6 (18)", "Vueltas 4 a 8: 18 pb", "Vuelta 9: (1 pb, dism) x 6 (12)", "Vuelta 10: 6 dism (6)"]);
+    assert.ok(textos.every(b => !/[а-яё]/i.test(b.t)), "no queda nada en ruso:\n" + textos.map(b => b.t).join("\n"));
+    assert.ok(textos.some(b => /ojos/i.test(b.t) && /6 y 7/.test(b.t)), "traduce las notas");
+    assert.ok(textos.some(b => b.tipo === "parte" && /^Cabeza/.test(b.t)));
+    const fotos = tr.bloques.map((b, i) => b.tipo === "imagen" ? i : -1).filter(i => i >= 0);
+    assert.equal(fotos.length, 2, "la foto y el gráfico");
+    assert.equal(fotos[0], 1, "la foto va debajo del título");
+    assert.ok(fotos[1] < tr.bloques.findIndex(b => b.tipo === "vuelta"), "el gráfico va antes de las vueltas");
+    assert.ok(!textos.some(b => /^\+/.test(b.t)), "los símbolos del gráfico no salen como texto");
+    await page.screenshot({ path: path.join(CAPTURAS, "traducir-movil.png"), fullPage: true });
+    // Corregir una frase a mano antes de hacer el PDF
+    await page.getByRole("button", { name: "Corregir el texto" }).tap();
+    const area = page.locator(".tr-doc textarea").nth(1);
+    await area.fill("Patrón de conejito a ganchillo");
+    await page.getByRole("button", { name: "Ya está" }).first().tap();
+    assert.ok(await page.locator(".tr-doc", { hasText: "Patrón de conejito a ganchillo" }).count());
+    const espera = page.waitForEvent("download");
+    await page.getByRole("button", { name: /Descargar el PDF/ }).tap();
+    const d = await espera, archivo = path.join(CAPTURAS, "traducido.pdf");
+    await d.saveAs(archivo);
+    assert.match(d.suggestedFilename(), /^Conejit.* \(en espanol\)\.pdf$/);
+    const pdf = fs.readFileSync(archivo);
+    const leido = await page.evaluate(async a => { const doc = await abrirPDF(new Uint8Array(a)); const t = await textoDePDF(doc); const n = doc.numPages; const p1 = await doc.getPage(1); const imgs = (await cajasDeImagenes(p1)).cajas.length; doc.destroy(); return { t, n, imgs }; }, [...pdf]);
+    assert.ok(leido.n >= 2, "el PDF traducido y al final la hoja original");
+    assert.match(leido.t, /Vuelta 1:\s*6 pb en el anillo mágico \(6\)/);
+    assert.match(leido.t, /Traducido del ruso al español/);
+    assert.match(leido.t, /Patrón de conejito a ganchillo/, "lleva lo corregido a mano");
+    assert.match(leido.t, /El patrón original/);
+    assert.ok(leido.imgs >= 2, "con la foto y el gráfico");
+    assert.deepEqual(page.errores, []);
+    // y se puede guardar en «Mis patrones»: pasa por «Añadir un patrón» ya en español
+    await page.getByRole("button", { name: "Guardar en Mis patrones" }).tap();
+    await page.waitForFunction(() => view.name === "importar" && document.querySelector("ol.importados li"));
+    const r = await page.evaluate(() => importarTexto(document.querySelector("#im-texto").value, null, true));
+    assert.equal(r.pasos.filter(p => /^Vueltas? \d/.test(p)).length, 6, JSON.stringify(r.pasos));
+    assert.equal(r.revision.filter(x => x.estado === "distinto").length, 0);
+    await page.context().close();
+  });
+  await prueba("traducir un PDF inglés del Reino Unido: «dc» es punto bajo y se puede cambiar a EE. UU.", async () => {
+    const page = await paginaWeb();
+    await page.evaluate(() => go({ name: "traducir" }));
+    await subir(page, "#tr-pdf", "coaster.pdf", "application/pdf", pdfIngles);
+    await esperarTraduccion(page);
+    const vueltas = () => page.evaluate(() => traduccion.bloques.filter(b => b.tipo === "vuelta").map(b => b.t));
+    assert.equal(await page.evaluate(() => traduccion.uk), true);
+    const uk = await vueltas();
+    assert.match(uk[0], /^Vuelta 1: 6 pb en el anillo mágico, cierra con pd \(6\)$/, uk[0]);
+    assert.match(uk[2], /^Vuelta 3: 3 cad \(cuenta como (el )?primer pa\), 2 pa en cada punto \(24\)$/, uk[2]);
+    await page.getByRole("button", { name: "EE. UU." }).tap();
+    await page.waitForFunction(() => traduccion.uk === false && /pa/.test(traduccion.bloques.find(b => b.tipo === "vuelta").t));
+    assert.match((await vueltas())[0], /^Vuelta 1: 6 pa /, "con términos de EE. UU. «dc» es punto alto");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("traducir un PDF ruso escaneado: lo lee como una foto y lo traduce", async () => {
+    const page = await paginaWeb();
+    await page.evaluate(() => go({ name: "traducir" }));
+    await subir(page, "#tr-pdf", "zaika-escaneado.pdf", "application/pdf", pdfRusoEscaneado);
+    await esperarTraduccion(page);
+    const tr = await page.evaluate(() => ({ idioma: traduccion.idioma, originales: traduccion.originales.length, bloques: traduccion.bloques.map(b => ({ tipo: b.tipo, t: b.t })) }));
+    assert.equal(tr.idioma, "ru");
+    assert.deepEqual(tr.bloques.filter(b => b.tipo === "vuelta").map(b => b.t), ["Vuelta 1: 6 pb en el anillo mágico (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: (1 pb, aum) x 6 (18)", "Vueltas 4 a 8: 18 pb", "Vuelta 9: (1 pb, dism) x 6 (12)", "Vuelta 10: 6 dism (6)"]);
+    assert.ok(tr.bloques.some(b => /ojos/.test(b.t) && /6 y 7/.test(b.t)), "traduce las notas");
+    assert.equal(tr.originales, 1, "la hoja escaneada va al final del PDF");
+    assert.deepEqual(page.errores.filter(e => !/Estimating resolution|diacritics|Empty page/.test(e)), []);
+    await page.context().close();
+  });
+  await prueba("traducir: sin conexión para el traductor, las vueltas salen igual y lo demás se marca para revisar", async () => {
+    const page = await paginaWeb();
+    await page.route(/\/traductor\//, r => r.abort());
+    await page.evaluate(() => go({ name: "traducir" }));
+    await subir(page, "#tr-pdf", "zaika.pdf", "application/pdf", pdfRuso);
+    await esperarTraduccion(page);
+    const tr = await page.evaluate(() => ({ sinMotor: traduccion.sinMotor, bloques: traduccion.bloques.map(b => ({ tipo: b.tipo, t: b.t, revisar: !!b.revisar })) }));
+    assert.ok(tr.sinMotor, "avisa de que no hay traductor");
+    assert.equal(tr.bloques.filter(b => b.tipo === "vuelta")[0].t, "Vuelta 1: 6 pb en el anillo mágico (6)");
+    assert.ok(tr.bloques.some(b => b.revisar), "lo que no se ha podido traducir se marca");
+    await page.getByText(/Sin internet no he podido preparar el traductor/).waitFor();
+    await page.context().close();
+  });
+  await prueba("traducir un patrón que ya está en español: lo dice y deja guardarlo", async () => {
+    const page = await paginaWeb();
+    await page.evaluate(() => go({ name: "traducir" }));
+    await subir(page, "#tr-pdf", "posavasos.pdf", "application/pdf", pdfTexto);
+    await esperarTraduccion(page);
+    await page.getByText("Este patrón ya está en español.").waitFor();
+    await page.getByRole("button", { name: "Guardar en Mis patrones" }).tap();
+    await page.waitForFunction(() => view.name === "importar" && /Vuelta 1: 6 pb/.test(document.querySelector("#im-texto").value));
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("se llega a «Traducir un patrón» desde Inicio, Más y Añadir un patrón", async () => {
+    const page = await nuevaPagina(browser);
+    for (const [desde, boton] of [["inicio", /Traducir un patrón \(ruso o inglés\)/], ["mas", /Traducir un patrón/], ["importar", /Traducir un patrón/]]) {
+      await page.evaluate(n => go({ name: n }), desde);
+      await page.getByRole("button", { name: boton }).first().tap();
+      assert.equal(await page.evaluate(() => view.name), "traducir", "desde " + desde);
+    }
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);
     const vistas = [["inicio"], ["patrones"], ["patron", "m-1"], ["patron", "b-gorro"], ["tejer", "m-1"], ["sofa", "m-1"], ["importar"], ["editar"], ["editar", "m-1"],
-      ["graficos"], ["grafico", "g-1"], ["foto"], ["lanas"], ["lana", "l-1"], ["mas"], ["contador"], ["ayuda"], ["copia"], ["herramientas"]];
+      ["graficos"], ["grafico", "g-1"], ["foto"], ["lanas"], ["lana", "l-1"], ["mas"], ["contador"], ["ayuda"], ["copia"], ["herramientas"], ["traducir"]];
     for (const [name, id] of vistas) {
       await page.evaluate(([name, id]) => go({ name, id }), [name, id]);
       await page.waitForTimeout(60);

@@ -1,9 +1,10 @@
 // Service worker de Tejiendo Ilusiones (lo genera tools/construir-web.cjs; no editar docs/sw.js a mano).
 // La app se guarda en el móvil al instalarla y funciona sin conexión. Los datos de la usuaria no pasan por aquí:
 // siguen en el almacenamiento del navegador.
-const VERSION = "83f738e25478";
+const VERSION = "24ab255eef2a";
 const APP = "app-" + VERSION;
 const OCR = "ocr-86e1ac103c70";
+const TRADUCTOR = "traductor-bc9a05036b9c";
 const FUENTES = "fuentes-1";
 const BASE = ["./","index.html","manifest.webmanifest","icono.svg","icono-180.png","icono-192.png","icono-512.png","icono-recortable-512.png","lib/pdf.min.js","lib/pdf.worker.min.js","lib/tesseract.min.js"];
 
@@ -13,7 +14,7 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys()
-    .then((claves) => Promise.all(claves.filter((k) => ![APP, OCR, FUENTES].includes(k)).map((k) => caches.delete(k))))
+    .then((claves) => Promise.all(claves.filter((k) => ![APP, OCR, TRADUCTOR, FUENTES].includes(k)).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -45,6 +46,7 @@ self.addEventListener("fetch", (e) => {
   if (req.mode === "navigate" && url.origin === location.origin) return e.respondWith(redPrimero(req));
   if (url.origin === location.origin) {
     if (url.pathname.includes("/ocr/")) return e.respondWith(guardadoPrimero(req, OCR));
+    if (url.pathname.includes("/traductor/")) return e.respondWith(guardadoPrimero(req, TRADUCTOR));
     return e.respondWith(guardadoPrimero(req, APP));
   }
   if (/^fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return e.respondWith(guardadoPrimero(req, FUENTES));
