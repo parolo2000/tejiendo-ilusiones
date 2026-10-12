@@ -4,8 +4,13 @@ bergamot-translator-worker.js/.wasm, translator-worker.js
     @browsermt/bergamot-translator 0.4.9 (MPL-2.0), el motor de traducción de Firefox (proyecto Bergamot).
 ruen-*.bin   modelo ruso → inglés   (Mozilla Firefox Translations, «base-memory»)
 enes-*.bin   modelo inglés → español (Mozilla Firefox Translations, «base-memory»)
+pten-*.bin   modelo portugués → inglés (Brasil y Portugal) («base-memory»)
+tren-*.bin   modelo turco → inglés («tiny»)
+zhen-*.bin   modelo chino → inglés (chino simplificado) («base-memory», en tres trozos: -0, -1 y -2)
     Descargados de storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data (db/models.json),
     los mismos que usa Firefox. Licencia MPL-2.0. Van comprimidos con gzip (se descomprimen en el navegador) y el
     modelo va partido en dos trozos de menos de 12 MB (-0 y -1) para poder publicarlo en todas partes.
-Del ruso se traduce al inglés y luego al español. Los puntos de ganchillo no pasan por el traductor: los cambia la app
+Del ruso, portugués, turco y chino se traduce al inglés y luego al español. En el móvil solo se carga un idioma
+a la vez. Descarga la primera vez: inglés 31 MB, turco 46 MB, ruso y portugués 56 MB, chino 69 MB.
+Si cambia un modelo, ponle otro nombre al archivo (la caché del móvil no mira los modelos, para no volver a bajarlos). Los puntos de ganchillo no pasan por el traductor: los cambia la app
 con reglas (tejiendo-ilusiones.html, «Traducir un patrón»).

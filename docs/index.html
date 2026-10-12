@@ -1662,7 +1662,7 @@ VISTAS.inicio = V => {
     h("div",{class:"section"},
       h("h2",{},"Otras cosas"),
       h("div",{class:"menu"},
-        h("button",{onclick:()=>go({name:"traducir"})}, h("span",{class:"ic"}, icono("traducir",22)), h("span",{class:"grow"},"Traducir un patrón (ruso o inglés)"), h("span",{class:"muted"},"›")),
+        h("button",{onclick:()=>go({name:"traducir"})}, h("span",{class:"ic"}, icono("traducir",22)), h("span",{class:"grow"},"Traducir un patrón de otro idioma"), h("span",{class:"muted"},"›")),
         h("button",{onclick:()=>go({name:"herramientas"})}, h("span",{class:"ic"}, icono("circulo",22)), h("span",{class:"grow"},"Hacer un círculo perfecto"), h("span",{class:"muted"},"›")),
         h("button",{onclick:()=>go({name:"graficos"})}, h("span",{class:"ic"}, icono("rejilla",22)), h("span",{class:"grow"},"Dibujar un gráfico"), h("span",{class:"muted"},"›")),
         h("button",{onclick:()=>go({name:"foto"})}, h("span",{class:"ic"}, icono("imagen",22)), h("span",{class:"grow"},"Convertir una foto en gráfico"), h("span",{class:"muted"},"›")),
@@ -3175,15 +3175,33 @@ function esCabeceraSuave(l, sig){
   if(!/\p{L}{3,}/u.test(sin) || NO_PARTES.test(sin) || esLeyenda(t) || lineaDeColor(t) || lineaAFilas(t).length) return false;
   return /^\s*Vueltas?\s+1\b/i.test(sig||"") || /^\s*(haz|monta|teje)\b.*\b(anillo|cad)/i.test(sig||"");
 }
+// Portugués, turco y chino: cada línea pasa a los puntos de aquí con las mismas reglas que usa el traductor.
+// La leyenda de abreviaturas se queda como está (va a las notas).
+function pasarAlEspanol(linea, idioma, xv=false){
+  const l = idioma==="zh" ? normalizarChino(linea) : linea;
+  const cv = cabeceraVuelta(l.trim(), idioma);
+  if(!cv && esLeyendaOrig(l.trim())) return linea;
+  const pz = !cv && piezaDe(l, idioma);
+  if(pz && !pz.resto) return pz.es;
+  const p = proteger(paraReglas(arreglarSignos(cv ? cv.resto : pz ? pz.resto : l), idioma), glosarioDe(idioma, false, xv));
+  const t = enAEspanol(devolverMarcas(palabraAPalabra(p.t, idioma), p.marcas).t);
+  return mayuscula(((cv ? cv.cab+" " : pz ? pz.es+" " : "")+t).replace(/\s+([,.;:)])/g, "$1").replace(/([(¿¡])\s+/g, "$1").replace(/\s{2,}/g, " ").trim()
+    .replace(/([.!?]\s+)(\p{Ll})/gu, (m, a, c) => a+c.toUpperCase()));
+}
 function importarTexto(texto, uk, soloVueltas=false){
   const rus = esRuso(texto);
-  const ingles = !rus && esIngles(texto);
-  const latino = !rus && !ingles && esLatino(texto);
+  // Portugués, turco o chino: primero las cabeceras de las vueltas pasan a «Vuelta N:» (así se separan bien las líneas)
+  const di = !rus ? idiomaDe(texto) : null, otroIdioma = ["pt","tr","zh"].includes(di) ? di : null, xv = otroIdioma==="tr" && usaXV(texto);
+  // (y la leyenda «X: 短针», «am - anel mágico» se escribe con «=», que es como la reconoce: así va a las notas)
+  if(otroIdioma) texto = texto.split("\n").map(l => { const l2 = otroIdioma==="zh" ? normalizarChino(l) : l, cv = cabeceraVuelta(l2.trim(), otroIdioma);
+    return cv ? cv.cab+" "+cv.resto : esLeyendaOrig(l2.trim()) ? l2.trim().replace(/\s+[-–—]\s+|\s*[–—=:]\s*/, " = ") : l2; }).join("\n");
+  const ingles = !rus && !otroIdioma && esIngles(texto);
+  const latino = !rus && !ingles && !otroIdioma && esLatino(texto);
   if(uk==null) uk = ingles && esUK(texto);
   const originales = limpiarPegado(texto);
   // «1pb», «6aum», «(1mp,1au)x6»: número pegado al punto (en español; el inglés y el ruso lo separan al traducir)
   const PEGADOS = new RegExp("(\\d)("+PUNTO_ES+"|mp|au|dis|var|mv|ap)(?=[\\s,.;)\\]*]|$)", "gi");
-  const lineas = numerosAVueltas(originales.map(l0 => { const l = rus || ingles ? prefijoVuelta(l0) : prefijoVuelta(l0).replace(PEGADOS, "$1 $2"); return normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : latino ? traducirLatino(l) : l)
+  const lineas = numerosAVueltas(originales.map(l0 => { const l = rus || ingles || otroIdioma ? prefijoVuelta(l0) : prefijoVuelta(l0).replace(PEGADOS, "$1 $2"); return normalizarVuelta(rus ? traducirRuso(l) : ingles ? traducirIngles(l, uk) : otroIdioma ? pasarAlEspanol(l, otroIdioma, xv) : latino ? traducirLatino(l) : l)
     .replace(/\bpor cada punto( de la vuelta anterior| de la fila anterior)?/gi, "en cada punto"); })).map(retocarPaso);
   // La primera línea corta y sin números es el título, aunque nombre puntos («Bufanda de punto bajo»)
   const conTitulo = originales.length>1 && originales[0].length<=60 && !/\d|:/.test(originales[0]) && !/^(haz|teje|monta|make|chain|start)\b/i.test(originales[0]);
@@ -3230,11 +3248,11 @@ function importarTexto(texto, uk, soloVueltas=false){
   const primeraLana = (()=>{ for(const l of lineas){ const c = lineaDeColor(l); if(c) return c; } return null; })();
   const tituloLinea = conTitulo ? originales[0] : antes.find(l => l.length<=60 && !/\d\s*mm|:/.test(l));
   // El grosor del ganchillo: mejor el que va junto a «ganchillo» o «hook» que el de la lana
-  const gan = texto.match(/(?:ganchillo|aguja|hook|crochet|крючок)[^\n\d]{0,25}(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])/iu) || texto.match(/(?:крючок|ganchillo|aguja)\s*(?:№|n[º°o]\.?|num\.?)\s*(\d+(?:[.,]\d+)?)/iu) || texto.match(/(\d+(?:[.,]\d+)?)\s*(?:mm|мм)(?![a-zа-я])[^\n]{0,4}(?:ganchillo|hook)?/iu);
+  const gan = texto.match(/(?:ganchillo|aguja|hook|crochet|крючок|agulha|tığ|钩针)[^\n\d]{0,25}(\d+(?:[.,]\d+)?)\s*(?:mm|мм|毫米)(?![a-zа-я])/iu) || texto.match(/(?:крючок|ganchillo|aguja)\s*(?:№|n[º°o]\.?|num\.?)\s*(\d+(?:[.,]\d+)?)/iu) || texto.match(/(\d+(?:[.,]\d+)?)\s*(?:mm|мм|毫米)(?![a-zа-я])[^\n]{0,4}(?:ganchillo|hook)?/iu);
   const lana = lanaDelTexto(antes.length ? antes : originales);
   if(!lana.color && primeraLana) lana.color = primeraLana;
   return {
-    ingles, ruso:rus, latino, uk, pasos, apartadas,
+    ingles, ruso:rus, otroIdioma, latino, uk, pasos, apartadas,
     revision: pasos.map(revisarLinea),
     titulo: tituloLinea || "",
     ganchillo: gan ? gan[1].replace(".", ",")+" mm" : "",
@@ -3266,7 +3284,9 @@ async function abrirPDF(datos){
   let password;
   for(let intento=0; ; intento++){
     try{
-      return await window.pdfjsLib.getDocument({data:datos.slice(), password, isEvalSupported:false, disableFontFace:true, useSystemFonts:false}).promise;
+      // (cMap: las tablas de letras de los PDF chinos y japoneses; solo se descargan si el PDF las pide)
+      return await window.pdfjsLib.getDocument({data:datos.slice(), password, isEvalSupported:false, disableFontFace:true, useSystemFonts:false,
+        cMapUrl: window.TI_LOCAL ? new URL("lib/cmaps/", location.href).href : "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/", cMapPacked:true}).promise;
     } catch(e){
       if(!e || e.name!=="PasswordException" || intento>=3) throw e;
       let escrita = null;
@@ -3464,31 +3484,65 @@ async function prepararFoto(archivo){
   c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close && bmp.close();
   return c;
 }
+// Idiomas del lector de fotos. Se empieza con español, inglés y ruso; si la primera hoja resulta estar en portugués o
+// en turco se vuelve a leer con ese idioma (sus letras: ã, ç, ğ, ş…), y si no se entiende nada se prueba con el chino.
+const OCR_BASE = ["spa","eng","rus"];
+function otroIdiomaLectura(d){
+  const t = (d && d.text) || "", i = idiomaDe(t);
+  if(i==="pt") return ["por","eng"];
+  if(i==="tr") return ["tur","eng"];
+  if(i==="zh") return ["chi_sim","eng"];
+  // Letras chinas leídas como si fueran latinas: salen pocas palabras y muy dudosas
+  const palabras = [];
+  for(const b of (d && d.blocks)||[]) for(const p of b.paragraphs||[]) for(const l of p.lines||[]) for(const w of l.words||[]) if(w && w.text && w.text.trim()) palabras.push(w);
+  // (o muchas «palabras» en mayúsculas sin sentido: «NEBR», «EERE»)
+  const buenas = palabras.filter(w => w.confidence >= 70).length;
+  const ps = t.match(/\p{L}{2,}/gu) || [], mayus = ps.filter(w => w===w.toUpperCase() && w!==w.toLowerCase()).length/Math.max(1, ps.length);
+  if(palabras.length >= 8 && (d.confidence||0) < 65 && (buenas < palabras.length*.35 || mayus > .45)) return ["chi_sim","eng"];
+  return null;
+}
 async function leerImagenes(imgs, avisar, porPagina=false){
   await cargarScript(TESSERACT);
   // Comprueba que los datos del lector están publicados junto a la app antes de arrancarlo
   const prueba = await fetch(OCR_DIR+"worker.min.js", {method:"HEAD"}).catch(()=>null);
   if(!prueba || !prueba.ok) throw new Error("no-arranca");
   let actual = 0;
-  // Si el lector no llega a arrancar (sin red, móvil muy antiguo) no se queda esperando para siempre
-  let plazo; const tarde = new Promise((_, mal)=>{ plazo = setTimeout(()=>mal(new Error("no-arranca")), 120000); });
-  const worker = await Promise.race([tarde, window.Tesseract.createWorker(["spa","eng","rus"], 1, {
-    workerPath: OCR_DIR+"worker.min.js", corePath: OCR_DIR, langPath: OCR_DIR, workerBlobURL: false,
-    logger: m => { if(m.status==="recognizing text") avisar("Leyendo"+(imgs.length>1?" la página "+(actual+1)+" de "+imgs.length:" la foto")+"…", (actual+m.progress)/imgs.length);
-                   else if(/load|initializ/.test(m.status||"")) avisar("Preparando la lectura (solo tarda la primera vez)…", null); },
-    errorHandler: ()=>{}
-  })]).finally(()=>clearTimeout(plazo));
-  try{
+  const crear = async langs => {
+    // Si el lector no llega a arrancar (sin red, móvil muy antiguo) no se queda esperando para siempre
+    let plazo; const tarde = new Promise((_, mal)=>{ plazo = setTimeout(()=>mal(new Error("no-arranca")), 120000); });
+    const w = await Promise.race([tarde, window.Tesseract.createWorker(langs, 1, {
+      workerPath: OCR_DIR+"worker.min.js", corePath: OCR_DIR, langPath: OCR_DIR, workerBlobURL: false,
+      logger: m => { if(m.status==="recognizing text") avisar("Leyendo"+(imgs.length>1?" la página "+(actual+1)+" de "+imgs.length:" la foto")+"…", (actual+m.progress)/imgs.length);
+                     else if(/load|initializ/.test(m.status||"")) avisar("Preparando la lectura (solo tarda la primera vez)…", null); },
+      errorHandler: ()=>{}
+    })]).finally(()=>clearTimeout(plazo));
     // Página en automático: así respeta las columnas (muchos patrones van a dos columnas) en vez de mezclar las líneas
-    try{ await worker.setParameters({tessedit_pageseg_mode: "3", preserve_interword_spaces: "1"}); }catch(e){}
+    try{ await w.setParameters({tessedit_pageseg_mode: "3", preserve_interword_spaces: "1"}); }catch(e){}
+    return w;
+  };
+  let worker = await crear(OCR_BASE);
+  try{
     const textos = [];
     for(; actual<imgs.length; actual++){
       const img = typeof imgs[actual]==="function" ? await imgs[actual]() : imgs[actual], ancho = img.width;
-      const d = (await worker.recognize(img, {}, {text:true, blocks:true})).data; soltarLienzo(img);
+      let d = (await worker.recognize(img, {}, {text:true, blocks:true})).data;
+      // La primera hoja dice en qué idioma está el patrón
+      const otro = actual===0 && otroIdiomaLectura(d);
+      if(otro){
+        avisar(otro[0]==="por" ? "Está en portugués: lo leo otra vez con sus letras…" : otro[0]==="tur" ? "Está en turco: lo leo otra vez con sus letras…" : "Parece chino: lo leo otra vez con letras chinas…", null);
+        // (de uno en uno: dos lectores a la vez no caben en la memoria de un móvil)
+        await worker.terminate(); worker = null;
+        worker = await crear(otro).catch(() => null);
+        const d2 = worker ? (await worker.recognize(img, {}, {text:true, blocks:true})).data : null;
+        // El chino solo se queda si de verdad salen letras chinas
+        if(d2 && (otro[0]!=="chi_sim" || (d2.text.match(RX_CJK)||[]).length >= 10)) d = d2;
+        else { if(worker) await worker.terminate(); worker = await crear(OCR_BASE); }
+      }
+      soltarLienzo(img);
       let t = null; try{ t = textoEnColumnas(d, ancho); }catch(e){} textos.push(t || d.text);
     }
     return porPagina ? textos.map(arreglarLectura) : arreglarLectura(textos.join("\n\n"));
-  } finally { worker.terminate(); }
+  } finally { if(worker) worker.terminate(); }
 }
 // Una página a dos columnas: el lector a veces junta la línea de la izquierda con la de la derecha. Con la
 // posición de cada palabra se busca el hueco vertical entre columnas y se lee primero una y luego la otra.
@@ -3527,7 +3581,36 @@ function textoEnColumnas(d, ancho){
 // Errores típicos al leer letras en un patrón: «(l2)» es «(12)» y «(3O)» es «(30)»
 // Con el ruso cargado, en un patrón en español a veces lee «тр» por «mp» o «о» cirílica por «o»
 const PARECIDAS = {"а":"a","е":"e","о":"o","р":"p","с":"c","у":"y","х":"x","т":"m","м":"m","к":"k","і":"i","А":"A","Е":"E","О":"O","Р":"P","С":"C","Т":"T","М":"M","К":"K","Х":"X","Н":"H","В":"B"};
+// «R4-RS:», «RO:», «Rl:»: el lector confunde los números de las vueltas con letras (8 y S, 0 y O, 1 y l). Como las
+// vueltas van seguidas, se elige el número que toca (la anterior más uno; y una que acaba justo antes de la siguiente)
+const LETRA_NUMERO = {S:"58", s:"58", B:"8", O:"09", o:"0", D:"0", Q:"0", I:"1", l:"1", "|":"1", i:"1", Z:"2", z:"2", g:"9", q:"9", G:"6", b:"6"};
+const RX_CAB_R = /^(\s*R\s*)([0-9SsBOoDQIl|iZzgqGb]{1,3})(?:(\s*[-–~]\s*R?\s*)([0-9SsBOoDQIl|iZzgqGb]{1,3}))?(?=\s*[:：.)])/;
+function arreglarNumerosVuelta(t){
+  const opciones = tok => tok.split("").reduce((acc, c) => acc.flatMap(a => (/\d/.test(c) ? c : LETRA_NUMERO[c] || "").split("").map(d => a+d)), [""]).filter(Boolean).map(Number);
+  const lineas = t.split("\n"), cabs = [];
+  lineas.forEach((l, i) => { const m = l.match(RX_CAB_R); if(m && (/\d/.test(m[2]) || m[4] || /^[SsBOoDQIl|iZzgqGb]$/.test(m[2]))) cabs.push({i, m, a: opciones(m[2]), b: m[4] ? opciones(m[4]) : null}); });
+  if(cabs.filter(c => /^\d+$/.test(c.m[2])).length < 2) return t; // no es un patrón con «R1:», «R2:»
+  let antes = 0;
+  cabs.forEach((c, k) => {
+    const elegir = (ops, quiero) => ops.includes(quiero) ? quiero : ops.filter(n => n > antes).sort((x, y) => x-y)[0] ?? ops[0];
+    const a = c.a.length ? (c.a.includes(1) && antes > 1 && !c.a.includes(antes+1) ? 1 : elegir(c.a, antes+1)) : null;
+    if(a==null) return;
+    let b = null;
+    if(c.b){
+      // El final de un tramo es el número justo antes de la vuelta siguiente («R4-RS:» y luego «RO:» es R4-R8 y R9)
+      const sig = cabs[k+1] ? cabs[k+1].a : [], mayores = c.b.filter(n => n > a).sort((x, y) => x-y);
+      b = mayores.find(n => sig.includes(n+1)) ?? mayores[0] ?? c.b[0];
+    }
+    antes = b ?? a;
+    const m = c.m;
+    lineas[c.i] = m[1]+a+(c.b ? m[3]+(/R/.test(m[3]) ? "" : "")+b : "")+lineas[c.i].slice(m[0].length);
+  });
+  return lineas.join("\n");
+}
 function arreglarLectura(t){
+  t = arreglarNumerosVuelta(t);
+  // El lector pone un espacio entre cada letra china
+  if((t.match(RX_CJK)||[]).length >= 10) t = t.replace(/([\u3400-\u9fff\uff08-\uff1f])[ \t]+(?=[\u3400-\u9fff\uff08-\uff1f])/g, "$1");
   const cir = (t.match(/[а-яё]/gi)||[]).length, lat = (t.match(/[a-záéíóúñ]/gi)||[]).length;
   if(cir && cir < (cir+lat)*.05) t = t.replace(/[\u0400-\u04FF]+/g, w => [...w].every(c=>PARECIDAS[c]) ? [...w].map(c=>PARECIDAS[c]).join("") : w);
   return t.replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"')
@@ -3535,6 +3618,7 @@ function arreglarLectura(t){
     .replace(/(^|[\s,(*])[lI|]\s?(?=(au|aum|mp|pb|pa|dis|dism|cad|var|mv|mpa)\b)/g, (m, a) => a+"1 ")
     .replace(/\(\s*([\dlIOo|]{1,4})\s*\)/g, (m, n) => /\d/.test(n) ? "("+n.replace(/[lI|]/g,"1").replace(/[Oo]/g,"0")+")" : m)
     .replace(/\b(vueltas?|rnds?|rounds?|rows?|filas?|hileras?)\s+([lI|])(?=\s*[:.)\-–])/gi, "$1 1")
+    .replace(/(^|\n)(\s*R)[lI|](?=\s*[:.)\-–])/g, "$1$21")
     .replace(/[ \t]+\n/g, "\n");
 }
 const AYUDA_FOTO = "Otra forma: en muchos móviles puedes abrir la foto, mantener el dedo sobre el texto, copiarlo y pegarlo aquí.";
@@ -3574,7 +3658,7 @@ VISTAS.importar = V => {
     const guardar = (yTejer)=>{
       const titulo = nombre.value.trim();
       if(!titulo){ err.textContent="Ponle un nombre al patrón."; err.hidden=false; nombre.focus(); return; }
-      const p = {id:"m-"+Date.now(), titulo, descripcion:"Importado"+(r.ingles?" del inglés":r.ruso?" del ruso":"")+".", nivel:"", hilo:hilo.value.trim(), ganchillo:gan.value.trim(), notas:r.notas, pasos:r.pasos, color:r.colorLana ? r.colorLana.hex : COLORES[state.patrones.length % COLORES.length], original:area.value};
+      const p = {id:"m-"+Date.now(), titulo, descripcion:"Importado"+(r.ingles?" del inglés":r.ruso?" del ruso":r.otroIdioma?" del "+NOMBRE_IDIOMA[r.otroIdioma]:"")+".", nivel:"", hilo:hilo.value.trim(), ganchillo:gan.value.trim(), notas:r.notas, pasos:r.pasos, color:r.colorLana ? r.colorLana.hex : COLORES[state.patrones.length % COLORES.length], original:area.value};
       state.patrones.unshift(p); save(); importarBorrador=""; importarUK=null; importarSoloVueltas=true; importarArreglos={}; importarArchivo="";
       toast("Patrón guardado");
       if(yTejer) tejer(p.id); else go({name:"patron", id:p.id});
@@ -3584,7 +3668,7 @@ VISTAS.importar = V => {
         h("p",{},"Está en inglés y lo he pasado a español. Elige de dónde es el patrón:"),
         h("div",{class:"seg", role:"group"}, [["us","EE. UU."],["uk","Reino Unido"]].map(([k,l])=>h("button",{class:(r.uk?"uk":"us")===k?"sel":"", "aria-pressed":String((r.uk?"uk":"us")===k), onclick:()=>{ importarUK = k==="uk"; leer(); }}, l))),
         h("p",{class:"muted", style:"font-size:.88rem"},"Cambia el nombre de los puntos: en el Reino Unido «dc» es punto bajo y «tr» es punto alto.")) : null,
-      r.ruso ? h("div",{class:"note"},"Está en ruso y lo he pasado a español. Revisa que los puntos estén bien.") : null,
+      r.ruso || r.otroIdioma ? h("div",{class:"note"},"Está en "+(r.ruso ? "ruso" : NOMBRE_IDIOMA[r.otroIdioma])+" y lo he pasado a español. Revisa que los puntos estén bien."+(r.otroIdioma ? " Las notas y los materiales se quedan como estaban: para tenerlo todo en español usa «Traducir un patrón»." : "")) : null,
       r.latino ? h("div",{class:"note"},"Usa los nombres de Latinoamérica (mp, au, dis, var…). Los he pasado a los de aquí: pb, aum, dism, pa.") : null,
       hayVueltas ? h("label",{class:"checkline"}, h("input",{type:"checkbox", id:"im-solo", checked:importarSoloVueltas, onchange:e=>{ importarSoloVueltas=e.target.checked; leer(); }}),
         h("span",{}, "Solo las vueltas («Vuelta 1», «Vuelta 2»…)", r.apartadas.length ? h("small",{}, r.apartadas.length===1 ? "1 línea más va a las notas." : r.apartadas.length+" líneas más van a las notas.") : null)) : null,
@@ -3673,7 +3757,7 @@ VISTAS.importar = V => {
   const opcion = (cls, ic, titulo, sub, fn) => { const b = h("button",{class:"action "+cls, onclick:fn}, h("span",{class:"ic"}, icono(ic)), h("span",{}, titulo, h("br"), h("small",{}, sub))); botones.push(b); return b; };
   V.append(
     volver("Patrones", {name:"patrones"}),
-    h("div",{class:"page-title"}, h("h1",{},"Añadir un patrón"), h("p",{class:"muted"},"Tráelo de un PDF, de una foto o pegando el texto. Lo separo en pasos y te aviso de lo que no cuadra. Entiende español, inglés y ruso."),
+    h("div",{class:"page-title"}, h("h1",{},"Añadir un patrón"), h("p",{class:"muted"},"Tráelo de un PDF, de una foto o pegando el texto. Lo separo en pasos y te aviso de lo que no cuadra. Entiende español, inglés, ruso, portugués, turco y chino."),
       h("p",{}, h("button",{class:"ghost", onclick:()=>go({name:"traducir"})}, icono("traducir",20), "¿Lo quieres traducido en un PDF? Traducir un patrón"))),
     h("div",{class:"section"},
       estado,
@@ -3698,23 +3782,43 @@ VISTAS.importar = V => {
 // por marcas («QXA») que el traductor deja tal cual y que luego se vuelven a poner en español.
 // Sin «lookbehind» (iPhone antiguos): el borde izquierdo de las palabras rusas se captura y se devuelve.
 const TR_L = "(^|[^\\p{L}\\p{N}])", TR_R = "(?![\\p{L}\\p{N}])";
-const trRx = (patron, flags="giu") => new RegExp(TR_L+"(?:"+patron+")"+TR_R, flags);
+const trRx = (patron, flags="giu") => /[\u3400-\u9fff]/.test(patron) ? new RegExp("()(?:"+patron+")", flags) : new RegExp(TR_L+"(?:"+patron+")"+TR_R, flags);
 
-// ¿En qué idioma está? Por las letras rusas y por las palabras más corrientes de cada idioma
+// ¿En qué idioma está? Por las letras (rusas, chinas, turcas) y por las palabras más corrientes de cada idioma
+const RX_CJK = /[\u3400-\u9fff\uf900-\ufaff]/g;
+const tieneCJK = t => /[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff01-\uff5e]/.test(t||"");
 function idiomaDe(texto){
   const t = String(texto||"");
-  const cir = (t.match(/[а-яё]/giu)||[]).length, lat = (t.match(/[a-zñáéíóú]/giu)||[]).length;
+  const cjk = (t.match(RX_CJK)||[]).length;
+  const cir = (t.match(/[а-яё]/giu)||[]).length, lat = (t.match(/[a-zñáéíóúãõçâêôàüöğşı]/giu)||[]).length;
+  if(cjk >= 10 && cjk >= (cjk+lat)*.15) return "zh";
   if(cir >= 20 && cir >= (cir+lat)*.3) return "ru";
   const cuenta = rx => (t.match(rx)||[]).length;
   const en = cuenta(/\b(the|and|with|each|of|in|your|this|you|stitch(es)?|sts?|sc|hdc|rnds?|rounds?|rows?|yarn|hook|repeat|around|chain|into|from|until|work|make)\b/gi);
-  const es = cuenta(/\b(el|la|los|las|y|con|cada|de|del|en|tu|este|esta|puntos?|pb|mpa|vueltas?|filas?|lana|ganchillo|repite|alrededor|cadenetas?|hasta|teje|haz)\b/gi);
+  const es = cuenta(/\b(el|la|los|las|y|con|cada|de|del|en|tu|este|esta|puntos?|pb|mpa|vueltas?|filas?|lana|ganchillo|repite|alrededor|cadenetas?|hasta|teje|haz)\b/gi) + cuenta(/ñ/gi);
+  // Portugués (de Brasil o de Portugal): «não», «com», «em», «carreira», «correntinha»… y las letras ã, õ, ç
+  const pt = cuenta(/(?:^|[^\p{L}])(não|nao|com|em|até|do|dos|das|nas|nos|uma|um|ponto|pontos|carreiras?|carr|correntinhas?|correntes?|aumentos?|diminui[çc][ãa]o|diminui[çc][õo]es|linha|agulha|enchimento|olhos|você|voce|também|então|faça|faca|repita|anel|fio|cor|pbx|dim|meio|cabe[çc]a|corpo|orelhas|bra[çc]os|pernas|costure|encha|arremate|feche)(?![\p{L}])/giu) + cuenta(/[ãõç]/gi);
+  // Turco: «ve», «bir», «tur», «zincir», «ilmek», «sık iğne»… y las letras ğ, ş, ı
+  const tr = cuenta(/(?:^|[^\p{L}])(ve|bir|ile|için|icin|tur|turda|turlar\p{L}*|sıra|zincir\p{L}*|halka\p{L}*|ilmek\p{L}*|ilme[ğg]\p{L}*|iğne\p{L}*|igne\p{L}*|içine|icine|kadar|sonra|art+[ıi]rma\p{L}*|azaltma\p{L}*|sık|elyaf|göz\p{L}*|renk\p{L}*|tekrar\p{L}*|yarım|çubuk\p{L}*|kez|defa|doldur\p{L}*|tığ\p{L}*|kafa\p{L}*|kulak\p{L}*)(?![\p{L}])/giu) + cuenta(/[ğşıİ]/g);
+  if(tr >= 8 && tr > Math.max(en, es, pt)) return "tr";
+  if(pt >= 8 && pt > es*1.2 && pt > en) return "pt";
   if(en >= 8 && en > es*1.3) return "en";
   if(es >= 8 && es >= en) return "es";
   return en > es ? "en" : es > en ? "es" : "otro";
 }
 // Patrón inglés con términos del Reino Unido («dc» es punto bajo, «tr» es punto alto)
 function esTerminosUK(texto){ return /\b(htr|dtr|uk\s+terms?|british\s+terms?|uk\s+crochet)\b/i.test(texto) || (/\bdc\b/i.test(texto) && /\btr\b/i.test(texto) && !/\bsc\b/i.test(texto)); }
-const NOMBRE_IDIOMA = {ru:"ruso", en:"inglés", es:"español", otro:"otro idioma"};
+const NOMBRE_IDIOMA = {ru:"ruso", en:"inglés", es:"español", pt:"portugués", tr:"turco", zh:"chino", otro:"otro idioma"};
+// Idiomas que se traducen pasando por el inglés (el traductor de Mozilla va de cada uno al inglés y del inglés al español)
+const POR_INGLES = ["ru", "pt", "tr", "zh"];
+// Chino: los signos de ancho completo («：», «（», «，») pasan a los normales y los números se separan de las letras
+function normalizarChino(t){
+  return String(t||"").replace(/[\uff01-\uff5e]/g, c => String.fromCharCode(c.charCodeAt(0)-0xfee0)).replace(/\u3000/g, " ")
+    .replace(/[、]/g, ",").replace(/[。]/g, ". ").replace(/[～〜]/g, "~").replace(/[【〔]/g, "(").replace(/[】〕]/g, ")")
+    .replace(/(\d)\s*~\s*(R?\d)/g, "$1-$2").replace(/,(?=[^\s\d])|,(?=\d+\s*[A-Za-z\u3400-\u9fff])/g, ", ")
+    .replace(/(\d)(?=[A-Za-z\u3400-\u9fff])/g, "$1 ").replace(/([\u3400-\u9fff])(?=[\dA-Za-z(])/g, "$1 ").replace(/([A-Za-z)])(?=[\u3400-\u9fff])/g, "$1 ")
+    .replace(/(\d|[A-Za-z])\(/g, "$1 (").replace(/[ \t]{2,}/g, " ");
+}
 
 // ---------- Glosario ----------
 // [patrón, salida, clase]. Clase "m": se cambia por una marca que vuelve como «salida» (en español).
@@ -3925,6 +4029,155 @@ const GLOSARIO_EN = uk => [
   ["lps", "loops", "en"], ["lp", "loop", "en"], ["sp", "space", "en"], ["ea", "each", "en"], ["prev", "previous", "en"], ["pm", "place marker", "en"], ["blo", "back loop", "en"]
 ];
 
+// Portugués de Brasil y de Portugal. Los nombres cortos casi coinciden con los de aquí: pb, pa, mpa, aum; «pbx» es el
+// punto deslizado, «corr» la cadeneta, «dim» la disminución y la «carreira» es la vuelta
+const PT_N = TN+"\\s*"; // número delante del punto
+const GLOSARIO_PT = [
+  ["\\(\\s*(?:fa[çc]a|fazer|fa[çc]a-se|tecer)\\s+"+TN+"(?:\\s*(?:vezes|pe[çc]as|unidades))?\\s*\\)", "(hacer $1)", "m"], ["\\(\\s*"+TN+"\\s*(?:pe[çc]as|unidades)\\s*\\)", "(hacer $1)", "m"],
+  ["(?:materiais|material)(?:\\s+necess[áa]rios?)?|voc[êe]\\s+vai\\s+precisar|voc[êe]\\s+precisar[áa]", "Materiales", "m"],
+  ["abrevia[çc][õo]es|abreviaturas|legenda", "Abreviaturas", "m"], ["montagem", "Montaje", "m"], ["acabamento", "Acabado", "m"], ["observa[çc][õo]es|notas", "Notas", "m"],
+  ["(?:receita|padr[ãa]o|gr[áa]fico)\\s+(?:de\\s+)?(?:amigurumi\\s+)?(?:em\\s+|de\\s+)?croch[êe]", "patrón de ganchillo", "m"],
+  ["(?:trabalh(?:ad[ao]|e|ar|amos)|tec(?:id[ao]|e|er)|fa[çc]a)\\s+em\\s+espiral|em\\s+espiral", "en espiral", "m"],
+  ["sem\\s+(?:fechar|unir)\\s+(?:as\\s+)?(?:carreiras|voltas)", "sin cerrar las vueltas", "m"],
+  ["entre\\s+(?:a|as)\\s+(?:carreiras?|voltas?)\\s+(\\d+)\\s+e\\s+(?:a\\s+)?(?:(?:carreira|volta)\\s+)?(\\d+)", "entre las vueltas $1 y $2", "m"],
+  ["(?:com|a)\\s+(\\d+)\\s+pontos\\s+de\\s+(?:dist[âa]ncia|intervalo|separa[çc][ãa]o)(?:\\s+entre\\s+(?:eles|si))?", "con $1 puntos de separación", "m"],
+  ["n[ãa]o\\s+(?:encha|encher|enchemos|preencha)", "no rellenes", "m"], ["dobr(?:e|ar|a)\\s+(?:ao|pela)\\s+(?:meio|metade)", "dobla por la mitad", "m"],
+  ["(?:monte|montar|fa[çc]a|fazer)\\s+(?:uma\\s+)?(?:corrente|correntinha|cadeia)\\s+(?:de\\s+|com\\s+)?"+TN+"\\s*(?:corr|correntinhas|correntes|pontos(?:\\s+de\\s+corrente)?|pc|ch)?", "monta una cadeneta de $1 cad", "m"],
+  ["(?:come[çc]ando\\s+)?(?:a\\s+partir\\s+)?(?:n[ao]|d[ao])\\s+"+TN+"[ªºa°]?\\s+(?:corr|correntinha|corrente|ponto)\\s+(?:a\\s+partir\\s+)?d[ao]\\s+(?:agulha|gancho)", "en la $1ª cad desde el ganchillo", "m"],
+  ["(?:fa[çc]a|fazer)\\s+(?:um\\s+)?anel\\s+m[áa]gico", "haz un anillo mágico", "m"],
+  ["(?:no|em\\s+um|num|dentro\\s+do|em)\\s+(?:anel\\s+m[áa]gico|am)", "en el anillo mágico", "m"],
+  ["am", "AM", "m"], ["anel\\s+m[áa]gico", "anillo mágico", "m"],
+  ["(?:fech(?:e|ar|a)|un(?:a|ir|e))(?:\\s+a\\s+(?:carreira|volta))?\\s+com\\s+(?:um\\s+)?(?:pbx|ponto\\s+baix[íi]ssimo)(?:\\s+no\\s+primeiro\\s+ponto)?", "cierra con pd", "m"],
+  ["em\\s+(?:cada|todos\\s+os)\\s+pontos?(?:\\s+da\\s+(?:carreira|volta)(?:\\s+anterior)?)?|em\\s+cada\\s+pb|em\\s+todos\\s+os\\s+pb", "en cada punto", "m"],
+  ["(?:no|em\\s+um|num)\\s+mesmo\\s+ponto", "en el mismo punto", "m"], ["(?:no|em\\s+o)\\s+pr[óo]ximo\\s+ponto|no\\s+ponto\\s+seguinte", "en el siguiente punto", "m"],
+  ["(?:(?:somente|s[óo]|apenas)\\s+)?(?:na|pela|nas|pelas|em)\\s+(?:al[çc]as?|argolas?|la[çc]adas?|al[çc]a)\\s+(?:de\\s+tr[áa]s|traseiras?|posterior(?:es)?)|(?:al[çc]a|argola)\\s+de\\s+tr[áa]s|blo", "por la hebra de atrás", "m"],
+  ["(?:(?:somente|s[óo]|apenas)\\s+)?(?:na|pela|nas|pelas|em)\\s+(?:al[çc]as?|argolas?|la[çc]adas?)\\s+(?:da\\s+frente|dianteiras?|frontal|frontais)|(?:al[çc]a|argola)\\s+da\\s+frente|flo", "por la hebra de delante", "m"],
+  ["(?:em|nas|pelas)\\s+(?:ambas\\s+as|as\\s+duas)\\s+(?:al[çc]as|argolas)", "por las dos hebras", "m"],
+  ["sem\\s+aumentos?(?:\\s+(?:e|nem)\\s+(?:sem\\s+)?diminui[çc][õo]es)?|sem\\s+aum(?:\\s+e\\s+dim)?", "sin aumentos", "m"],
+  ["(?:arremate|arrematar|arremata)(?:\\s+e\\s+(?:corte|cortar)(?:\\s+o\\s+fio)?)?", "remata", "m"], ["(?:corte|cortar|corta)\\s+o\\s+fio", "corta el hilo", "m"],
+  ["(?:deix(?:e|ar|ando))\\s+(?:um\\s+)?(?:fio|rabo|cauda|pedaço\\s+de\\s+fio)\\s+(?:longo|comprido|grande)(?:\\s+para\\s+(?:costurar|costura|a\\s+costura))?", "deja una hebra larga para coser", "m"],
+  ["(?:feche|fechar|fecha)\\s+o\\s+(?:buraco|orif[íi]cio|furo)|(?:feche|fechar)\\s+(?:os\\s+)?pontos\\s+restantes", "cierra el agujero", "m"],
+  ["olhos\\s+de\\s+seguran[çc]a|olhos\\s+com\\s+trava", "ojos de seguridad", "m"], ["olho\\s+de\\s+seguran[çc]a|olho\\s+com\\s+trava", "ojo de seguridad", "m"],
+  ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+de\\s+seguran[çc]a", "de seguridad de $1", "m"],
+  ["(?:fibra\\s+siliconada|fibra)\\s+para\\s+enchimento", "relleno de fibra", "m"], ["fibra\\s+siliconada|fibra\\s+de\\s+silicone|enchimento\\s+de\\s+fibra|enchimento", "relleno", "m"],
+  ["bom\\s+croch[êe]", "¡Feliz ganchillo", "m"], ["linhas", "yarns", "en"], ["linha|fio", "yarn", "en"],
+  ["agulha\\s+(?:de\\s+)?(?:tape[çc]aria|costura|l[ãa]|bordar|sem\\s+ponta|ponta\\s+romba)", "aguja lanera", "m"],
+  ["agulha\\s+(?:de\\s+)?croch[êe]\\s+(?:de\\s+)?(\\d+(?:[.,]\\d+)?\\s*mm)|agulha\\s+(\\d+(?:[.,]\\d+)?\\s*mm)", (m, a, b) => "ganchillo de "+(a||b), "m"],
+  ["agulha\\s+de\\s+croch[êe]|agulha", "ganchillo", "m"],
+  ["marcador(?:es)?(?:\\s+de\\s+pontos?)?", "marcador", "m"],
+  ["croch[êe]", "ganchillo", "m"],
+  // Los puntos: con nombre largo, en plural o en singular; y las abreviaturas
+  [PT_N+"(?:pontos?\\s+baix[íi]ssimos?)", "$1 pd", "m"], ["pontos\\s+baix[íi]ssimos", "puntos deslizados", "m"], ["ponto\\s+baix[íi]ssimo|ponto\\s+deslizado", "punto deslizado", "m"],
+  [PT_N+"(?:meios?\\s+pontos?\\s+altos?)", "$1 mpa", "m"], ["meios\\s+pontos\\s+altos", "medios puntos altos", "m"], ["meio\\s+ponto\\s+alto", "medio punto alto", "m"],
+  [PT_N+"(?:pontos?\\s+altos?\\s+duplos?)", "$1 pad", "m"], ["pontos\\s+altos\\s+duplos", "puntos altos dobles", "m"], ["ponto\\s+alto\\s+duplo", "punto alto doble", "m"],
+  [PT_N+"(?:pontos?\\s+altos?)", "$1 pa", "m"], ["pontos\\s+altos", "puntos altos", "m"], ["ponto\\s+alto", "punto alto", "m"],
+  [PT_N+"(?:pontos?\\s+baixos?)", "$1 pb", "m"], ["pontos\\s+baixos", "puntos bajos", "m"], ["ponto\\s+baixo", "punto bajo", "m"],
+  [PT_N+"(?:correntinhas?|correntes?|pontos?\\s+(?:de\\s+)?(?:corrente|cadeia))", "$1 cad", "m"], ["correntinhas|correntes", "cadenetas", "m"], ["correntinha|corrente", "cadeneta", "m"],
+  [PT_N+"(?:aumentos?)", "$1 aum", "m"], ["aumentos", "aumentos", "m"], ["aumento", "aumento", "m"],
+  [PT_N+"(?:diminui[çc][õo]es|diminui[çc][ãa]o)(?:\\s+invis[íi]veis|\\s+invis[íi]vel)?", "$1 dism", "m"], ["diminui[çc][õo]es(?:\\s+invis[íi]veis)?", "disminuciones", "m"], ["diminui[çc][ãa]o(?:\\s+invis[íi]vel)?", "disminución", "m"],
+  ["pbx|pd|pt\\.?\\s*bx", "pd", "m"], ["mpa|mpt", "mpa", "m"], ["pad", "pad", "m"], ["pa", "pa", "m"], ["pb", "pb", "m"], ["corr\\.?|ch|pc", "cad", "m"],
+  ["aum", "aum", "m"], ["dim(?:\\s+invis[íi]vel)?|dism|inv", "dism", "m"],
+  ["carreiras?\\s+anterior(?:es)?|volta\\s+anterior", "vuelta anterior", "m"], ["em\\s+volta|ao\\s+redor", "alrededor", "m"],
+  ["carreiras|voltas", "vueltas", "m"], ["carreira|carr\\.?", "vuelta", "m"],
+  ["pontos|pts\\.?", "puntos", "m"], ["ponto|pt\\.", "punto", "m"],
+  ["(\\d+)\\s+vezes", "$1 veces", "m"], ["repita|repetir|repete", "repite", "m"]
+];
+// Turco. Los turcos escriben «sı» o «sık iğne» (punto bajo), «zn» (cadeneta), «art» (aumento), «az» (disminución), «SH»
+// (anillo mágico) y la vuelta es «tur» o «sıra». Muchos usan además las abreviaturas inglesas (sc, inc, dec) o las
+// chinas (X, V, A): «xv» dice si el patrón las usa.
+const TR_SUF = "(?:['’]?\\p{L}*)";
+// En turco el sitio va delante del punto («SH içine 6 sı», «her ilmeğe 1 sı»); en español, detrás
+const TR_PUNTOS = [["sık\\s+iğne"+TR_SUF+"|sı|sc|X", "pb"], ["yarım\\s+çubuk"+TR_SUF+"|yç|hdc", "mpa"], ["(?:tek\\s+)?çubuk"+TR_SUF+"|ç|dc", "pa"], ["art+[ıi]rma"+TR_SUF+"|art|inc|V", "aum"], ["azaltma"+TR_SUF+"|az|dec|A", "dism"], ["zincir"+TR_SUF+"|zn|ch", "cad"]];
+const TR_SITIOS = [["sihirli\\s+halka"+TR_SUF+"\\s+(?:içine|icine|içerisine)|sh"+TR_SUF+"\\s+(?:içine|icine|içerisine)|sihirli\\s+halkaya|sh['’](?:y?[ae])", "en el anillo mágico"],
+  ["(?:her|tüm|bütün)\\s+ilme(?:ğe|ge)", "en cada punto"], ["aynı\\s+ilme(?:ğe|ge)|ayni\\s+ilmege", "en el mismo punto"], ["(?:bir\\s+)?sonraki\\s+ilme(?:ğe|ge)", "en el siguiente punto"]];
+const COLORES_TR = {krem:"crema", beyaz:"blanco", siyah:"negro", pembe:"rosa", kırmızı:"rojo", mavi:"azul", sarı:"amarillo", yeşil:"verde", kahverengi:"marrón", gri:"gris", turuncu:"naranja", mor:"morado", bej:"beige", lacivert:"azul marino"};
+const colorTurco = c => { const k = c.toLocaleLowerCase("tr").replace(/\s+rengi$/, "").trim(); return COLORES_TR[k] || k; };
+const GLOSARIO_TR = (xv=false) => [
+  ...TR_SITIOS.flatMap(([sitio, es]) => TR_PUNTOS.map(([p, ab]) => ["(?:"+sitio+")\\s*"+TN+"\\s*(?:"+(xv ? p : p.replace(/\|[XVA]$/, ""))+")", "$1 "+ab+" "+es, "m"])),
+  ["(\\d+)\\.?\\s*(?:ve|ile|-)\\s*(\\d+)\\.?\\s*(?:turlar|tur|sıralar|sıra)(?:ın)?\\s*(?:arasına|arasında|arası)", "entre las vueltas $1 y $2", "m"],
+  ["\\(\\s*"+TN+"\\s*(?:adet|tane|parça)(?:\\s+(?:yap|ör)\\p{L}*)?\\s*\\)", "(hacer $1)", "m"],
+  ["(?:gerekli\\s+)?malzemeler|ihtiyacınız\\s+olanlar", "Materiales", "m"], ["kısaltmalar|kisaltmalar|açıklamalar", "Abreviaturas", "m"],
+  ["birleştirme|birlestirme|montaj", "Montaje", "m"], ["notlar", "Notas", "m"],
+  ["spiral\\s+(?:şeklinde|olarak|halinde)", "en espiral", "m"], ["(?:turlar|sıralar)\\s+(?:kapatılmaz|birleştirilmez|kapatmadan)", "sin cerrar las vueltas", "m"],
+  ["her\\s+tur(?:un|un\\s+de)?\\s+ilk\\s+ilme[kğg]\\p{L}*\\s+(?:bir\\s+)?işaretle(?:yici|yiciyle|yici\\s+ile|ç|çle|ç\\s+ile)\\s+işaretle\\p{L}*", "marca el primer punto de cada vuelta con un marcador", "m"],
+  ["her\\s+tur(?:un|un\\s+de)?\\s+ilk\\s+ilme[kğg]\\p{L}*", "the first stitch of each round", "en"],
+  ["aralarında\\s+(\\d+)\\s+ilmek\\s+(?:olacak\\s+şekilde|mesafe(?:\\s+ile)?|boşluk(?:\\s+bırakarak)?)", "con $1 puntos de separación", "m"],
+  ["(kulakları|kolları|bacakları|ayakları|kuyruğu|kanatları|boynuzları)\\s+doldurma(?:yın|yınız|yin|dan)", (m, p) => "no rellenes "+({kulakları:"las orejas", kolları:"los brazos", bacakları:"las piernas", ayakları:"los pies", kuyruğu:"la cola", kanatları:"las alas", boynuzları:"los cuernos"})[p.toLocaleLowerCase("tr")], "m"],
+  ["doldurma(?:yın|yınız|yin|dan)", "no rellenes", "m"],
+  ["(?:kafayı|başı|gövdeyi|vücudu)\\s+(?:elyaf|silikon\\s+elyaf)(?:\\s+ile|la|le)?\\s+sıkıca\\s+doldur\\p{L}*", "rellena bien la cabeza", "m"], ["sıkıca\\s+doldur\\p{L}*", "rellena bien firme", "m"],
+  ["burn(?:u|unu)\\s+([\\p{L} ]{2,25}?)\\s+(?:ip(?:le|\\s+ile)|iplikle)\\s+işle\\p{L}*", (m, c) => "borda la nariz con hilo "+colorTurco(c), "m"],
+  ...[["krem","crema"],["beyaz","blanco"],["siyah","negro"],["pembe","rosa"],["kırmızı","rojo"],["mavi","azul"],["sarı","amarillo"],["yeşil","verde"],["kahverengi","marrón"],["gri","gris"],["turuncu","naranja"],["mor","morado"],["bej","beige"],["lacivert","azul marino"]]
+    .map(([tr, es]) => ["(?:"+tr+")(?:\\s+rengi)?", es, "m"]), ["doldur\\p{L}*", "stuff", "en"], ["burn(?:u|un)|burun", "nose", "en"], ["işle(?:yin|yiniz|yerek)", "embroider", "en"],
+  ["sihirli\\s+halka"+TR_SUF+"\\s+(?:içine|icine|içerisine)|sh"+TR_SUF+"\\s+(?:içine|icine|içerisine)|sihirli\\s+halkaya|sh['’](?:y?[ae])", "en el anillo mágico", "m"],
+  ["sihirli\\s+halka"+TR_SUF+"|sh|mr", "anillo mágico", "m"],
+  ["(?:her|tüm|bütün)\\s+ilme(?:ğe|ge|kte|kten|ğin)|her\\s+birine", "en cada punto", "m"],
+  ["aynı\\s+ilme(?:ğe|ge|kte)|ayni\\s+ilmege", "en el mismo punto", "m"], ["(?:bir\\s+)?sonraki\\s+ilme(?:ğe|ge)", "en el siguiente punto", "m"],
+  ["(?:sadece\\s+)?arka\\s+(?:ilmek|halka|iplik|yarım\\s+ilmek)"+TR_SUF+"|blo", "por la hebra de atrás", "m"],
+  ["(?:sadece\\s+)?ön\\s+(?:ilmek|halka|iplik|yarım\\s+ilmek)"+TR_SUF+"|flo", "por la hebra de delante", "m"],
+  ["art+[ıi]rma\\s+(?:ve|veya)\\s+azaltma\\s+(?:yapmadan|olmadan)|art+[ıi]rma\\s+yapmadan|artış\\s+yapmadan", "sin aumentos", "m"],
+  ["(?:kaydırma|terlik\\s+iğne"+TR_SUF+"|zincir)\\s+ile\\s+kapat\\p{L}*", "cierra con pd", "m"],
+  ["(?:ipi|ipinizi)\\s+kes\\p{L}*|ip\\s+kes\\p{L}*", "corta el hilo", "m"],
+  ["(?:dikmek|dikiş)\\s+için\\s+(?:uzun\\s+)?(?:bir\\s+)?(?:ip|kuyruk)\\s+bırak\\p{L}*", "deja una hebra larga para coser", "m"],
+  ["(?:kalan\\s+)?ilmekleri\\s+(?:toplayarak|toplayıp|büzerek)\\s+kapat\\p{L}*|deliği\\s+kapat\\p{L}*", "cierra el agujero", "m"],
+  ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+(?:güvenlik|emniyetli|plastik)\\s+göz"+TR_SUF, "ojos de seguridad de $1", "m"],
+  ["(?:güvenlik|emniyetli)\\s+göz(?:leri|lerini|ü|ünü)|(?:güvenlik|emniyetli)\\s+göz", "ojos de seguridad", "m"],
+  ["(?:silikon\\s+)?elyaf"+TR_SUF+"|dolgu\\s+malzemesi", "relleno", "m"],
+  ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+tığ"+TR_SUF+"|tığ\\s+(?:no\\s*)?(\\d+(?:[.,]\\d+)?\\s*mm)", (m, a, b) => "ganchillo de "+(a||b), "m"], ["tığ"+TR_SUF, "ganchillo", "m"],
+  ["(?:yün|dikiş|kanaviçe)\\s+iğne(?:si|sini)?", "aguja lanera", "m"], ["işaretleyici"+TR_SUF+"|işaretçi"+TR_SUF+"|markör"+TR_SUF, "marcador", "m"],
+  // Los puntos (con número delante van en abreviatura: «6 sı» → «6 pb»)
+  [TN+"\\s*(?:sık\\s+iğne"+TR_SUF+"|sik\\s+igne"+TR_SUF+"|sı|sk|sc)", "$1 pb", "m"], ["sık\\s+iğne(?:ler|leri)\\p{L}*", "puntos bajos", "m"], ["sık\\s+iğne"+TR_SUF+"|sik\\s+igne"+TR_SUF, "punto bajo", "m"],
+  [TN+"\\s*(?:yarım\\s+çubuk"+TR_SUF+"|yç|y\\.ç\\.|hdc)", "$1 mpa", "m"], ["yarım\\s+çubuk"+TR_SUF, "medio punto alto", "m"],
+  [TN+"\\s*(?:çift\\s+çubuk"+TR_SUF+"|çç|tr)", "$1 pad", "m"], ["çift\\s+çubuk"+TR_SUF, "punto alto doble", "m"],
+  [TN+"\\s*(?:(?:tek\\s+)?çubuk"+TR_SUF+"|ç|tç|çb|dc)", "$1 pa", "m"], ["(?:tek\\s+)?çubuk"+TR_SUF, "punto alto", "m"],
+  [TN+"\\s*(?:zincir"+TR_SUF+"|zn|zin|ch)", "$1 cad", "m"], ["zincir(?:ler|leri)\\p{L}*", "cadenetas", "m"], ["zincir"+TR_SUF, "cadeneta", "m"],
+  [TN+"\\s*(?:kaydırma(?:\\s+ilme(?:k|ği)|\\s+iğne(?:si)?)?|terlik\\s+iğne"+TR_SUF+"|sl\\s*st|ks)", "$1 pd", "m"], ["kaydırma(?:\\s+ilme(?:k|ği)|\\s+iğne(?:si)?)?|terlik\\s+iğne"+TR_SUF, "punto deslizado", "m"],
+  [TN+"\\s*(?:art+[ıi]rma"+TR_SUF+"|art|inc)", "$1 aum", "m"], ["art+[ıi]rmalar\\p{L}*", "aumentos", "m"], ["art+[ıi]rma"+TR_SUF+"|artış", "aumento", "m"],
+  [TN+"\\s*(?:azaltma"+TR_SUF+"|az|dec)", "$1 dism", "m"], ["azaltmalar\\p{L}*", "disminuciones", "m"], ["azaltma"+TR_SUF, "disminución", "m"],
+  ...(xv ? [[TN+"\\s*X", "$1 pb", "m", "gu"], [TN+"\\s*V", "$1 aum", "m", "gu"], [TN+"\\s*A", "$1 dism", "m", "gu"], ["X", "pb", "m", "gu"], ["V", "aum", "m", "gu"]] : []),
+  ["sı|sc", "pb", "m"], ["yç|hdc", "mpa", "m"], ["art|inc", "aum", "m"], ["az(?=\\s*(?:[,):]|$))|dec", "dism", "m"], ["zn|ch", "cad", "m"],
+  ["(?:turlar|sıralar)(?:ı|da|dan|a|ın)?", "vueltas", "m"], ["(?:tur|sıra)(?:u|da|dan|a|un|ı|yı|ya)?", "vuelta", "m"],
+  [TN+"\\s*ilme[kğg]\\p{L}*", "$1 puntos", "m"], ["ilk\\s+ilme[kğg]\\p{L}*", "first stitch", "en"], ["ilmekler\\p{L}*", "puntos", "m"], ["ilme[kğg]\\p{L}*", "punto", "m"],
+  ["dik(?:in|iniz|ilir|elim)", "sew", "en"], ["ip(?:le|ler|i|e|ten)?(?=\\s|[.,;)]|$)", "yarn", "en"],
+  ["(\\d+)\\s*(?:kez|defa|kere)", "$1 veces", "m"], ["tekrarla\\p{L}*", "repite", "m"]
+];
+// Chino: X punto bajo, T medio alto, F punto alto, E alto doble, CH o 锁针 cadeneta, SL o 引拔 punto deslizado,
+// V aumento, A disminución; «环起» es empezar en un anillo mágico; «圈» es la vuelta y «针» el punto
+const GLOSARIO_ZH = [
+  ["[(]\\s*(?:钩|织|做)?\\s*"+TN+"\\s*(?:个|只|片|条|块)\\s*[)]", "(hacer $1)", "m"],
+  ["所需材料|工具和材料|材料和工具|材料", "Materiales", "m"], ["针法说明|针法符号|符号说明|针法|缩写", "Abreviaturas", "m"], ["组装|缝合组装|拼装", "Montaje", "m"], ["注意事项|注意", "Notas", "m"],
+  ["钩针图解|图解", "patrón de ganchillo", "m"],
+  ["(?:环形起针|环起|魔术环起?|圈起|绕线环起)\\s*"+TN+"\\s*(?:X|短针)", "$1 pb en el anillo mágico", "m", "gu"],
+  ["环形起针|魔术环|环起|绕线环", "anillo mágico", "m"], ["MR", "AM", "m", "gu"],
+  ["用?\\s*螺旋(?:的方式|方式|状)?\\s*(?:钩织?|织)?", "teje en espiral", "m"],
+  ["(?:两眼|两只眼睛|眼睛)\\s*之间\\s*(?:相隔|间隔|隔)\\s*(\\d+)\\s*针", "con $1 puntos de separación", "m"],
+  ["不加不减|不加减", "sin aumentos", "m"],
+  ["(?:在\\s*)?第\\s*(\\d+)\\s*圈\\s*(?:和|与|到|至)\\s*第?\\s*(\\d+)\\s*圈\\s*(?:之间|中间)?", "entre las vueltas $1 y $2", "m"], ["第\\s*(\\d+)\\s*圈", "la vuelta $1", "m"],
+  ["开始\\s*(?:塞入|塞|填充|填入)\\s*(?:PP\\s*)?棉(?:花)?", "empieza a rellenar", "m"], ["(?:要)?塞得?(?:结实|紧实|紧|饱满|实)(?:一些|一点|些)?", "rellena bien firme", "m"],
+  ["不(?:用|需要|要)\\s*(?:塞入|塞|填充)\\s*(?:PP\\s*)?(?:棉|棉花)?", "no se rellenan", "m"],
+  ["每\\s*(?:一)?\\s*针", "en cada punto", "m"], ["同一针(?:里|内|中)?", "en el mismo punto", "m"],
+  ["(?:只钩)?(?:后半针|内半针|后半)", "por la hebra de atrás", "m"], ["(?:只钩)?(?:前半针|外半针|前半)", "por la hebra de delante", "m"], ["BLO", "por la hebra de atrás", "m", "gu"], ["FLO", "por la hebra de delante", "m", "gu"],
+  ["隐形减针", "disminución invisible", "m"],
+  [TN+"\\s*(?:短针|X)", "$1 pb", "m", "gu"], [TN+"\\s*(?:中长针|T)", "$1 mpa", "m", "gu"], [TN+"\\s*(?:长长针|E)", "$1 pad", "m", "gu"], [TN+"\\s*(?:长针|F)", "$1 pa", "m", "gu"],
+  [TN+"\\s*(?:锁针|辫子针|CH|ch)", "$1 cad", "m", "gu"], [TN+"\\s*(?:引拔针|引拔|SL|sl)", "$1 pd", "m", "gu"],
+  [TN+"\\s*(?:加针|V)", "$1 aum", "m", "gu"], [TN+"\\s*(?:减针|A)", "$1 dism", "m", "gu"],
+  ["短针", "punto bajo", "m"], ["中长针", "medio punto alto", "m"], ["长长针", "punto alto doble", "m"], ["长针", "punto alto", "m"], ["锁针|辫子针", "cadeneta", "m"], ["引拔针|引拔", "punto deslizado", "m"],
+  ["加针", "aumento", "m"], ["减针", "disminución", "m"],
+  ["([A-F])\\s*色", "color $1", "m", "gu"],
+  ["X", "pb", "m", "gu"], ["V", "aum", "m", "gu"], ["A", "dism", "m", "gu"], ["T", "mpa", "m", "gu"], ["F", "pa", "m", "gu"], ["E", "pad", "m", "gu"], ["CH", "cad", "m", "gu"], ["SL", "pd", "m", "gu"],
+  ["(?:塞入|塞|填充|填入)\\s*(?:PP\\s*)?棉(?:花)?", "rellena", "m"], ["PP\\s*棉|棉花|填充物|填充棉", "relleno", "m", "gu"],
+  ["(?:留(?:一段)?(?:长)?线|留长线)(?:用来|用于)?(?:缝合|缝)", "deja una hebra larga para coser", "m"], ["(?:断线|剪线)(?:,|，)?\\s*留(?:一段)?(?:长)?线\\s*(?:收口|收针|束口)", "corta el hilo, deja una hebra y cierra el agujero", "m"], ["留(?:一段)?(?:长)?线\\s*(?:收口|收针|束口)", "deja una hebra y cierra el agujero", "m"],
+  ["(?:断线|剪线)(?:,|，)?\\s*留(?:一段)?(?:长)?线", "corta el hilo y deja una hebra larga", "m"],
+  ["断线|剪线", "corta el hilo", "m"], ["收口|收针|束口", "cierra el agujero", "m"],
+  ["安全眼(?:睛)?|安全眼珠", "ojos de seguridad", "m"], ["记号扣|记号圈", "marcador", "m"], ["缝针|毛线针|钝针", "aguja lanera", "m"],
+  ["(\\d+(?:[.,]\\d+)?)\\s*(?:毫米|mm)\\s*钩针", "ganchillo de $1 mm", "m"], ["钩针", "ganchillo", "m"],
+  ["(\\d+)\\s*次", "$1 veces", "m"], ["重复", "repite", "m"],
+  ["(\\d+)\\s*圈", (m, n) => n+(n==="1" ? " vuelta" : " vueltas"), "m"],
+  [TN+"\\s*针", "$1 stitches", "en"], ["第一针|第一个针", "first stitch", "en"], ["每(?:一)?圈", "each round", "en"], ["棉线", "cotton yarn", "en"], ["毛线|线", "yarn", "en"], ["针", "stitch", "en"]
+];
+// Las letras sueltas X, V, A como puntos (al estilo chino) en un patrón turco
+const usaXV = texto => (String(texto||"").match(/\d\s*[XV](?![A-Za-z])/g)||[]).length >= 3;
+const glosarioDe = (idioma, uk, xv) => idioma==="ru" ? GLOSARIO_RU : idioma==="pt" ? GLOSARIO_PT : idioma==="tr" ? GLOSARIO_TR(xv) : idioma==="zh" ? GLOSARIO_ZH : GLOSARIO_EN(uk);
+
 // Títulos de las piezas en ruso: con diccionario (el traductor a veces se inventa la palabra si va sola)
 const PIEZAS_ES = [["голов[аыу]|головк[аиу]","Cabeza"],["тел[оа]|тельц[еа]|туловищ[еа]","Cuerpo"],["уши|ушки|ушек","Orejas"],["ух[оа]|ушк[оа]","Oreja"],["руки|ручки|ручек","Brazos"],
   ["рук[аиу]|ручк[аиу]","Brazo"],["ноги|ножки|ножек","Piernas"],["ног[аиу]|ножк[аиу]","Pierna"],["лапы|лапки|лапок","Patas"],["лап[аиу]|лапк[аиу]","Pata"],["хвост|хвостик","Cola"],
@@ -3934,6 +4187,30 @@ const PIEZAS_ES = [["голов[аыу]|головк[аиу]","Cabeza"],["тел
   ["бант|бантик","Lazo"],["цвет(?:ок|очек)","Flor"],["сердц[ея]|сердечк[оа]","Corazón"],["подошв[аы]","Suela"],["стоп[аы]","Pie"],["волосы|прич[её]ск[аи]","Pelo"],["панцир[ья]","Caparazón"],
   ["плавники","Aletas"],["клюв|клювик","Pico"],["копыта|копытца","Pezuñas"],["ше[яи]","Cuello"],["туфельки|туфли|ботиночки|ботинки","Zapatos"],["пуговицы","Botones"],["основ[аы]","Base"],
   ["дно|донышко","Fondo"],["руч(?:ка|ки) (?:сумки|корзины)","Asa"],["мордочк[аи] (?:и|с) нос(?:ом|ик)","Hocico y nariz"]];
+// Y en portugués, turco y chino
+const PIEZAS_OTRAS = {
+  pt: [["cabe[çc]a","Cabeza"],["corpo","Cuerpo"],["orelhas","Orejas"],["orelha","Oreja"],["bra[çc]os","Brazos"],["bra[çc]o","Brazo"],["pernas","Piernas"],["perna","Pierna"],
+    ["patas","Patas"],["pata","Pata"],["p[ée]s","Pies"],["p[ée]","Pie"],["m[ãa]os","Manos"],["rabo|rabinho|cauda","Cola"],["focinho","Hocico"],["nariz|narizinho","Nariz"],["olhos","Ojos"],
+    ["bochechas","Mejillas"],["asas","Alas"],["asa","Ala"],["chifres","Cuernos"],["chifre","Cuerno"],["chap[ée]u|gorro|touca","Gorro"],["vestido","Vestido"],["saia","Falda"],
+    ["cachecol","Bufanda"],["cabelo","Pelo"],["bico","Pico"],["base","Base"],["montagem","Montaje"],["acabamento","Acabado"],["crina","Crin"],["juba","Melena"],["la[çc]o","Lazo"],
+    ["flor","Flor"],["cora[çc][ãa]o","Corazón"],["casco","Caparazón"],["barbatanas","Aletas"],["sapatos","Zapatos"],["pesco[çc]o","Cuello"],["materiais","Materiales"],["abrevia[çc][õo]es|legenda","Abreviaturas"],["observa[çc][õo]es|notas","Notas"]],
+  tr: [["kafa|baş","Cabeza"],["gövde|vücut","Cuerpo"],["kulaklar","Orejas"],["kulak","Oreja"],["kollar","Brazos"],["kol","Brazo"],["bacaklar","Piernas"],["bacak","Pierna"],
+    ["ayaklar","Pies"],["ayak","Pie"],["eller","Manos"],["kuyruk","Cola"],["burun","Nariz"],["ağız","Boca"],["gözler","Ojos"],["yanaklar","Mejillas"],["kanatlar","Alas"],["kanat","Ala"],
+    ["boynuzlar","Cuernos"],["boynuz","Cuerno"],["şapka|bere","Gorro"],["elbise","Vestido"],["etek","Falda"],["atkı","Bufanda"],["saç|saçlar","Pelo"],["gaga","Pico"],["yele","Crin"],
+    ["kalp","Corazón"],["çiçek","Flor"],["fiyonk","Lazo"],["taban","Base"],["kabuk","Caparazón"],["boyun","Cuello"],["ayakkabılar","Zapatos"],["birleştirme|montaj","Montaje"],["malzemeler","Materiales"],["kısaltmalar","Abreviaturas"],["notlar","Notas"]],
+  zh: [["头部|头","Cabeza"],["身体|身子|身躯","Cuerpo"],["耳朵","Orejas"],["手臂|胳膊|手","Brazos"],["腿部|腿","Piernas"],["脚","Pies"],["尾巴","Cola"],["鼻子","Nariz"],["嘴巴|嘴","Boca"],
+    ["眼睛","Ojos"],["腮红","Mejillas"],["翅膀","Alas"],["角","Cuernos"],["帽子","Gorro"],["裙子","Falda"],["衣服","Ropa"],["围巾","Bufanda"],["头发","Pelo"],["鬃毛","Crin"],
+    ["嘴巴|喙","Pico"],["花","Flor"],["蝴蝶结","Lazo"],["底部|底","Base"],["组装|拼装|缝合","Montaje"],["材料","Materiales"],["针法说明|针法|缩写","Abreviaturas"],["注意|注意事项","Notas"]]
+};
+function piezaDe(t, idioma){
+  if(idioma==="ru") return piezaRusa(t);
+  const lista = PIEZAS_OTRAS[idioma]; if(!lista) return null;
+  const m = t.trim().match(/^([\p{L} ]+?)\s*(\(.*\))?\s*[:.]?\s*$/u);
+  if(!m) return null;
+  const palabra = idioma==="tr" ? m[1].trim().toLocaleLowerCase("tr") : m[1].trim();
+  const e = lista.find(([rx]) => new RegExp("^(?:"+rx+")$", "iu").test(palabra));
+  return e ? {es: m[1]===m[1].toUpperCase() && m[1]!==m[1].toLowerCase() && m[1].length > 2 ? e[1].toUpperCase() : e[1], resto: m[2]||""} : null;
+}
 function piezaRusa(t){
   const m = t.trim().match(/^([\p{L} ]+?)\s*(\(.*\))?\s*[:.]?\s*$/u);
   if(!m) return null;
@@ -3953,6 +4230,26 @@ function cabeceraVuelta(l, idioma){
     if((m = l.match(new RegExp("^\\s*"+RU_NUM+"\\s*(?:ряд|круг|р)\\.?\\s*[:;.)]?\\s*", "iu")))) return una(m[1]);
     if((m = l.match(/^\s*(?:ряд|круг|р)\.?\s*(\d+)\s*[:;.)\-–—]?\s*/iu))) return una(m[1]);
   }
+  if(idioma==="pt"){
+    if((m = l.match(/^\s*(?:carreiras?|carr\.?|voltas?|rodadas?|c|v)\s*(\d+)\s*[ªº°]?\s*(?:-|–|—|a|à|ao|até|e)\s*(?:c|v|carr\.?)?\s*(\d+)\s*[ªº°]?\s*[:;.)\-–—]?\s*/i))) return rango(m[1], m[2]);
+    if((m = l.match(/^\s*(\d+)\s*[ªº°a]?\.?\s*(?:-|–|—|a|à|ao|até|e)\s*(\d+)\s*[ªº°a]?\.?\s*(?:carreiras?|voltas?|carr\.?)\s*[:;.)\-–—]?\s*/i))) return rango(m[1], m[2]);
+    if((m = l.match(/^\s*(?:fileiras?)\s*(\d+)\s*(?:-|–|—|a|até|e)\s*(\d+)\s*[:;.)\-–—]?\s*/i))) return rango(m[1], m[2], true);
+    if((m = l.match(/^\s*(?:carreira|carr\.?|volta|rodada)\s*(\d+)\s*[ªº°]?\s*[:;.)\-–—]?\s*/i))) return una(m[1]);
+    if((m = l.match(/^\s*(?:fileira)\s*(\d+)\s*[:;.)\-–—]?\s*/i))) return una(m[1], true);
+    if((m = l.match(/^\s*(?:c|v)\s*(\d+)\s*(?:[:;.)\-–—]\s*|\s+(?=\d))/i))) return una(m[1]);
+    if((m = l.match(/^\s*(\d+)\s*[ªº°a]?\.?\s*(?:carreira|volta|carr\.?)\s*[:;.)\-–—]?\s*/i))) return una(m[1]);
+  }
+  if(idioma==="tr"){
+    const TUR = "(?:tur(?:lar|u|da)?|[sS][ıiIİ][rR][aA](?:lar|da)?)(?![\\p{L}])";
+    if((m = l.match(new RegExp("^\\s*(\\d+)\\s*\\.?\\s*(?:-|–|—|ile)\\s*(\\d+)\\s*\\.?\\s*"+TUR+"\\s*[:;.)\\-–—]?\\s*", "iu")))) return rango(m[1], m[2]);
+    if((m = l.match(new RegExp("^\\s*"+TUR+"\\s*(\\d+)\\s*(?:-|–|—)\\s*(\\d+)\\s*[:;.)\\-–—]?\\s*", "iu")))) return rango(m[1], m[2]);
+    if((m = l.match(new RegExp("^\\s*(\\d+)\\s*\\.?\\s*"+TUR+"\\s*[:;.)\\-–—]?\\s*", "iu")))) return una(m[1]);
+    if((m = l.match(new RegExp("^\\s*"+TUR+"\\s*(\\d+)\\s*[:;.)\\-–—]?\\s*", "iu")))) return una(m[1]);
+  }
+  if(idioma==="zh"){
+    if((m = l.match(/^\s*第\s*(\d+)\s*(?:-|–|—|~|至|到)\s*第?\s*(\d+)\s*([圈行轮])\s*[:;.)\-–—]?\s*/)) || (m = l.match(/^\s*(\d+)\s*(?:-|–|—|~|至|到)\s*(\d+)\s*([圈行轮])\s*[:;)\-–—]\s*/))) return rango(m[1], m[2], m[3]==="行");
+    if((m = l.match(/^\s*第\s*(\d+)\s*([圈行轮])\s*[:;.)\-–—]?\s*/)) || (m = l.match(/^\s*(\d+)\s*([圈行轮])\s*[:;)\-–—]\s*/))) return una(m[1], m[2]==="行");
+  }
   if((m = l.match(/^\s*(rows?)\s*(\d+)\s*(?:-|–|—|to|and|&)\s*(\d+)\s*[:;.)\-–—]?\s*/i))) return rango(m[2], m[3], true);
   if((m = l.match(/^\s*(?:rnds?|rounds?|rds?|r)\s*(\d+)\s*(?:-|–|—|to|and|&)\s*(?:r\s*)?(\d+)\s*[:;.)\-–—]?\s*/i))) return rango(m[1], m[2]);
   if((m = l.match(/^\s*(row)\s*(\d+)\s*[:;.)\-–—]?\s*/i))) return una(m[2], true);
@@ -3963,6 +4260,9 @@ function cabeceraVuelta(l, idioma){
   return null;
 }
 function tienePuntosOrig(t, idioma){
+  if(idioma==="pt") return /\d\s*(?:pb|pbx|pa|mpa|pad|corr|aum|dim|ch)(?![\p{L}])|anel|pontos?\s+baixos?/iu.test(t);
+  if(idioma==="tr") return /\d\s*(?:sı|sk|zn|art|az|yç|ç|sc|inc|dec|ch|X|V|A)(?![\p{L}])|halka|sık\s+iğne/iu.test(t);
+  if(idioma==="zh") return /\d\s*(?:[XVATFE]|CH|SL)(?![A-Za-z])|短针|长针|锁针|加针|减针|引拔|环起/.test(t);
   return idioma==="ru" ? /\d\s*(?:сбн|вп|пр|уб|ссн|пссн|сс|с1н|с2н)|(?:^|[^\p{L}])(?:сбн|пр|уб|КА)(?![\p{L}])|кольц/iu.test(t) : /\b(sc|dc|hdc|htr|tr|ch|inc|dec|sl\s*st|mr)\b/i.test(t);
 }
 
@@ -3980,7 +4280,8 @@ function proteger(texto, glosario){
       if(clase==="ru" && /^\p{Lu}/u.test(m.slice(borde.length)) && !/^\p{Lu}/u.test(out)) return borde+out.charAt(0).toUpperCase()+out.slice(1);
       if(clase==="en" || clase==="ru") return borde+out.replace(/\{([^}]+)\}/g, (x, es) => { const k = marcaTr(marcas.length); marcas.push(es); return k; });
       const k = marcaTr(marcas.length); marcas.push(out);
-      return borde+k;
+      // (en chino no hay espacios: la marca se separa de lo de al lado)
+      return borde+(rx.source.startsWith("()") ? " "+k+" " : k);
     });
   }
   return {t: t.trim(), marcas};
@@ -4017,7 +4318,7 @@ const IMPERATIVOS = {Tejer:"Teje", Coser:"Cose", Rellenar:"Rellena", Doblar:"Dob
   Añada:"Añade", Añadir:"Añade", Marque:"Marca", Ate:"Ata", Comience:"Empieza", Empiece:"Empieza", Continúe:"Continúa", Termine:"Termina", Salte:"Salta", Cuente:"Cuenta",
   Bordee:"Borda", Fije:"Remata", Monte:"Monta", Remate:"Remata", Cambie:"Cambia", Ponga:"Pon", Poner:"Pon", Coloquen:"Coloca", Trabaje:"Teje", Trabajar:"Teje",
   Tejimos:"Tejemos", Recorte:"Recorta", Recortar:"Recorta", Lleve:"Lleva", Mueva:"Mueve", Mover:"Mueve", Pase:"Pasa", Pasar:"Pasa", Inserta:"Coloca", Sujete:"Sujeta",
-  Retire:"Quita", Trabajen:"Teje", Trabaja:"Teje", Marque:"Marca", Destale:"Monta", Llene:"Rellena", Llenar:"Rellena", Llenen:"Rellena", Llenamos:"Rellenamos", Rellenen:"Rellena", Tense:"Tensa", Tensar:"Tensa", Apriete:"Aprieta", Apretar:"Aprieta", Pinte:"Pinta", Pintar:"Pinta", Decore:"Decora", Decorar:"Decora"};
+  Retire:"Quita", Trabajen:"Teje", Trabaja:"Teje", Marque:"Marca", Destale:"Monta", Llene:"Rellena", Llenar:"Rellena", Llenen:"Rellena", Llenamos:"Rellenamos", Rellenen:"Rellena", Tense:"Tensa", Tensar:"Tensa", Apriete:"Aprieta", Apretar:"Aprieta", Pinte:"Pinta", Pintar:"Pinta", Decore:"Decora", Decorar:"Decora", Instale:"Coloca", Instalar:"Coloca", Llene:"Rellena", Marque:"Marca"};
 const ARREGLOS_ES = [
   [/\bpuntadas\b/g, "puntos"], [/\bpuntada\b/g, "punto"], [/\bPuntadas\b/g, "Puntos"], [/\bPuntada\b/g, "Punto"],
   [/\b(una|la|esta|esa|cada|otra) punto\b/gi, (m, a) => ({una:"un", la:"el", esta:"este", esa:"ese", cada:"cada", otra:"otro"})[a.toLowerCase()]+" punto"],
@@ -4032,7 +4333,7 @@ const ARREGLOS_ES = [
   [/\bcrochet\b/gi, "ganchillo"], [/\bganchillo de ganchillo\b/gi, "ganchillo"], [/\bpatrón de ganchillo de amigurumi\b/gi, "patrón de amigurumi"],
   [/\bclase magistral\b/gi, "patrón"], [/\bdetalles\b(?= *[,)])/g, "piezas"],
   [/\bhilo de\s+(?=\d)/g, "hilo de "], [/\ben un círculo\b/g, "alrededor"], [/\bfelices? ganchillo\b/gi, "¡Feliz ganchillo"],
-  [/\bjuguetes\b/g, "muñecos"], [/\bjuguete\b/g, "muñeco"], [/\bJuguete\b/g, "Muñeco"], [/\bprefabricad([oa]s?)\b/g, "terminad$1"], [/\bacabad([oa]s?)\b/g, "terminad$1"],
+  [/\boídos\b/g, "orejas"], [/\b[Ii]nstalar\b/g, "coloca"], [/\bcerca con (?=\d)/g, "cierra con "], [/\boído\b/g, "oreja"], [/\bOídos\b/g, "Orejas"], [/\bcuerdas\b/g, "hilos"], [/\bcuerda\b/g, "hilo"], [/\bjuguetes\b/g, "muñecos"], [/\bjuguete\b/g, "muñeco"], [/\bJuguete\b/g, "Muñeco"], [/\bprefabricad([oa]s?)\b/g, "terminad$1"], [/\bacabad([oa]s?)\b/g, "terminad$1"],
   [/\b(mientras|a medida que) (trabaja|trabajas|trabajes|trabaje|avanza|avanzas|avances)\b/g, "$1 tejes"],
   [/(^|[.!?]\s+)Borde (la|el|los|las|un|una)\b/g, "$1Borda $2"], [/(^|[.!?]\s+)Bordear\b/g, "$1Borda"],
   [/\b(?:su|tu) (cabeza|cola|nariz|boca|labor|pieza|oreja)\b/g, "la $1"], [/\b(?:su|tu) (cuerpo|muñeco|hocico|brazo|ojo)\b/g, "el $1"],
@@ -4045,7 +4346,7 @@ const ARREGLOS_ES = [
 const INFINITIVO_A_TU = Object.fromEntries(Object.entries(IMPERATIVOS).map(([k, v])=>[k.toLowerCase(), v.toLowerCase()]));
 function arreglarEspanol(t, idioma){
   for(const [rx, r] of ARREGLOS_ES) t = t.replace(rx, r);
-  if(idioma==="ru") t = t.replace(/\bfilas\b/g, "vueltas").replace(/\bfila\b/g, "vuelta").replace(/\bFilas\b/g, "Vueltas").replace(/\bFila\b/g, "Vuelta")
+  if(POR_INGLES.includes(idioma)) t = t.replace(/\bfilas\b/g, "vueltas").replace(/\bfila\b/g, "vuelta").replace(/\bFilas\b/g, "Vueltas").replace(/\bFila\b/g, "Vuelta")
     .replace(/\bhileras\b/g, "vueltas").replace(/\bhilera\b/g, "vuelta");
   // Mayúscula al empezar cada frase (las marcas devueltas pueden haber dejado minúscula)
   t = t.replace(/([.!?]\s+)(\p{Ll})/gu, (m, a, c) => a+c.toUpperCase());
@@ -4060,7 +4361,7 @@ const mayuscula = t => t.replace(/^(\s*[-–•*]?\s*[¿¡(«"]?)(\p{Ll})/u, (m,
 // ---------- Leer el texto por bloques ----------
 // Las líneas que el PDF parte se juntan en frases; cada vuelta, cada línea de la leyenda y cada título de parte
 // va por separado. «""» separa párrafos. Cada línea puede llevar su tamaño de letra (h) para encontrar títulos.
-const SECCIONES = /^(materials?|materiales|you will need|supplies|tools|abbreviations|stitches used|notes?|pattern notes|assembly|finishing|instructions|gauge|size|finished size|материалы|инструменты|вам понадобится|понадобится|условные обозначения|обозначения|сокращения|примечани[ея]|сборка|оформление)\s*:?$/iu;
+const SECCIONES = /^(materials?|materiales|you will need|supplies|tools|abbreviations|stitches used|notes?|pattern notes|assembly|finishing|instructions|gauge|size|finished size|материалы|инструменты|вам понадобится|понадобится|условные обозначения|обозначения|сокращения|примечани[ея]|сборка|оформление|materiais|abreviações|abreviaturas|legenda|observações|notas|montagem|acabamento|malzemeler|kısaltmalar|notlar|birleştirme|材料|针法说明|针法|注意|组装)\s*:?$/iu;
 const RX_VINETA = /^\s*(?:[-–—•●▪◦·]|\d{1,2}[.)](?=\s+\D))\s+/u;
 function esLeyendaOrig(l){ return /^\s*(?:[\p{L}][\p{L}\d.\/-]{0,9}|[\p{L}][\p{L}\d.\/-]{0,5} [\p{L}\d.\/-]{1,6})(?:\s+[-–—]\s+|\s*[–—=:]\s*)\p{L}/u.test(l) && l.length <= 90 && !/^\s*(?:rnds?|rounds?|rows?|ряд|vueltas?)(?![\p{L}])/iu.test(l); }
 // Letras que el lector de fotos confunde en un patrón ruso: «cóH» es «сбн»; en una palabra rusa, una «c» o una «o»
@@ -4077,8 +4378,13 @@ function arreglarLecturaRusa(t){
     })
     .replace(/[\p{L}]+/gu, w => /[\u0400-\u04FF]/.test(w) && /[A-Za-zó]/.test(w) ? [...w].map(c => LATINA_A_RUSA[c] || c).join("") : w);
 }
+// Y en uno turco: «1s1» es «1 sı» (la ı sin punto se lee como un 1), «Laz» es «1 az», «YG» es «yç»
+function arreglarLecturaTurca(t){
+  return t.replace(/(\d)\s*[sS][1lı|I](?![\p{L}\d])/gu, "$1 sı").replace(/(^|[\s,(])[Ll|I]\s?az(?![\p{L}])/gu, (m, a) => a+"1 az")
+    .replace(/(^|[\s,(])[Ll|I]\s?art(?![\p{L}])/gu, (m, a) => a+"1 art").replace(/(\d)\s*(?:YG|yG|Yç|Y[cÇ])(?![\p{L}])/gu, "$1 yç").replace(/(^|\n)\s*(?:YG|Yç)\s*:/gu, "$1yç:");
+}
 function bloquesDeTexto(lineas, idioma){
-  const ls = lineas.map(l => typeof l==="string" ? {t:l} : l).map(l => idioma==="ru" && l.t ? {...l, t: arreglarLecturaRusa(l.t)} : l);
+  const ls = lineas.map(l => typeof l==="string" ? {t:l} : l).map(l => !l.t ? l : idioma==="ru" ? {...l, t: arreglarLecturaRusa(l.t)} : idioma==="zh" ? {...l, t: normalizarChino(l.t).trim()} : idioma==="tr" ? {...l, t: arreglarLecturaTurca(l.t)} : l);
   const altos = ls.filter(l=>l.t && l.t.trim() && l.h).map(l=>l.h).sort((a,b)=>a-b), altoNormal = altos[Math.floor(altos.length/2)] || 0;
   // Largo de una línea llena (para saber si una línea sin punto final sigue en la de abajo)
   const largos = ls.map(l => (l.t||"").trim().length).filter(n => n > 0).sort((a,b)=>a-b), lleno = largos[Math.floor(largos.length*.8)] || 60;
@@ -4095,11 +4401,12 @@ function bloquesDeTexto(lineas, idioma){
     if(esLeyendaOrig(t)) return "leyenda";
     if(RX_VINETA.test(t)) return "lista";
     // (lo que empieza en minúscula o con paréntesis sigue la frase de arriba: no es un título)
-    const corta = t.length <= 45 && !/[.,;!?]$/.test(t) && /\p{L}{3}/u.test(t) && !/^[\p{Ll}(\[]/u.test(t);
+    // (en chino un título puede tener solo dos letras: «头部»)
+    const corta = t.length <= 45 && !/[.,;!?]$/.test(t) && (/\p{L}{3}/u.test(t) || /[\u3400-\u9fff]{2}/.test(t)) && !/^[\p{Ll}(\[]/u.test(t);
     const grande = altoNormal && l.h >= altoNormal*1.25;
     const sigVuelta = sig && cabeceraVuelta(sig.t.trim(), idioma);
     const letras = t.replace(/[^\p{L}]/gu, "");
-    if(corta && (grande || (letras.length >= 3 && letras===letras.toUpperCase()) || /:\s*$/.test(t) || sigVuelta)) return "parte";
+    if(corta && (grande || (letras.length >= 3 && letras===letras.toUpperCase() && letras!==letras.toLowerCase()) || /:\s*$/.test(t) || sigVuelta)) return "parte";
     // «Сборка» / «Assembly» sola en su línea, al empezar un párrafo, y debajo el texto
     if(corta && SECCIONES.test(t.replace(/\s*\([^)]*\)\s*:?$/, ""))) return "parte";
     const sinPar = t.replace(/\([^)]*\)/g, "").trim();
@@ -4147,13 +4454,15 @@ function leyendaConocida(texto, glosario){
   if(izq.replace(/\s/g, "").length <= 6 && glosario.some(([pat, sal, clase, fl]) => clase==="en" && new RegExp("^(?:"+pat+")$", fl ? fl.replace("g","") : "iu").test(izq))) return {omitir:true};
   const p = proteger(izq, glosario);
   if(!/^QX[A-Z]{2}$/.test(p.t.trim()) || p.marcas.length!==1) return null;
-  const es = p.marcas[0];
+  let es = p.marcas[0];
+  // «kaydırma: …» se ha convertido en «punto deslizado»: es la abreviatura «pd»
+  if(!ABREV_ES[es]){ const k = Object.keys(ABREV_ES).find(k => ABREV_ES[k].replace(/:.*$/, "")===es); if(k) es = k; }
   if(!ABREV_ES[es]) return izq.replace(/\s/g, "").length <= 6 ? {omitir:true} : null;
   const extra = (m[2].match(/\(([^()]{3,})\)\s*\.?$/)||[])[1] || "";
   return {abrev: es, extra};
 }
 // Concordancia de las palabras que vuelven de las marcas («el ojos de seguridad» → «los ojos de seguridad»)
-const PLURALES = {ojos:"m", puntos:"m", aumentos:"m", "puntos bajos":"m", cuadrados:"m", cadenetas:"f", disminuciones:"f", hebras:"f", piezas:"f"};
+const PLURALES = {orejas:"f", piernas:"f", patas:"f", brazos:"m", ojos:"m", puntos:"m", aumentos:"m", "puntos bajos":"m", cuadrados:"m", cadenetas:"f", disminuciones:"f", hebras:"f", piezas:"f"};
 function concordar(t){
   for(const [n, g] of Object.entries(PLURALES)){
     t = t.replace(new RegExp("\\b(el|la|las|los|un|una|unos|unas|este|esta|estos|estas)\\s+"+n+"\\b", "gi"), (m, a) => {
@@ -4165,8 +4474,8 @@ function concordar(t){
 }
 // «traductor» es una función async que recibe un texto y devuelve su traducción (el de Mozilla), o null si no hay
 async function traducirBloques(bloques, {idioma, uk=false, traductor=null, avisar=null}){
-  const glosario = idioma==="ru" ? GLOSARIO_RU : GLOSARIO_EN(uk);
-  const traduce = idioma==="ru" || idioma==="en";
+  const glosario = glosarioDe(idioma, uk, idioma==="tr" && usaXV(bloques.map(b => b.t).join("\n")));
+  const traduce = idioma==="en" || POR_INGLES.includes(idioma);
   const trabajo = bloques.map(b => {
     if(b.tipo==="imagen") return {b, imagen:true};
     if(!traduce) return {b, listo: b.t};
@@ -4174,16 +4483,17 @@ async function traducirBloques(bloques, {idioma, uk=false, traductor=null, avisa
     if(b.tipo==="leyenda"){ ley = leyendaConocida(b.t, glosario); if(ley && ley.omitir) return {b, omitir:true}; if(ley) resto = ley.extra; }
     const cv = !ley && cabeceraVuelta(b.t, idioma);
     if(cv){ cab = cv.cab; resto = cv.resto; }
-    const pz = idioma==="ru" && (b.tipo==="parte" || b.tipo==="titulo") && piezaRusa(b.t);
+    const pz = idioma!=="en" && (b.tipo==="parte" || b.tipo==="titulo") && piezaDe(b.t, idioma);
     if(pz){ cab = pz.es; resto = pz.resto; if(!resto) return {b, cab, listo:"", p:{t:"", marcas:[]}}; }
-    let p = proteger(arreglarSignos(idioma==="ru" ? imperativosRu(resto) : resto), glosario), cola = "";
+    let p = proteger(paraReglas(arreglarSignos(idioma==="ru" ? imperativosRu(resto) : resto), idioma), glosario), cola = "";
     // Lo de entre paréntesis al final que no hay que traducir («(18)», «(hacer 8)») se aparta para que el traductor no lo mueva
     const mc = p.t.match(/\s*\((?:[\d\s,.x+]|QX[A-Z]{2})+\)\s*\.?$/);
     const mt = !mc && p.t.match(/\s*(QX[A-Z]{2})\s*\.?$/), valor = mt && p.marcas[LETRAS_MARCA.indexOf(mt[1][2])*LETRAS_MARCA.length+LETRAS_MARCA.indexOf(mt[1][3])];
     if(mc && quedaTexto(p.t.slice(0, mc.index))){ cola = devolverMarcas(mc[0], p.marcas).t; p = {t: p.t.slice(0, mc.index), marcas: p.marcas}; }
     else if(valor && /^\(.*\)$/.test(valor) && quedaTexto(p.t.slice(0, mt.index))){ cola = valor; p = {t: p.t.slice(0, mt.index), marcas: p.marcas}; }
     const r = {b, cab, p, ley, cola};
-    if(!quedaTexto(p.t)) r.listo = devolverMarcas(idioma==="ru" ? palabraAPalabra(p.t, "ru") : p.t, p.marcas).t;
+    if(!quedaTexto(p.t)) r.listo = devolverMarcas(idioma!=="en" ? palabraAPalabra(p.t, idioma) : p.t, p.marcas).t;
+    if(r.listo!=null && idioma!=="en" && idioma!=="ru") r.listo = enAEspanol(r.listo);
     return r;
   });
   const pendientes = trabajo.filter(r => r.listo==null && !r.omitir && !r.imagen);
@@ -4195,6 +4505,7 @@ async function traducirBloques(bloques, {idioma, uk=false, traductor=null, avisa
     if(mt){ const d = devolverMarcas(mt, r.p.marcas, r.p.t); if(!d.falta){ r.listo = d.t; continue; } }
     // Sin traductor (o se ha comido alguna marca): reglas palabra a palabra, y se marca para revisar
     r.listo = devolverMarcas(palabraAPalabra(r.p.t, idioma), r.p.marcas).t; r.revisar = true;
+    if(idioma!=="ru" && idioma!=="en") r.listo = enAEspanol(r.listo);
   }
   const out = [], leyenda = {};
   let dondeLeyenda = -1;
@@ -4204,14 +4515,17 @@ async function traducirBloques(bloques, {idioma, uk=false, traductor=null, avisa
     let t = r.listo;
     if(traduce) t = concordar(arreglarEspanol(t, idioma));
     if(r.cola) t = t.replace(/\s*\.?\s*$/, "")+" "+r.cola.trim();
-    if(idioma==="ru" && (r.b.tipo==="parte" || r.b.tipo==="titulo")) t = t.replace(/^\s*(?:El|La|Los|Las)\s+(?=\p{L})/u, "");
+    if(POR_INGLES.includes(idioma) && (r.b.tipo==="parte" || r.b.tipo==="titulo")) t = t.replace(/^\s*(?:El|La|Los|Las)\s+(?=\p{L})/u, "");
     t = t.trim();
     if(r.cab && !/^(pb|pa|mpa|pad|pd|cad|aum|dism)\b|^\(/.test(t)) t = mayuscula(t);
     t = (r.cab ? r.cab+" " : "")+t;
     // Las abreviaturas van en minúscula («6 pb…»); el resto empieza con mayúscula
     if(!/^(pb|pa|mpa|pad|pd|cad|aum|dism)\b/.test(t)) t = mayuscula(t);
     t = t.replace(/\s{2,}/g, " ").trim();
-    const queda = idioma==="ru" && /[а-яё]{2,}/iu.test(t);
+    // El traductor a veces se come el punto final cuando la frase acaba en una palabra de ganchillo
+    if(r.b.tipo==="texto" && /[.!?]\s*$/.test(r.b.t) && !/[.!?:)…]\s*$/.test(t)) t += ".";
+    // Si queda algo sin traducir (letras rusas, chinas o turcas), se marca para revisar
+    const queda = idioma==="ru" ? /[а-яё]{2,}/iu.test(t) : idioma==="zh" ? /[\u3400-\u9fff]/.test(t) : idioma==="tr" ? /(?:^|[^\p{L}])\p{Ll}*[ğşı]/u.test(t) : false;
     out.push({tipo: r.b.tipo, t, original: r.b.t, revisar: !!r.revisar || queda, h: r.b.h, y: r.b.y, pagina: r.b.pagina});
   }
   if(!traduce) return out;
@@ -4242,8 +4556,28 @@ const PALABRAS_RU = [["и","y"],["в","en"],["на","en"],["с","con"],["по","
 const PALABRAS_EN_TR = {the:"el", a:"un", and:"y", with:"con", of:"de", in:"en", into:"en", to:"a", for:"para", each:"cada", head:"cabeza", body:"cuerpo", arms:"brazos", legs:"piernas",
   ears:"orejas", eyes:"ojos", nose:"nariz", tail:"cola", sew:"cose", stuff:"rellena", stitches:"puntos", stitch:"punto", rounds:"vueltas", round:"vuelta", rows:"filas", row:"fila",
   repeat:"repite", times:"veces", yarn:"lana", color:"color", white:"blanco", black:"negro", pink:"rosa", blue:"azul", make:"haz", together:"juntos", then:"después", next:"siguiente"};
+// Portugués, turco y chino: lo justo para entender una frase de ganchillo
+const PALABRAS_OTRAS = {
+  pt: [["no\\s+topo\\s+d[ae]","arriba de"],["no\\s+topo","arriba"],["e","y"],["em","en"],["no","en el"],["na","en la"],["nos","en los"],["nas","en las"],["com","con"],["do","del"],["da","de la"],["dos","de los"],["das","de las"],["os","los"],["as","las"],["o","el"],
+    ["um","un"],["uma","una"],["até","hasta"],["entre","entre"],["depois","después"],["então","luego"],["cabe[çc]a","cabeza"],["corpo","cuerpo"],["orelhas","orejas"],["bra[çc]os","brazos"],
+    ["pernas","piernas"],["olhos","ojos"],["rabo","cola"],["cor","color"],["fio|linha","hilo"],["repita|repetir","repite"],["encha|encher","rellena"],["costure|costurar","cose"],
+    ["feche|fechar","cierra"],["fa[çc]a|fazer","haz"],["vire|virar","gira"],["corte|cortar","corta"],["borde|bordar","borda"],["pr[óo]ximo","siguiente"],["mesmo","mismo"],["n[ãa]o","no"],
+    ["buraco","agujero"],["topo","parte de arriba"],["ao","al"],["meio","medio"],["dobre","dobla"],["deixe","deja"],["longo","largo"],["para","para"],["branc[oa]","blanco"],["pret[oa]","negro"],["rosa","rosa"]],
+  tr: [["ve","y"],["ile","con"],["her","cada"],["içine|icine","en"],["arasına|arasında","entre"],["sonra","después"],["kafa\\p{L}*","cabeza"],["gövde\\p{L}*","cuerpo"],["kulaklar\\p{L}*","orejas"],
+    ["kulak\\p{L}*","oreja"],["kollar\\p{L}*","brazos"],["bacaklar\\p{L}*","piernas"],["göz(?:ler)?\\p{L}*","ojos"],["burun\\p{L}*","nariz"],["kuyruk\\p{L}*","cola"],["renk\\p{L}*","color"],
+    ["ip\\p{L}*","hilo"],["doldur\\p{L}*","rellena"],["dik(?:in|iniz|ilir)?","cose"],["kapat\\p{L}*","cierra"],["bırak\\p{L}*","deja"],["takın|takınız|yerleştirin|yerleştirilir","coloca"],["uzun","largo"],["bir","un"],["beyaz","blanco"],["siyah","negro"],["pembe","rosa"]],
+  zh: [["和","y"],["在","en"],["每","cada"],["头部|头","cabeza"],["身体","cuerpo"],["耳朵","orejas"],["手臂","brazos"],["腿","piernas"],["眼睛","ojos"],["鼻子","nariz"],["尾巴","cola"],["颜色","color"],
+    ["然后","después"],["缝合|缝","cose"],["之间","entre"],["白色","blanco"],["黑色","negro"],["粉色","rosa"],["线","hilo"],["针","puntos"],["圈","vuelta"]]
+};
+// Palabras que las reglas dejan en inglés para ayudar al traductor: sin traductor se ponen en español
+const EN_A_ES = [["the first stitch of each round","el primer punto de cada vuelta"],["first stitch","primer punto"],["each round","cada vuelta"],["cotton yarn","hilo de algodón"],
+  ["yarns","hilos"],["yarn","hilo"],["stitches","puntos"],["stitch","punto"],["stuff","rellena"],["sew","cose"],["nose","nariz"],["embroider","borda"]];
+function enAEspanol(t){ for(const [en, es] of EN_A_ES) t = t.replace(new RegExp("\\b"+en+"\\b", "g"), es); return t; }
+// En turco «İ» no es la mayúscula de «i» para las reglas: se cambia por «I»
+const paraReglas = (t, idioma) => idioma==="tr" ? t.replace(/İ/g, "I") : t;
 function palabraAPalabra(t, idioma){
   if(idioma==="ru"){ for(const [p, es] of PALABRAS_RU) t = t.replace(trRx(p), (m, b) => b+es); return t; }
+  if(PALABRAS_OTRAS[idioma]){ for(const [p, es] of PALABRAS_OTRAS[idioma]) t = t.replace(trRx(p), (m, b) => b+(idioma==="zh" ? " "+es+" " : es)); return idioma==="zh" ? t.replace(/\s{2,}/g, " ").trim() : t; }
   return t.replace(/\b[a-z]+\b/gi, w => { const es = PALABRAS_EN_TR[w.toLowerCase()]; return es==null ? w : (w[0]===w[0].toUpperCase() ? es.charAt(0).toUpperCase()+es.slice(1) : es); });
 }
 
@@ -4252,22 +4586,28 @@ function palabraAPalabra(t, idioma){
 const ARREGLOS_EN = [
   [/\bEmbroide\b/g, "Embroider"], [/\bembroide\b/g, "embroider"], [/\bspout\b/gi, "nose"], [/\bfiller\b/g, "stuffing"], [/\bFiller\b/g, "Stuffing"],
   [/\bloops\b/g, "stitches"], [/\bloop\b/g, "stitch"], [/\bLoops\b/g, "Stitches"], [/\brows\b/g, "rounds"], [/\brow\b/g, "round"], [/\bRows\b/g, "Rounds"], [/\bRow\b/g, "Round"],
-  [/\b[Mm]aster ?class\b/g, "pattern"], [/\btoy\b/g, "toy"], [/\bsynthetic winterizer\b/gi, "stuffing"], [/\bhollofiber\b/gi, "stuffing"]
+  [/\b[Mm]aster ?class\b/g, "pattern"], [/\bpins\b/g, "stitches"], [/\bpin\b/g, "stitch"], [/\blaps\b/g, "rounds"], [/\blap\b/g, "round"], [/\btours\b/g, "rounds"], [/\btour\b/g, "round"],
+  [/\bmark(?:ing|er)? buckles?\b/gi, "stitch marker"], [/\bropes\b/g, "yarns"], [/\brope\b/g, "yarn"], [/\bRope\b/g, "Yarn"], [/\bsecurity eyes\b/gi, "safety eyes"], [/\btoy\b/g, "toy"], [/\bsynthetic winterizer\b/gi, "stuffing"], [/\bhollofiber\b/gi, "stuffing"]
 ];
 function arreglarIngles(t){ for(const [rx, r] of ARREGLOS_EN) t = t.replace(rx, r); return t; }
 
 // ---------- El traductor libre de Mozilla, dentro del navegador ----------
-// Va en traductor/ junto a la app. La primera vez se descarga (unos 51 MB para el ruso, 31 MB para el inglés) y se
+// Va en traductor/ junto a la app. La primera vez se descarga (unos 31 MB para el inglés y 46-69 MB para los demás) y se
 // guarda en el móvil; después funciona sin conexión. Los modelos van comprimidos y partidos en trozos de menos de 12 MB.
+// Del ruso, el portugués, el turco y el chino se pasa primero al inglés (no hay modelos directos al español).
 const TRAD_DIR = new URL("traductor/", location.href).href;
 const PARES_TR = {
   ruen: {de:"ru", a:"en", modelo:["ruen-modelo-0.bin","ruen-modelo-1.bin"], lex:"ruen-lex.bin", vocab:"ruen-vocab.bin", mb:25.4},
+  pten: {de:"pt", a:"en", modelo:["pten-modelo-0.bin","pten-modelo-1.bin"], lex:"pten-lex.bin", vocab:"pten-vocab.bin", mb:25.6},
+  tren: {de:"tr", a:"en", modelo:["tren-modelo-0.bin","tren-modelo-1.bin"], lex:"tren-lex.bin", vocab:"tren-vocab.bin", mb:15.2},
+  zhen: {de:"zh", a:"en", modelo:["zhen-modelo-0.bin","zhen-modelo-1.bin","zhen-modelo-2.bin"], lex:"zhen-lex.bin", vocab:"zhen-vocab.bin", mb:38.3},
   enes: {de:"en", a:"es", modelo:["enes-modelo-0.bin","enes-modelo-1.bin"], lex:"enes-lex.bin", vocab:"enes-vocab.bin", mb:25.4}
 };
 const MB_MOTOR_TR = 5.3; // el motor (bergamot-translator-worker.wasm)
 const CACHE_TR = "ti-traductor-1";
 let trad = null;
-const mbTraductor = idioma => Math.round(MB_MOTOR_TR + (idioma==="ru" ? PARES_TR.ruen.mb+PARES_TR.enes.mb : PARES_TR.enes.mb));
+const paresDe = idioma => POR_INGLES.includes(idioma) ? [idioma+"en", "enes"] : ["enes"];
+const mbTraductor = idioma => Math.round(MB_MOTOR_TR + paresDe(idioma).reduce((a, p) => a+PARES_TR[p].mb, 0));
 function trLlamar(t, name, args, transfer=[], plazo=0){
   return new Promise((ok, mal) => {
     if(t.roto) return mal(new Error("roto"));
@@ -4316,10 +4656,12 @@ async function descomprimirTr(buf){
   return u.buffer.slice(u.byteOffset, u.byteOffset+u.byteLength);
 }
 const juntarBuffers = bs => { const u = new Uint8Array(bs.reduce((a, b)=>a+b.byteLength, 0)); let k = 0; for(const b of bs){ u.set(new Uint8Array(b), k); k += b.byteLength; } return u.buffer; };
-// Devuelve una función que traduce un texto (ruso o inglés) al español, o null si en este aparato no se puede
+// Devuelve una función que traduce un texto (ruso, portugués, turco, chino o inglés) al español, o null si en este aparato no se puede
 async function prepararTraductor(idioma, avisar){
   if(!window.Worker || !window.WebAssembly) return null;
-  const pares = idioma==="ru" ? ["ruen","enes"] : ["enes"];
+  const pares = paresDe(idioma);
+  // Un solo idioma de origen a la vez: los modelos ocupan mucha memoria y los móviles se quedan sin ella
+  if(trad && [...trad.pares].some(p => !pares.includes(p))) romperTraductor(trad);
   if(!trad){
     // Sin conexión (y sin el traductor guardado) no se intenta: se avisa de que hace falta internet
     // (con GET y no HEAD: el service worker de la app instalada solo contesta a GET desde lo guardado)
@@ -4338,9 +4680,10 @@ async function prepararTraductor(idioma, avisar){
     avisar("Preparando el traductor…", 0);
     for(const p of faltan){
       const d = PARES_TR[p];
-      const [m0, m1, lex, vocab] = await Promise.all([...d.modelo, d.lex, d.vocab].map(f => bajarTr(f, alBajar)));
+      const bajados = await Promise.all([...d.modelo, d.lex, d.vocab].map(f => bajarTr(f, alBajar)));
+      const [lex, vocab] = bajados.slice(-2);
       avisar("Preparando el traductor…", null);
-      const modelo = await descomprimirTr(juntarBuffers([m0, m1])), shortlist = await descomprimirTr(lex), voc = await descomprimirTr(vocab);
+      const modelo = await descomprimirTr(juntarBuffers(bajados.slice(0, -2))), shortlist = await descomprimirTr(lex), voc = await descomprimirTr(vocab);
       await trLlamar(t, "loadTranslationModel", [{from:d.de, to:d.a}, {model:modelo, shortlist, vocabs:[voc]}], [modelo, shortlist, voc], 180000);
       t.pares.add(p);
     }
@@ -4351,8 +4694,8 @@ async function prepararTraductor(idioma, avisar){
     return r && r[0] && r[0].target ? r[0].target.text : null;
   };
   return async texto => {
-    if(idioma!=="ru") return uno("en", "es", texto);
-    const en = await uno("ru", "en", texto);
+    if(!POR_INGLES.includes(idioma)) return uno("en", "es", texto);
+    const en = await uno(idioma, "en", texto);
     return en==null ? null : uno("en", "es", arreglarIngles(en));
   };
 }
@@ -4572,10 +4915,29 @@ async function cargarJsPDF(){
   return window.jspdf.jsPDF;
 }
 // Letras que llevan las fuentes del PDF; lo demás se cambia por algo parecido
-const LETRA_PDF_RARA = /[^\n\x20-\x7E -ÿıŒœ–—‘’“”•…€™]/g;
-const CAMBIOS_PDF = {"‚":",", "„":"\"", "″":"\"", "′":"'", "−":"-", "‐":"-", "‑":"-", "‒":"-", "→":"->", "←":"<-", "≈":"~", "№":"n.º", "⁄":"/", "∙":"·", "●":"•", "▪":"•", "◦":"•", "✓":"v", "♥":"", "❤":""};
+const LETRA_PDF_RARA = /[^\n\x20-\x7E -ÿ\u0100-\u012F\u0131-\u017FŒœ–—‘’“”•…€™]/g;
+const CAMBIOS_PDF = {"İ":"I", "‚":",", "„":"\"", "″":"\"", "′":"'", "−":"-", "‐":"-", "‑":"-", "‒":"-", "→":"->", "←":"<-", "≈":"~", "№":"n.º", "⁄":"/", "∙":"·", "●":"•", "▪":"•", "◦":"•", "✓":"v", "♥":"", "❤":""};
 const limpiarPDF = (t, cirilico=false) => String(t||"").normalize("NFC").replace(/\t/g, " ").replace(LETRA_PDF_RARA, c => cirilico && /[\u0400-\u04FF\u2116]/.test(c) ? c : CAMBIOS_PDF[c] ?? "");
 const tieneCirilico = t => /[Ѐ-ӿ]/.test(t||"");
+// Las letras chinas no van en las fuentes del PDF: ese texto se dibuja con las letras del móvil y se pone como imagen
+function textoComoImagen(t, anchoMm, tamPt, color){
+  const PX = 12, fontPx = tamPt*0.3528*PX, maxPx = Math.ceil(anchoMm*PX);
+  const c = document.createElement("canvas"), ctx = c.getContext("2d"), letra = fontPx+"px sans-serif";
+  ctx.font = letra;
+  const lineas = []; let cur = "";
+  for(const trozo of String(t).match(/[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]|[^\s\u3400-\u9fff\u3000-\u303f\uff00-\uffef]+\s*|\s+/g) || []){
+    if(cur && ctx.measureText(cur+trozo).width > maxPx){ lineas.push(cur); cur = trozo.trimStart(); } else cur += trozo;
+  }
+  if(cur) lineas.push(cur);
+  const alto = fontPx*1.35;
+  c.width = maxPx; c.height = Math.ceil(alto*lineas.length + fontPx*.3);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.font = letra; ctx.textBaseline = "top"; ctx.fillStyle = "rgb("+color.join(",")+")";
+  lineas.forEach((l, i) => ctx.fillText(l, 0, i*alto + fontPx*.15));
+  const url = c.toDataURL("image/png"), hMm = c.height/PX;
+  soltarLienzo(c);
+  return {url, hMm, lineas: lineas.length};
+}
 async function hacerPDFTraducido(tr, conOriginal){
   const jsPDF = await cargarJsPDF(), fuentes = await cargarFuentesPDF();
   const doc = new jsPDF({unit:"mm", format:"a4", compress:true});
@@ -4592,6 +4954,14 @@ async function hacerPDFTraducido(tr, conOriginal){
   const partir = (t, ancho, f) => doc.splitTextToSize(limpiarPDF(t, !!F.ruso && f===F.ruso), ancho);
   const alto = (tam, inter=1.4) => tam*PT*inter;
   function escribir(t, {x=M, ancho=ANCHO, f=F.texto, estilo="normal", tam=12.5, color=TINTA, inter=1.4, barra=null}={}){
+    if(tieneCJK(t)){
+      const im = textoComoImagen(t, ancho, tam, color);
+      sitio(Math.min(im.hMm, ABAJO-M));
+      if(barra){ doc.setFillColor(...barra); doc.rect(M-4.5, y, 1.4, im.hMm, "F"); }
+      try{ doc.addImage(im.url, "PNG", x, y, ancho, im.hMm, undefined, "FAST"); }catch(e){}
+      y += im.hMm;
+      return im.lineas;
+    }
     if(f!==F.ruso && tieneCirilico(t) && F.ruso){ f = F.ruso; estilo = "normal"; }
     fuente(f, estilo, tam, color);
     const ls = partir(t, ancho, f), a = alto(tam, inter);
@@ -4605,7 +4975,8 @@ async function hacerPDFTraducido(tr, conOriginal){
   }
   const altoTexto = (t, ancho, tam=12.5, inter=1.4, f=F.texto) => { fuente(f, "normal", tam); return partir(t, ancho, f).length*alto(tam, inter); };
   const bloques = tr.bloques;
-  const titulo = (bloques.find(b => b.tipo==="titulo") || {}).t || tr.tituloArchivo || "Patrón traducido";
+  const sinChino = t => t && !tieneCJK(t) ? t : "";
+  const titulo = sinChino((bloques.find(b => b.tipo==="titulo") || {}).t) || sinChino(tr.tituloArchivo) || "Patrón traducido";
   // Cabecera: el título, de dónde viene y cómo leer las marcas naranjas
   fuente(F.titulo, "normal", 24, MARCA);
   for(const l of partir(titulo, ANCHO)){ doc.text(l, M, y + 24*PT*.9); y += alto(24, 1.25); }
@@ -4639,6 +5010,8 @@ async function hacerPDFTraducido(tr, conOriginal){
       sitio(alto(15, 1.3)+conSig+2);
       escribir(b.t, {f:F.titulo, tam:15, color:MARCA, inter:1.3, barra});
       y += 1.5; antes = b;
+    } else if(b.tipo==="vuelta" && tieneCJK(b.t)){
+      escribir(b.t, {barra}); y += 1.2; antes = b;
     } else if(b.tipo==="vuelta"){
       const cab = (b.t.match(/^(?:Vueltas?|Filas?) \d+(?: a \d+)?:/)||[""])[0], resto = b.t.slice(cab.length).trim();
       const ancho = ANCHO-colVuelta, f = tieneCirilico(resto) && F.ruso ? F.ruso : F.texto;
@@ -4735,7 +5108,7 @@ async function entregarArchivo(blob, nombre, compartir){
   return true;
 }
 // (sin tildes ni eñes: algunos navegadores cambian por «download» un nombre de archivo con letras así)
-const nombreArchivoTr = tr => ((((tr.bloques.find(b=>b.tipo==="titulo")||{}).t || tr.tituloArchivo || "Patron").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 _-]/g, "").replace(/\s+/g, " ").trim().slice(0, 60)) || "Patron")+" (en espanol).pdf";
+const nombreArchivoTr = tr => ((((tr.bloques.find(b=>b.tipo==="titulo")||{}).t || tr.tituloArchivo || "Patron").replace(/ı/g, "i").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 _-]/g, "").replace(/\s+/g, " ").trim().slice(0, 60)) || "Patron")+" (en espanol).pdf";
 // El patrón traducido como texto, para guardarlo en «Mis patrones»
 const textoTraducido = tr => tr.bloques.filter(b => b.tipo!=="imagen").map((b, i, bs) => (i && (b.tipo==="parte" || (b.tipo!==bs[i-1].tipo && b.tipo!=="vuelta")) ? "\n" : "")+b.t).join("\n").trim();
 
@@ -4825,7 +5198,7 @@ VISTAS.traducir = V => {
       return;
     }
     if(tr.idioma==="otro"){
-      res.replaceChildren(h("div",{class:"note stack"}, h("p",{style:"font-weight:700"}, "No sé en qué idioma está este patrón."), h("p",{}, "Sé traducir patrones en ruso y en inglés. Si está en otro idioma, todavía no puedo con él.")));
+      res.replaceChildren(h("div",{class:"note stack"}, h("p",{style:"font-weight:700"}, "No sé en qué idioma está este patrón."), h("p",{}, "Sé traducir patrones en inglés, ruso, portugués, turco y chino. Si está en otro idioma, todavía no puedo con él.")));
       return;
     }
     const revisar = tr.bloques.filter(b => b.revisar).length, fotos = tr.bloques.filter(b => b.tipo==="imagen").length;
@@ -4863,14 +5236,14 @@ VISTAS.traducir = V => {
   V.append(
     volver("Más", {name:"mas"}),
     h("div",{class:"page-title"}, h("h1",{},"Traducir un patrón"),
-      h("p",{class:"muted"},"Abre un patrón en ruso o en inglés y te lo devuelvo en español, en un PDF para guardar o imprimir, con sus fotos.")),
+      h("p",{class:"muted"},"Abre un patrón en inglés, ruso, portugués, turco o chino y te lo devuelvo en español, en un PDF para guardar o imprimir, con sus fotos.")),
     h("div",{class:"section"},
       estado,
       h("div",{class:"actions"},
-        opcion("", "pdf", "Abrir un PDF", "En ruso o en inglés", ()=>elegir.click()),
+        opcion("", "pdf", "Abrir un PDF", "Inglés, ruso, portugués, turco o chino", ()=>elegir.click()),
         opcion("pink", "foto", "Foto del patrón", "De una revista o un libro", ()=>elegirFoto.click())),
       elegir, elegirFoto,
-      h("p",{class:"muted", style:"font-size:.88rem"}, "Se traduce dentro del móvil, gratis y sin mandar el patrón a ningún sitio. La primera vez se descarga el traductor (unos "+mbTraductor("en")+" MB para el inglés y "+mbTraductor("ru")+" MB para el ruso): mejor con wifi.")),
+      h("p",{class:"muted", style:"font-size:.88rem"}, "Se traduce dentro del móvil, gratis y sin mandar el patrón a ningún sitio. La primera vez que traduces de cada idioma se descarga su traductor (entre "+mbTraductor("en")+" y "+mbTraductor("zh")+" MB): mejor con wifi.")),
     h("div",{class:"section"}, res)
   );
   pintar();
@@ -5038,7 +5411,7 @@ VISTAS.grafico = V => {
       // Lo primero: escribir el patrón y ver el dibujo al momento
       g.modo==="color" ? null : h("div",{class:"panel stack escribe", style:"gap:.5rem"},
         h("label",{class:"f", for:"gr-texto", style:"margin:0"}, "Escribe el patrón y se dibuja solo",
-          h("small",{}, "Una vuelta por línea, como en las revistas: «Vuelta 1: 6 pb en anillo mágico (6)». Entiende pb, pa, mpa, cad, aum, dism, repeticiones «(1 pb, 1 aum) x 6» y también inglés y ruso.")),
+          h("small",{}, "Una vuelta por línea, como en las revistas: «Vuelta 1: 6 pb en anillo mágico (6)». Entiende pb, pa, mpa, cad, aum, dism, repeticiones «(1 pb, 1 aum) x 6» y también inglés, ruso, portugués, turco y chino.")),
         ayudasEscribir(texto),
         texto,
         h("div",{class:"row"}, h("button",{onclick:()=>{ texto.value = graficoATexto(g); g.texto=texto.value; save(); aviso.textContent="He escrito lo que hay dibujado."; }},"Escribir lo que he dibujado")),
@@ -5870,7 +6243,7 @@ VISTAS.mas = V => {
   V.append(
     h("div",{class:"page-title"}, h("h1",{},"Más")),
     h("div",{class:"section"}, h("div",{class:"menu"},
-      item("traducir","Traducir un patrón","Del ruso o del inglés al español, en PDF", ()=>go({name:"traducir"})),
+      item("traducir","Traducir un patrón","Del inglés, ruso, portugués, turco o chino al español, en PDF", ()=>go({name:"traducir"})),
       item("rejilla","Gráficos","Dibuja con símbolos, en filas o en redondo", ()=>go({name:"graficos"})),
       item("ovillo","Mis lanas","Los ovillos que tienes en casa", ()=>go({name:"lanas"})),
       item("circulo","Círculo perfecto","Patrón y gráfico de un círculo plano", ()=>go({name:"herramientas"})),

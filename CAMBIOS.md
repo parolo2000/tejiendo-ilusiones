@@ -477,3 +477,24 @@ Capturas en `tests/capturas/`.
   botón «Instalar la app» (guarda el `beforeinstallprompt`); en iPhone, los pasos de Safari; dentro de WhatsApp,
   del correo, etc., cómo abrirla en el navegador primero. Se oculta si ya está instalada; «Ahora no» usa `prefs.avisoApp`.
 - Test nuevo (Android con botón, iPhone, WhatsApp). 81 bien.
+
+## 2026-10-12 · Portugués, turco y chino (traducir y añadir patrones)
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-12-antes-idiomas.html`.
+- Idiomas nuevos en «Traducir un patrón» y en «Añadir un patrón» (PDF, foto o texto pegado): portugués (Brasil y
+  Portugal), turco y chino simplificado, además de ruso e inglés (EE. UU. y Reino Unido). `idiomaDe` los reconoce;
+  `NOMBRE_IDIOMA`, `POR_INGLES` (ru/pt/tr/zh pasan por el inglés).
+- Reglas: `GLOSARIO_PT`, `GLOSARIO_TR` (sufijos turcos, «SH içine 6 sı» → «6 pb en el anillo mágico», colores),
+  `GLOSARIO_ZH` (X/V/A/T, 第N圈, 环起, 塞棉…); `glosarioDe`. `cabeceraVuelta`, `piezaDe`, `SECCIONES` y
+  `tienePuntosOrig` con los tres idiomas. `normalizarChino` (letras de ancho completo, espacios entre cifras y chino).
+  Marcas con letras chinas sin `\b`. Al importar, las vueltas pasan a «Vuelta N:» y la leyenda a «X = …».
+- Traductor: modelos pt→en (26 MB), tr→en (15 MB) y zh→en (38 MB, tres trozos) de Mozilla. Solo se carga un idioma a
+  la vez (el worker se reinicia al cambiar). Descarga la primera vez: inglés 31 MB, turco 46, ruso y portugués 56,
+  chino 69. La caché del service worker ya no cambia al añadir modelos (la huella sale solo del código).
+- Lector de fotos: `por`, `tur`, `chi_sim` (ocr/). Se lee con español+inglés+ruso y, si parece otro idioma
+  (`otroIdiomaLectura`), se vuelve a leer con el suyo. `arreglarLecturaTurca` («1s1» → «1 sı»), `arreglarNumerosVuelta`
+  («R4-RS:» → «R4-R8:», «RO:» → «R9:» mirando la vuelta anterior y la siguiente), espacios entre letras chinas fuera.
+- PDF: `lib/cmaps/` de pdf.js para PDF chinos. Letras con latín extendido (ğ ş ı); İ sale como I. El texto chino que
+  queda en el PDF traducido se dibuja como imagen (`textoComoImagen`).
+- Sin cambios en los datos guardados.
+- Tests: 3 nuevos (reglas e importar en pt/tr/zh, PDF traducido en los tres, chino escaneado). 84 bien.
