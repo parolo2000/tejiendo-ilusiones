@@ -26,6 +26,8 @@ const LEGADO = {
 
 let fallos = 0, pasados = 0;
 async function prueba(nombre, fn) {
+  // SOLO="chino|turco" para pasar solo algunas pruebas
+  if (process.env.SOLO && !new RegExp(process.env.SOLO, "i").test(nombre)) return;
   try { await fn(); pasados++; console.log("  ✓ " + nombre); }
   catch (e) { fallos++; console.log("  ✗ " + nombre + "\n    " + (e.stack || e).toString().split("\n").slice(0, 4).join("\n    ")); }
 }
@@ -1704,9 +1706,109 @@ Fasten off and weave in ends.`;
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });
+  // Portugués (de Brasil), turco y chino: los mismos puntos escritos como los escribe cada país
+  const PT = ["Coelhinho", "Materiais", "- Agulha de crochê 2,5 mm", "Cabeça", "C1: 6 pb no anel mágico (6)", "C2: 6 aum (12)", "C3: (1 pb, 1 aum) x 6 (18)", "C4 a C8: 18 pb (18)",
+    "Coloque os olhos de segurança entre a carreira 5 e a 6, com 6 pontos de distância.", "C9: (1 pb, 1 dim) x 6 (12)", "C10: 6 dim (6)", "Encha a cabeça com fibra siliconada. Arremate e feche o buraco."];
+  const TR = ["Ayıcık", "Malzemeler", "- 2,5 mm tığ", "Kafa", "1. tur: SH içine 6 sı (6)", "2. tur: 6 art (12)", "3. tur: (1 sı, 1 art) x 6 (18)", "4-8. tur: her ilmeğe 1 sı (18)",
+    "Güvenlik gözlerini 5. ve 6. turlar arasına takın.", "9. tur: (1 sı, 1 az) x 6 (12)", "10. tur: 6 az (6)", "Kafayı elyaf ile sıkıca doldurun. İpi kesin ve kalan ilmekleri toplayarak kapatın."];
+  const ZH = ["小熊", "材料", "- 2.5毫米钩针", "头部", "R1：环起6X（6）", "R2：6V（12）", "R3：（1X，1V）*6（18）", "R4-R8：18X（18）",
+    "在第5圈和第6圈之间安装安全眼睛，两眼之间相隔6针。", "R9：（1X，1A）*6（12）", "R10：6A（6）", "开始塞棉，要塞得结实一些。断线，留一段线收口。"];
+  const VUELTAS_3 = ["Vuelta 1: 6 pb en el anillo mágico (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: (1 pb, 1 aum) x 6 (18)", "Vueltas 4 a 8: 18 pb (18)", "Vuelta 9: (1 pb, 1 dism) x 6 (12)", "Vuelta 10: 6 dism (6)"];
+  // (el turco dice «her ilmeğe 1 sı»: un punto bajo en cada punto)
+  const vueltasDe = k => k === "tr" ? VUELTAS_3.map(v => v.replace("18 pb (18)", "1 pb en cada punto (18)")) : VUELTAS_3;
+  await prueba("portugués, turco y chino: se reconocen, y las vueltas y los puntos salen bien con reglas (también al añadir el patrón)", async () => {
+    const page = await paginaWeb();
+    const r = await page.evaluate(async ([PT, TR, ZH]) => {
+      const out = {};
+      for (const [k, ls] of [["pt", PT], ["tr", TR], ["zh", ZH]]) {
+        const texto = ls.join("\n"), idioma = idiomaDe(texto);
+        const bs = await traducirBloques(bloquesDeTexto(ls, idioma), { idioma, traductor: null });
+        const imp = importarTexto(texto, null, true);
+        out[k] = { idioma, vueltas: bs.filter(b => b.tipo === "vuelta").map(b => b.t), revisarVueltas: bs.filter(b => b.tipo === "vuelta" && b.revisar).length,
+          partes: bs.filter(b => b.tipo === "parte").map(b => b.t), leyenda: bs.filter(b => b.tipo === "leyenda").map(b => b.t),
+          imp: imp.pasos.filter(p => /^Vueltas? \d/.test(p)), cuadran: imp.revision.filter(x => x.estado === "cuadra").length, otro: imp.otroIdioma, gan: imp.ganchillo };
+      }
+      return out;
+    }, [PT, TR, ZH]);
+    for (const k of ["pt", "tr", "zh"]) {
+      assert.equal(r[k].idioma, k);
+      assert.deepEqual(r[k].vueltas, vueltasDe(k), k);
+      assert.equal(r[k].revisarVueltas, 0, k + ": las vueltas no hay que revisarlas");
+      assert.ok(r[k].partes.includes("Cabeza"), k + " " + JSON.stringify(r[k].partes));
+      assert.ok(r[k].leyenda.some(l => /^pb – punto bajo/.test(l)), k + ": pone la leyenda");
+      assert.deepEqual(r[k].imp.map(p => p.replace(/^Vuelta (\d+): \*(.+)\* repetir (\d+) veces/, "Vuelta $1: ($2) x $3")), vueltasDe(k), k + " al añadirlo a Mis patrones");
+      assert.equal(r[k].cuadran, 6, k + ": todas las vueltas cuadran");
+      assert.equal(r[k].otro, k); assert.equal(r[k].gan, "2,5 mm", k);
+    }
+    // No confunde un patrón en español o en inglés con portugués
+    assert.deepEqual(await page.evaluate(() => [idiomaDe("Vuelta 1: 6 pb en el anillo mágico (6)\nVuelta 2: 6 aum (12)\nRemata y esconde las hebras con la aguja lanera de la labor. Cose la cabeza al cuerpo con la hebra larga"), idiomaDe("Round 1: 6 sc in the magic ring (6)\nRound 2: inc in each st around (12)\nFasten off and weave in the ends with your hook")]), ["es", "en"]);
+    // Turco con las letras chinas (X, V, A) y lo que confunde el lector de fotos («1s1» es «1 sı»)
+    const tr2 = await page.evaluate(async () => (await traducirBloques(bloquesDeTexto(["1. tur: SH içine 6 X (6)", "2. tur: 6 V (12)", "3. tur: (1 X, 1 V) x 6 (18)", "4. tur: (1s1, Laz) x 6 (12)"], "tr"), { idioma: "tr", traductor: null })).filter(b => b.tipo === "vuelta").map(b => b.t));
+    assert.deepEqual(tr2, ["Vuelta 1: 6 pb en el anillo mágico (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: (1 pb, 1 aum) x 6 (18)", "Vuelta 4: (1 pb, 1 dism) x 6 (12)"]);
+    // En «Añadir un patrón» avisa del idioma
+    await page.evaluate(() => go({ name: "importar" }));
+    await page.locator("#im-texto").fill(PT.join("\n"));
+    await page.getByRole("button", { name: "Leer el patrón" }).tap();
+    assert.match(await page.locator(".note:not(.leyendo)").first().textContent(), /Está en portugués y lo he pasado a español/);
+    assert.equal(await page.locator("ol.importados li").count(), 7, "la parte y sus 6 vueltas");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  const fxI = await browser.newPage();
+  const hojaDe = ls => `<style>body{font:13px Arial;margin:36px} h1{font-size:26px} h3{margin:14px 0 4px} p{margin:0 0 4px}</style><h1>${ls[0]}</h1>` + ls.slice(1).map(l => /^(Materiais|Malzemeler|材料|Cabeça|Kafa|头部)$/.test(l) ? `<h3>${l}</h3>` : `<p>${l}</p>`).join("");
+  const pdfsIdiomas = {};
+  for (const [k, ls] of [["pt", PT], ["tr", TR], ["zh", ZH]]) { await fxI.setContent(hojaDe(ls)); pdfsIdiomas[k] = await fxI.pdf({ format: "A4" }); }
+  await fxI.setViewportSize({ width: 800, height: 1130 }); await fxI.setContent(hojaDe(ZH).replace("13px Arial", "17px Arial"));
+  const hojaChina = (await fxI.screenshot()).toString("base64");
+  await fxI.setContent(`<style>body{margin:0}</style><img src="data:image/png;base64,${hojaChina}" style="width:100%">`);
+  const pdfChinoEscaneado = await fxI.pdf({ format: "A4", margin: { top: 0, bottom: 0, left: 0, right: 0 } });
+  await fxI.close();
+  await prueba("traducir PDF en portugués, turco y chino con el traductor de Mozilla, y descargar el PDF en español", async () => {
+    const page = await paginaWeb({ acceptDownloads: true });
+    for (const [k, nombre, archivo] of [["pt", "portugués", "coelhinho.pdf"], ["tr", "turco", "ayicik.pdf"], ["zh", "chino", "xiaoxiong.pdf"]]) {
+      await page.evaluate(() => go({ name: "traducir" }));
+      await subir(page, "#tr-pdf", archivo, "application/pdf", pdfsIdiomas[k]);
+      await esperarTraduccion(page);
+      const tr = await page.evaluate(() => ({ idioma: traduccion.idioma, sinMotor: traduccion.sinMotor, bloques: traduccion.bloques.map(b => ({ tipo: b.tipo, t: b.t, revisar: !!b.revisar })) }));
+      assert.equal(tr.idioma, k); assert.equal(tr.sinMotor, undefined, k + ": el traductor funciona");
+      assert.deepEqual(tr.bloques.filter(b => b.tipo === "vuelta").map(b => b.t), vueltasDe(k), k);
+      const textos = tr.bloques.filter(b => b.tipo === "texto").map(b => b.t);
+      assert.ok(textos.some(t => /ojos de seguridad/i.test(t) && /5 y 6/.test(t)), k + ": " + textos.join(" | "));
+      assert.ok(textos.some(t => /rellen/i.test(t)), k + ": " + textos.join(" | "));
+      assert.ok(tr.bloques.every(b => !/[㐀-鿿]/.test(b.t)), "no queda nada en chino");
+      await page.getByText("✓ Traducido del " + nombre + " al español").waitFor();
+      const espera = page.waitForEvent("download");
+      await page.getByRole("button", { name: /Descargar el PDF/ }).tap();
+      const d = await espera, destino = path.join(CAPTURAS, "traducido-" + k + ".pdf");
+      await d.saveAs(destino);
+      const leido = await page.evaluate(async a => { const doc = await abrirPDF(new Uint8Array(a)); const t = await textoDePDF(doc); doc.destroy(); return t; }, [...fs.readFileSync(destino)]);
+      assert.match(leido, new RegExp("Traducido del " + nombre + " al español"));
+      assert.match(leido, /Vuelta 3:\s*\(1 pb, 1 aum\) x 6 \(18\)/);
+    }
+    // Una frase que queda en chino (para revisar) va en el PDF como imagen, no como letras perdidas
+    const pdfConChino = await page.evaluate(async () => {
+      const b = await hacerPDFTraducido({ idioma: "zh", archivo: "x.pdf", tituloArchivo: "小熊", originales: [], bloques: [{ tipo: "titulo", t: "小熊" }, { tipo: "texto", t: "Cose las orejas.", original: "把耳朵缝在头顶。", revisar: true }] }, false);
+      const doc = await abrirPDF(new Uint8Array(await b.arrayBuffer())); const p1 = await doc.getPage(1); const n = (await cajasDeImagenes(p1)).cajas.length; const t = await textoDePDF(doc); doc.destroy(); return { n, t };
+    });
+    assert.ok(pdfConChino.n >= 1, "el original chino va como imagen");
+    assert.match(pdfConChino.t, /Patrón traducido|Cose las orejas/);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("traducir un PDF chino escaneado: el lector de fotos se da cuenta de que es chino y lo lee con letras chinas", async () => {
+    const page = await paginaWeb();
+    await page.evaluate(() => go({ name: "traducir" }));
+    await subir(page, "#tr-pdf", "xiaoxiong-escaneado.pdf", "application/pdf", pdfChinoEscaneado);
+    await esperarTraduccion(page);
+    const tr = await page.evaluate(() => ({ idioma: traduccion.idioma, bloques: traduccion.bloques.map(b => ({ tipo: b.tipo, t: b.t })) }));
+    assert.equal(tr.idioma, "zh");
+    assert.deepEqual(tr.bloques.filter(b => b.tipo === "vuelta").map(b => b.t), VUELTAS_3, JSON.stringify(tr.bloques.map(b => b.t)));
+    assert.deepEqual(page.errores.filter(e => !/Estimating resolution|diacritics|Empty page|Parameter not found/.test(e)), []);
+    await page.context().close();
+  });
   await prueba("se llega a «Traducir un patrón» desde Inicio, Más y Añadir un patrón", async () => {
     const page = await nuevaPagina(browser);
-    for (const [desde, boton] of [["inicio", /Traducir un patrón \(ruso o inglés\)/], ["mas", /Traducir un patrón/], ["importar", /Traducir un patrón/]]) {
+    for (const [desde, boton] of [["inicio", /Traducir un patrón de otro idioma/], ["mas", /Traducir un patrón/], ["importar", /Traducir un patrón/]]) {
       await page.evaluate(n => go({ name: n }), desde);
       await page.getByRole("button", { name: boton }).first().tap();
       assert.equal(await page.evaluate(() => view.name), "traducir", "desde " + desde);

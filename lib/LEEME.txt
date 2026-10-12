@@ -5,9 +5,12 @@ tesseract.min.js                tesseract.js 5.1.1 (Apache-2.0)   = cdn.jsdelivr
 Si cambias de versión, cambia también PDFJS y TESSERACT en tejiendo-ilusiones.html.
 jspdf.umd.min.js                jsPDF 4.2.1 (MIT) = cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/  (para hacer el PDF traducido)
 fuentes/                        letras del PDF traducido, recortadas a las letras que hacen falta (con fontTools):
-                                 atkinson-400/700.ttf  Atkinson Hyperlegible (SIL OFL 1.1), la misma letra de la app
+                                 atkinson-400/700.ttf  Atkinson Hyperlegible (SIL OFL 1.1), la misma letra de la app (latín + latín
+                                                       extendido, para ğ ş ı del turco)
                                  young-serif.ttf       Young Serif (SIL OFL 1.1), la de los títulos de la app
                                  dejavu-cirilico.ttf   DejaVu Sans (licencia libre de Bitstream Vera), con letras rusas
                                                        para enseñar el texto original cuando una frase hay que revisarla
 fflate.min.js                   fflate 0.8.2 (MIT) = cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js  (descomprime el traductor en móviles
                                  antiguos que no traen DecompressionStream)
+cmaps/                          pdfjs-dist 3.11.174 cmaps/ (Apache-2.0 / Adobe, ver cmaps/LICENSE) = cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/
+                                 (para leer PDF con letras chinas). El chino del PDF traducido se dibuja como imagen.

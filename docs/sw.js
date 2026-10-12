@@ -1,10 +1,10 @@
 // Service worker de Tejiendo Ilusiones (lo genera tools/construir-web.cjs; no editar docs/sw.js a mano).
 // La app se guarda en el móvil al instalarla y funciona sin conexión. Los datos de la usuaria no pasan por aquí:
 // siguen en el almacenamiento del navegador.
-const VERSION = "4787ceaebe27";
+const VERSION = "7c07be4dc280";
 const APP = "app-" + VERSION;
-const OCR = "ocr-86e1ac103c70";
-const TRADUCTOR = "traductor-bc9a05036b9c";
+const OCR = "ocr-c859cd14fb45";
+const TRADUCTOR = "traductor-909d7812f973";
 const FUENTES = "fuentes-1";
 const BASE = ["./","index.html","manifest.webmanifest","icono.svg","icono-180.png","icono-192.png","icono-512.png","icono-recortable-512.png","lib/pdf.min.js","lib/pdf.worker.min.js","lib/tesseract.min.js"];
 

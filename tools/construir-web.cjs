@@ -97,16 +97,21 @@ if ("serviceWorker" in navigator) addEventListener("load", () => navigator.servi
 
   copiarCarpeta(path.join(RAIZ, "lib"), path.join(WEB, "lib"), f => f.endsWith(".js"));
   copiarCarpeta(path.join(RAIZ, "lib", "fuentes"), path.join(WEB, "lib", "fuentes"), f => f.endsWith(".ttf"));
+  // Tablas de letras de pdf.js para leer PDF en chino (y otros con letras CJK)
+  copiarCarpeta(path.join(RAIZ, "lib", "cmaps"), path.join(WEB, "lib", "cmaps"), f => f.endsWith(".bcmap"));
   copiarCarpeta(path.join(RAIZ, "ocr"), path.join(WEB, "ocr"), f => !f.endsWith(".txt"));
-  // El traductor de «Traducir un patrón» (unos 56 MB): se guarda en el móvil la primera vez que se usa
+  // El traductor de «Traducir un patrón»: cada idioma se guarda en el móvil la primera vez que se usa (de 31 MB el inglés a 70 MB el chino)
   copiarCarpeta(path.join(RAIZ, "traductor"), path.join(WEB, "traductor"), f => !f.endsWith(".txt"));
   fs.writeFileSync(path.join(WEB, ".nojekyll"), "");
 
-  // Lo que se guarda al instalar (pequeño). El lector de fotos (13 MB) y el traductor (56 MB) se guardan la primera vez que se usan.
+  // Lo que se guarda al instalar (pequeño). El lector de fotos y el traductor se guardan la primera vez que se usan.
   const BASE = ["index.html", "manifest.webmanifest", "icono.svg", "icono-180.png", "icono-192.png", "icono-512.png", "icono-recortable-512.png",
     "lib/pdf.min.js", "lib/pdf.worker.min.js", "lib/tesseract.min.js"];
-  const OCR = fs.readdirSync(path.join(WEB, "ocr")).map(f => "ocr/" + f).sort();
-  const TRADUCTOR = fs.readdirSync(path.join(WEB, "traductor")).map(f => "traductor/" + f).sort();
+  // La versión de esas cachés sale solo del código (no de los idiomas): así, al añadir un idioma nuevo, nadie vuelve a
+  // descargar los que ya tenía. Si algún día cambia un modelo o un idioma del lector, ponle otro nombre al archivo.
+  const esIdioma = f => /\.traineddata\.gz$|-(modelo-\d+|lex|vocab)\.bin$/.test(f);
+  const OCR = fs.readdirSync(path.join(WEB, "ocr")).filter(f => !esIdioma(f)).map(f => "ocr/" + f).sort();
+  const TRADUCTOR = fs.readdirSync(path.join(WEB, "traductor")).filter(f => !esIdioma(f)).map(f => "traductor/" + f).sort();
   const sw = fs.readFileSync(path.join(__dirname, "sw-plantilla.js"), "utf8")
     .replace("__VERSION__", huella(BASE))
     .replace("__VERSION_OCR__", huella(OCR))

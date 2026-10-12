@@ -5,6 +5,8 @@ worker.min.js                      tesseract.js 5.1.1 (Apache-2.0)
 tesseract-core-simd-lstm.wasm.js   tesseract.js-core 5.1.1 (Apache-2.0), móviles modernos
 tesseract-core-lstm.wasm.js        tesseract.js-core 5.1.1 (Apache-2.0), móviles sin SIMD
 spa.traineddata.gz, eng.traineddata.gz, rus.traineddata.gz   tessdata 4.0.0_best_int (Apache-2.0), español, inglés y ruso
+por.traineddata.gz, tur.traineddata.gz, chi_sim.traineddata.gz   igual: portugués, turco y chino simplificado
+    (se leen primero con español+inglés+ruso; si la página parece de otro idioma, se vuelve a leer con el suyo)
 
-Para actualizar: npm i tesseract.js@<versión> tesseract.js-core@<versión> @tesseract.js-data/spa @tesseract.js-data/eng @tesseract.js-data/rus
+Para actualizar: npm i tesseract.js@<versión> tesseract.js-core@<versión> @tesseract.js-data/spa @tesseract.js-data/eng @tesseract.js-data/rus @tesseract.js-data/por @tesseract.js-data/tur @tesseract.js-data/chi_sim
 y copiar los mismos archivos. Cambia también TESSERACT en tejiendo-ilusiones.html a la misma versión.
