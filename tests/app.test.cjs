@@ -1829,6 +1829,63 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  console.log("Biblioteca de PDF");
+  await prueba("biblioteca: mete muchos PDF de una vez, sin repetidos, y se buscan en cualquier idioma", async () => {
+    const DATOS_ANTES = { patrones: [{ id: "m-1", titulo: "Mi bufanda", pasos: ["Vuelta 1: 20 pb"] }], progreso: {}, graficos: [], lanas: [], v: 3, t: 1 };
+    const page = await paginaWeb({}, DATOS_ANTES);
+    await page.evaluate(() => go({ name: "mas" }));
+    await page.getByRole("button", { name: /Biblioteca de PDF/ }).tap();
+    await page.getByText("Aún no hay ningún PDF").waitFor();
+    // Varios PDF elegidos en el móvil: uno repetido con otro nombre, uno escaneado y uno que no es un PDF de verdad
+    const archivos = [
+      { name: "Posavasos.pdf", mimeType: "application/pdf", buffer: pdfTexto },
+      { name: "copia de posavasos.pdf", mimeType: "application/pdf", buffer: pdfTexto },
+      { name: "Zayka Mia.pdf", mimeType: "application/pdf", buffer: pdfRuso },
+      { name: "Granny coaster UK.pdf", mimeType: "application/pdf", buffer: pdfIngles },
+      { name: "Bola escaneada.pdf", mimeType: "application/pdf", buffer: pdfEscaneado },
+      { name: "roto.pdf", mimeType: "application/pdf", buffer: Buffer.from("esto no es un pdf") }];
+    await page.setInputFiles("#bib-pdfs", archivos);
+    await page.waitForFunction(() => bib.trabajo && bib.trabajo.fin, null, { timeout: 120000 });
+    const t = await page.evaluate(() => ({ ...bib.trabajo, fichas: bib.fichas.map(f => ({ t: f.titulo, i: f.idioma, temas: f.temas, esc: f.escaneado, err: f.error || "" })) }));
+    assert.equal(t.total, 6); assert.equal(t.nuevos, 5); assert.equal(t.repetidos, 1, "el posavasos repetido no se mete dos veces"); assert.equal(t.fallos, 1);
+    const de = n => t.fichas.find(f => f.t === n) || assert.fail(n + " " + JSON.stringify(t.fichas));
+    assert.equal(de("Zayka Mia").i, "ru"); assert.ok(de("Zayka Mia").temas.includes("conejo"), JSON.stringify(de("Zayka Mia")));
+    assert.equal(de("Granny coaster UK").i, "en"); assert.ok(de("Granny coaster UK").temas.includes("granny"));
+    assert.equal(de("Posavasos de colores").i, "es", "un nombre de archivo de una palabra: el título sale de la hoja"); assert.equal(de("Bola escaneada").esc, true); assert.equal(de("roto").err, "dañado");
+    await page.getByText("5 patrones en la biblioteca").waitFor();
+    // Buscar «conejo» encuentra el ruso («зайка»), y el filtro de idioma
+    await page.locator("#bib-buscar").fill("conejo");
+    await page.getByText("1 de 5 patrones").waitFor();
+    assert.equal(await page.locator(".plist .pitem h3").first().textContent(), "Zayka Mia");
+    await page.locator("#bib-buscar").fill("");
+    await page.getByRole("button", { name: "Inglés", exact: true }).tap();
+    await page.getByText("1 de 5 patrones").waitFor();
+    await page.getByRole("button", { name: "Inglés", exact: true }).tap();
+    await page.screenshot({ path: path.join(CAPTURAS, "biblioteca.png"), fullPage: true });
+    // Abrir uno y pasarlo a Mis patrones (el PDF está guardado en el móvil, no hace falta elegirlo otra vez)
+    await page.locator(".plist .pitem", { hasText: "Posavasos" }).tap();
+    await page.getByRole("button", { name: "Añadir a Mis patrones" }).tap();
+    await page.waitForFunction(() => view.name === "patron" && state.patrones.length === 2, null, { timeout: 60000 });
+    const p = await page.evaluate(() => state.patrones[0]);
+    assert.equal(p.titulo, "Posavasos de colores"); assert.ok(p.pasos.some(x => /^Vuelta 4: \*2 pb, 1 aum\*/.test(x)), JSON.stringify(p.pasos));
+    assert.equal(await page.evaluate(() => state.patrones[1].titulo), "Mi bufanda", "lo de antes sigue ahí");
+    // Uno en ruso: «Traducir al español» abre el traductor con ese PDF
+    await page.evaluate(() => go({ name: "biblioteca" }));
+    await page.locator(".plist .pitem", { hasText: "Zayka Mia" }).tap();
+    await page.getByRole("button", { name: "Traducir al español" }).tap();
+    await page.waitForFunction(() => view.name === "traducir" && traduccion && traduccion.archivo === "Zayka Mia.pdf", null, { timeout: 120000 });
+    // Las fichas siguen al volver a abrir la app; volver a elegir los mismos no los repite
+    await page.reload();
+    await page.evaluate(() => go({ name: "biblioteca" }));
+    await page.getByText("5 patrones en la biblioteca").waitFor();
+    await page.setInputFiles("#bib-pdfs", archivos.slice(0, 3));
+    await page.waitForFunction(() => bib.trabajo && bib.trabajo.fin, null, { timeout: 60000 });
+    assert.equal(await page.evaluate(() => bib.trabajo.yaEstaban + bib.trabajo.repetidos), 3);
+    assert.equal(await page.evaluate(() => bib.fichas.length), 5);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);

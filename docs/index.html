@@ -319,6 +319,7 @@ ol.steps li.parte b{display:none}
 .color-lana{display:flex;gap:.45rem;align-items:center}
 .color-lana i{width:1.1rem;height:1.1rem;border-radius:50%;border:1px solid var(--line);flex:none}
 .partes-sel{display:flex;flex-direction:column;gap:.35rem;margin-top:.6rem}
+.pitem .meta{display:flex;gap:.35rem;flex-wrap:wrap}
 .chip-parte{min-height:2.6rem;padding:.3rem .8rem;border-radius:999px;gap:.4rem;font-size:.9rem}
 .chip-parte i{width:.9rem;height:.9rem;border-radius:50%;border:1px solid rgba(0,0,0,.2)}
 .chip-parte.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -811,7 +812,7 @@ addEventListener("popstate", e => {
 });
 marcar(view, true);
 const TABS = [["inicio","Inicio","casa"],["patrones","Patrones","libro"],["labores","Labores","corazon"],["mas","Más","mas"]];
-const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", traducir:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad", clave:"comunidad", avisos:"comunidad"};
+const TAB_DE = {recibido:"patrones", importar:"patrones", patron:"patrones", tejer:"patrones", sofa:"patrones", editar:"patrones", graficos:"mas", grafico:"mas", traducir:"mas", biblioteca:"mas", bibficha:"mas", foto:"mas", lana:"mas", lanas:"mas", herramientas:"mas", contador:"mas", ayuda:"mas", copia:"mas", publicacion:"comunidad", perfil:"comunidad", publicar:"comunidad", privacidad:"comunidad", clave:"comunidad", avisos:"comunidad"};
 function pintarTabs(){
   const actual = TAB_DE[view.name] || view.name;
   const tabs = nubeActiva() ? [...TABS.slice(0,3), ["comunidad","Gente","gente"], TABS[3]] : TABS;
@@ -3277,7 +3278,7 @@ const PDFJS = window.TI_LOCAL ? "lib/" : "https://cdn.jsdelivr.net/npm/pdfjs-dis
 const TESSERACT = window.TI_LOCAL ? "lib/tesseract.min.js" : "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 // Los datos para leer letras (unos 9 MB) se publican junto a la app en ocr/ y se guardan en el móvil tras el primer uso
 const OCR_DIR = new URL("ocr/", location.href).href;
-async function abrirPDF(datos){
+async function abrirPDF(datos, preguntar=true){
   await cargarScript(PDFJS+"pdf.min.js");
   await cargarScript(PDFJS+"pdf.worker.min.js"); // sin worker aparte: corre en la página
   // isEvalSupported:false evita ejecutar código de las fuentes del PDF (CVE-2024-4367)
@@ -3289,7 +3290,7 @@ async function abrirPDF(datos){
       return await window.pdfjsLib.getDocument({data:datos.slice(), password, isEvalSupported:false, disableFontFace:true, useSystemFonts:false,
         cMapUrl: window.TI_LOCAL ? new URL("lib/cmaps/", location.href).href : "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/", cMapPacked:true}).promise;
     } catch(e){
-      if(!e || e.name!=="PasswordException" || intento>=3) throw e;
+      if(!e || e.name!=="PasswordException" || intento>=3 || !preguntar) throw e;
       let escrita = null;
       try{ escrita = window.prompt(intento ? "Esa contraseña no vale. Prueba otra vez:" : "Este PDF tiene contraseña. Escríbela para abrirlo:"); }catch(e2){}
       if(escrita==null || escrita==="") throw e;
@@ -3622,6 +3623,37 @@ function arreglarLectura(t){
     .replace(/(^|\n)(\s*R)[lI|](?=\s*[:.)\-–])/g, "$1$21")
     .replace(/[ \t]+\n/g, "\n");
 }
+// Lee un PDF para «Añadir un patrón» (y la Biblioteca): el texto con su maquetación; las hojas escaneadas, como una foto
+const conFoto = fn => async ()=>{ try{ return await fn(); } catch(e){ const err = e instanceof Error ? e : new Error(String(e)); err.foto = true; throw err; } };
+async function leerPDFParaImportar(f, avisar){
+  avisar("Abriendo «"+f.name+"»…", null);
+  const doc = await abrirPDF(new Uint8Array(await f.arrayBuffer()));
+  const crudas = (await paginasDePDF(doc, avisar)).map(p=>p.join("\n").trim());
+  const paginas = crudas.map(p=>p.split("\n").map(juntarEspaciado).join("\n"));
+  const texto = paginas.join("\n\n").trim();
+  const vueltas = t => importarTexto(t, null, true).pasos.filter(l=>RX_VUELTA.test(l)).length;
+  if(textoLegible(texto)){
+    // Hojas sin texto dentro de un PDF con texto: suelen ser el patrón escaneado (o fotos). Si con el texto no
+    // salen vueltas, esas hojas se leen como una foto y se ponen en su sitio. Las hojas con las letras muy
+    // separadas también se leen como foto: así se ve dónde acaba cada palabra.
+    const espaciadas = crudas.map((p, i)=>paginaEspaciada(p) ? i+1 : 0).filter(Boolean);
+    const vacias = paginas.map((p, i)=>p.replace(/\s/g,"").length < 30 ? i+1 : 0).filter(Boolean);
+    const sinTexto = [...espaciadas, ...(vacias.length && vueltas(texto) < 3 ? vacias : [])].sort((a,b)=>a-b);
+    if(!sinTexto.length){ doc.destroy(); return texto; }
+    avisar(espaciadas.length && !vacias.length ? "Este PDF tiene las letras muy separadas. Lo leo como una foto…" : "Algunas hojas son imágenes escaneadas. Las leo como una foto…", null);
+    const imgs = paginasComoImagen(doc, 20, sinTexto);
+    let leidas = [];
+    try{ leidas = (await leerImagenes(imgs, avisar, true)); }catch(e){ return texto; } finally { doc.destroy(); }
+    sinTexto.slice(0, 20).forEach((n, i)=>{ paginas[n-1] = leidas[i] || paginas[n-1]; });
+    return paginas.join("\n\n").trim();
+  }
+  // PDF escaneado (no tiene texto, solo imágenes de las páginas) o con letras que no se pueden sacar
+  avisar(texto.replace(/\s/g,"").length >= 30 ? "No puedo sacar las letras de este PDF. Lo leo como una foto…" : "Este PDF es una imagen escaneada. Lo leo como una foto…", null);
+  const imgs = paginasComoImagen(doc, 20);
+  const leido = await conFoto(()=>leerImagenes(imgs, avisar))().finally(()=>doc.destroy());
+  if(!leido.trim()) throw Object.assign(new Error("vacio"), {foto:true});
+  return leido;
+}
 const AYUDA_FOTO = "Otra forma: en muchos móviles puedes abrir la foto, mantener el dedo sobre el texto, copiarlo y pegarlo aquí.";
 
 let importarBorrador = "", importarUK = null, importarSoloVueltas = true, importarArreglos = {}, importarArchivo = "";
@@ -3719,37 +3751,9 @@ VISTAS.importar = V => {
       else fallo("No he podido leer este PDF.", "Otra forma: haz una captura de pantalla de la hoja del patrón y usa «Foto del patrón».");
     } finally { botones.forEach(b=>b.disabled=false); }
   }
-  const conFoto = fn => async ()=>{ try{ return await fn(); } catch(e){ const err = e instanceof Error ? e : new Error(String(e)); err.foto = true; throw err; } };
   const elegirPDF = h("input",{type:"file", accept:"application/pdf,.pdf", hidden:true, id:"im-pdf", onchange:e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return; importarArchivo = f.name;
-    traer(async ()=>{
-      avisar("Abriendo «"+f.name+"»…", null);
-      const doc = await abrirPDF(new Uint8Array(await f.arrayBuffer()));
-      const crudas = (await paginasDePDF(doc, avisar)).map(p=>p.join("\n").trim());
-      const paginas = crudas.map(p=>p.split("\n").map(juntarEspaciado).join("\n"));
-      const texto = paginas.join("\n\n").trim();
-      const vueltas = t => importarTexto(t, null, true).pasos.filter(l=>RX_VUELTA.test(l)).length;
-      if(textoLegible(texto)){
-        // Hojas sin texto dentro de un PDF con texto: suelen ser el patrón escaneado (o fotos). Si con el texto no
-        // salen vueltas, esas hojas se leen como una foto y se ponen en su sitio. Las hojas con las letras muy
-        // separadas también se leen como foto: así se ve dónde acaba cada palabra.
-        const espaciadas = crudas.map((p, i)=>paginaEspaciada(p) ? i+1 : 0).filter(Boolean);
-        const vacias = paginas.map((p, i)=>p.replace(/\s/g,"").length < 30 ? i+1 : 0).filter(Boolean);
-        const sinTexto = [...espaciadas, ...(vacias.length && vueltas(texto) < 3 ? vacias : [])].sort((a,b)=>a-b);
-        if(!sinTexto.length){ doc.destroy(); return texto; }
-        avisar(espaciadas.length && !vacias.length ? "Este PDF tiene las letras muy separadas. Lo leo como una foto…" : "Algunas hojas son imágenes escaneadas. Las leo como una foto…", null);
-        const imgs = paginasComoImagen(doc, 20, sinTexto);
-        let leidas = [];
-        try{ leidas = (await leerImagenes(imgs, avisar, true)); }catch(e){ return texto; } finally { doc.destroy(); }
-        sinTexto.slice(0, 20).forEach((n, i)=>{ paginas[n-1] = leidas[i] || paginas[n-1]; });
-        return paginas.join("\n\n").trim();
-      }
-      // PDF escaneado (no tiene texto, solo imágenes de las páginas) o con letras que no se pueden sacar
-      avisar(texto.replace(/\s/g,"").length >= 30 ? "No puedo sacar las letras de este PDF. Lo leo como una foto…" : "Este PDF es una imagen escaneada. Lo leo como una foto…", null);
-      const imgs = paginasComoImagen(doc, 20);
-      const leido = await conFoto(()=>leerImagenes(imgs, avisar))().finally(()=>doc.destroy());
-      if(!leido.trim()) throw Object.assign(new Error("vacio"), {foto:true});
-      return leido;
-    }); }});
+    traer(()=>leerPDFParaImportar(f, avisar));
+  }});
   const elegirFoto = h("input",{type:"file", accept:"image/*", hidden:true, id:"im-foto", onchange:e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return; importarArchivo = f.name;
     traer(conFoto(async ()=>{
       avisar("Preparando la foto…", null);
@@ -3761,7 +3765,8 @@ VISTAS.importar = V => {
   V.append(
     volver("Patrones", {name:"patrones"}),
     h("div",{class:"page-title"}, h("h1",{},"Añadir un patrón"), h("p",{class:"muted"},"Tráelo de un PDF, de una foto o pegando el texto. Lo separo en pasos y te aviso de lo que no cuadra. Entiende español, inglés, ruso, portugués, turco y chino."),
-      h("p",{}, h("button",{class:"ghost", onclick:()=>go({name:"traducir"})}, icono("traducir",20), "¿Lo quieres traducido en un PDF? Traducir un patrón"))),
+      h("p",{}, h("button",{class:"ghost", onclick:()=>go({name:"traducir"})}, icono("traducir",20), "¿Lo quieres traducido en un PDF? Traducir un patrón")),
+      h("p",{}, h("button",{class:"ghost", onclick:()=>go({name:"biblioteca"})}, icono("libro",20), "¿Tienes muchos PDF? Mételos todos en la Biblioteca"))),
     h("div",{class:"section"},
       estado,
       h("div",{class:"actions"},
@@ -5289,6 +5294,356 @@ VISTAS.traducir = V => {
     h("div",{class:"section"}, res)
   );
   pintar();
+  // Viene de la Biblioteca con un PDF ya elegido
+  if(traducirPendiente){ const a = traducirPendiente; traducirPendiente = null; empezar(a); }
+};
+
+// ---------- Biblioteca: miles de PDF de patrones ----------
+// La app recorre una carpeta del ordenador (o los PDF que se elijan en el móvil) y de cada PDF guarda una ficha:
+// título, idioma, número de hojas, una miniatura de la primera hoja y de qué es (conejo, manta, gorro…). Así se puede
+// buscar entre miles. El patrón completo (y la traducción) se hace al abrir uno. Todo se queda en el aparato.
+// Las fichas van en IndexedDB («ti-biblioteca»), aparte de los datos de siempre (localStorage), que no se tocan.
+// En el ordenador se guarda el acceso a la carpeta (Chrome y Edge) para volver a abrir cada PDF; en el móvil se
+// guarda una copia del PDF elegido.
+const BIB_DB = "ti-biblioteca";
+let bibDB = null;
+function bibAbrir(){
+  if(bibDB) return bibDB;
+  bibDB = new Promise((ok, mal) => {
+    let r; try{ r = indexedDB.open(BIB_DB, 1); }catch(e){ return mal(e); }
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      const f = db.createObjectStore("fichas", {keyPath:"id"}); f.createIndex("huella", "huella", {unique:false});
+      db.createObjectStore("miniaturas"); db.createObjectStore("archivos"); db.createObjectStore("carpetas");
+    };
+    r.onsuccess = () => ok(r.result); r.onerror = () => { bibDB = null; mal(r.error); };
+  });
+  return bibDB;
+}
+async function bibTx(almacenes, modo, fn){
+  const db = await bibAbrir();
+  return new Promise((ok, mal) => {
+    const tx = db.transaction(almacenes, modo); let res;
+    Promise.resolve(fn(...[].concat(almacenes).map(a => tx.objectStore(a)))).then(v => { res = v; });
+    tx.oncomplete = () => ok(res); tx.onerror = () => mal(tx.error); tx.onabort = () => mal(tx.error || new Error("abort"));
+  });
+}
+const pedir = r => new Promise((ok, mal) => { r.onsuccess = () => ok(r.result); r.onerror = () => mal(r.error); });
+const bibGet = (almacen, k) => bibTx(almacen, "readonly", a => pedir(a.get(k)));
+async function bibTodas(){ return (await bibTx("fichas", "readonly", a => pedir(a.getAll()))) || []; }
+
+// De qué es el patrón: palabras en español, inglés, ruso, portugués, turco y chino. Sirve para las etiquetas y para
+// que al buscar «conejo» salgan también «bunny», «кролик», «coelho»…
+const BIB_TEMAS = [
+  ["amigurumi", "amigurumi|muñeco|juguete|toy|plush|stuffed|игрушк|амигуруми|brinquedo|pelúcia|oyuncak|玩偶|公仔"],
+  ["conejo", "conejo|conejito|bunny|rabbit|кролик|зайк|заяц|зайчик|coelh|tavşan|兔"],
+  ["oso", "oso|osito|bear|teddy|медвед|мишк|urso|ursinho|ayı|ayıcık|熊"],
+  ["gato", "gato|gatito|kitty|kitten|cat|кот|кошк|котик|kedi|猫"],
+  ["perro", "perro|perrito|puppy|dog|собак|щен|cachorr|köpek|狗"],
+  ["muñeca", "muñeca|doll|кукл|boneca|bebek|娃娃"],
+  ["pollito", "pollito|pollo|chick|chicken|hen|цыпл|курица|pintinho|galinha|civciv|tavuk|小鸡|鸡"],
+  ["pulpo", "pulpo|octopus|осьминог|polvo|ahtapot|章鱼"],
+  ["elefante", "elefante|elephant|слон|fil|大象"],
+  ["unicornio", "unicornio|unicorn|единорог|unicórnio|unicorn|独角兽"],
+  ["dinosaurio", "dinosaurio|dino|dinosaur|динозавр|dinossauro|dinozor|恐龙"],
+  ["ratón", "ratón|ratoncito|mouse|мыш|rato|ratinho|fare|老鼠"],
+  ["zorro", "zorro|fox|лис|raposa|tilki|狐狸"],
+  ["pato", "pato|patito|duck|утк|утён|ördek|鸭"],
+  ["panda", "panda|панд|熊猫"],
+  ["jirafa", "jirafa|giraffe|жираф|girafa|zürafa|长颈鹿"],
+  ["ballena", "ballena|whale|кит|baleia|balina|鲸"],
+  ["tortuga", "tortuga|turtle|черепах|tartaruga|kaplumbağa|龟"],
+  ["mono", "mono|monkey|обезьян|macaco|maymun|猴"],
+  ["león", "león|lion|лев|львён|leão|aslan|狮"],
+  ["vaca", "vaca|cow|коров|inek|奶牛"],
+  ["cerdo", "cerdo|cerdito|pig|piggy|свин|поросён|porco|porquinho|domuz|猪"],
+  ["oveja", "oveja|sheep|lamb|овц|овеч|барашк|ovelha|koyun|羊"],
+  ["búho", "búho|owl|сова|совён|coruja|baykuş|猫头鹰"],
+  ["pájaro", "pájaro|bird|птиц|pássaro|passarinho|kuş|鸟"],
+  ["abeja", "abeja|bee|пчел|abelha|arı|蜜蜂"],
+  ["mariposa", "mariposa|butterfly|бабочк|borboleta|kelebek|蝴蝶"],
+  ["flor", "flor|flower|цвет[оы]к|цветы|çiçek|花"],
+  ["navidad", "navidad|christmas|xmas|рождеств|новогод|ёлк|natal|noel|yılbaşı|圣诞"],
+  ["manta", "manta|blanket|afghan|плед|одеял|cobertor|battaniye|毯"],
+  ["granny", "granny|бабушкин квадрат|quadrado|kare motif"],
+  ["gorro", "gorro|hat|beanie|cap|шапк|touca|şapka|bere|帽"],
+  ["bufanda", "bufanda|scarf|cowl|шарф|снуд|cachecol|atkı|围巾"],
+  ["bolso", "bolso|bolsa|bag|purse|tote|сумк|çanta|包"],
+  ["chal", "chal|shawl|wrap|шаль|палантин|xale|şal|披肩"],
+  ["jersey", "jersey|sweater|pullover|cardigan|свитер|кофт|джемпер|кардиган|suéter|blusa|casaco|kazak|hırka|毛衣|开衫"],
+  ["calcetines", "calcet|socks|носк|meias|çorap|袜"],
+  ["patucos", "patuco|booties|пинетк|sapatinho|patik|婴儿鞋"],
+  ["vestido", "vestido|dress|плать|elbise|裙"],
+  ["tapete", "tapete|doily|салфетк|toalhinha|dantel|蕾丝垫"],
+  ["alfombra", "alfombra|rug|коврик|halı|地毯"],
+  ["cojín", "cojín|pillow|cushion|подушк|almofada|yastık|抱枕"],
+  ["llavero", "llavero|keychain|keyring|брелок|chaveiro|anahtarlık|挂件|钥匙扣"],
+  ["mandala", "mandala|мандал"],
+  ["bebé", "bebé|baby|детск|малыш|bebê|bebek|宝宝|婴儿"]
+].map(([es, pal]) => ({es, rx: new RegExp("(?:^|[^\\p{L}])(?:"+pal+")", "iu")}));
+const bibTemas = t => BIB_TEMAS.filter(x => x.rx.test(t)).map(x => x.es);
+const bibPlano = t => String(t||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+// Lo que se busca: «conejo» busca también en los otros idiomas
+function bibCoincide(f, q){
+  const palabras = bibPlano(q).split(" ").filter(Boolean);
+  if(!palabras.length) return true;
+  const donde = f.busca;
+  return palabras.every(w => {
+    if(donde.includes(w)) return true;
+    const tema = BIB_TEMAS.find(x => bibPlano(x.es)===w || x.rx.test(" "+w));
+    return tema ? f.temas.includes(tema.es) : false;
+  });
+}
+const bibId = (ruta, tam, mod) => ruta+"|"+tam+"|"+mod;
+// Huella para no meter dos veces el mismo PDF (mismo tamaño y mismo texto de la primera hoja)
+function bibHuella(tam, texto){ let h = 2166136261; const t = tam+"|"+texto.slice(0, 2000); for(let i=0; i<t.length; i++){ h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h>>>0).toString(36)+"-"+tam; }
+
+// Lee la ficha de un PDF: primera hoja (texto y miniatura). Si no se puede abrir (contraseña, dañado) queda apuntado.
+async function bibFichaDe(archivo, ruta){
+  const base = {id: bibId(ruta, archivo.size, archivo.lastModified||0), nombre: archivo.name, ruta, tam: archivo.size, mod: archivo.lastModified||0, alta: Date.now()};
+  let doc = null;
+  try{
+    // (leer muchos archivos seguidos a veces falla un momento: se reintenta)
+    let datos = null;
+    for(let i=0; !datos; i++){ try{ datos = new Uint8Array(await archivo.arrayBuffer()); }catch(e){ if(i>=2 || e.name!=="NotReadableError") throw e; await new Promise(r => setTimeout(r, 300)); } }
+    doc = await abrirPDF(datos, false);
+    const pag = await doc.getPage(1);
+    const tc = await pag.getTextContent();
+    let texto = tc.items.map(i => i.str + (i.hasEOL ? "\n" : " ")).join("");
+    if(doc.numPages > 1 && texto.replace(/\s/g, "").length < 400){ try{ const p2 = await doc.getPage(2); texto += "\n" + (await p2.getTextContent()).items.map(i => i.str + (i.hasEOL ? "\n" : " ")).join(""); p2.cleanup(); }catch(e){} }
+    texto = texto.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+    // Miniatura de 150 px de ancho
+    const vp0 = pag.getViewport({scale:1}), vp = pag.getViewport({scale: 150/vp0.width});
+    const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.min(Math.round(vp.height), 220);
+    const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    await pag.render({canvasContext: ctx, viewport: vp}).promise;
+    const mini = c.toDataURL("image/jpeg", .6); soltarLienzo(c); pag.cleanup();
+    const escaneado = texto.replace(/\s/g, "").length < 40;
+    const primera = texto.split("\n").map(l => l.trim()).find(l => l.length >= 3 && l.length <= 70 && /\p{L}{3}/u.test(l)) || "";
+    const titulo = tituloDeArchivo(archivo.name) || primera || archivo.name.replace(/\.pdf$/i, "");
+    const idioma = escaneado ? "?" : idiomaDe(texto);
+    return {ficha: {...base, titulo: titulo.slice(0, 90), idioma, paginas: doc.numPages, escaneado, temas: bibTemas(archivo.name+" "+ruta+" "+texto.slice(0, 3000)),
+      busca: bibPlano(titulo+" "+ruta+" "+texto.slice(0, 400)), huella: bibHuella(archivo.size, texto)}, mini};
+  } catch(e){
+    const titulo = tituloDeArchivo(archivo.name) || archivo.name.replace(/\.pdf$/i, "");
+    return {ficha: {...base, titulo, idioma: "?", paginas: 0, escaneado: false, temas: bibTemas(archivo.name+" "+ruta), busca: bibPlano(titulo+" "+ruta),
+      huella: "x-"+base.id, error: e && e.name==="PasswordException" ? "contraseña" : "dañado", detalle: String(e && (e.name+": "+e.message)).slice(0, 120)}, mini: null};
+  } finally { try{ doc && doc.destroy(); }catch(e){} }
+}
+
+// El trabajo de leer muchos: sigue aunque se cambie de pantalla dentro de la app, se puede parar y seguir otro día
+const bib = {fichas: null, trabajo: null, avisar: null};
+async function bibCargar(){ if(!bib.fichas){ try{ bib.fichas = await bibTodas(); }catch(e){ bib.fichas = []; } } return bib.fichas; }
+function bibAviso(){ try{ bib.avisar && bib.avisar(); }catch(e){} }
+// «origen»: [{archivo, ruta, handle?}] o una función async que va dando archivos (la carpeta del ordenador)
+async function bibLeerMuchos(entradas, {guardarCopia=false}={}){
+  if(bib.trabajo && !bib.trabajo.fin) return;
+  await bibCargar();
+  const ids = new Set(bib.fichas.map(f => f.id)), huellas = new Set(bib.fichas.map(f => f.huella));
+  const tr = bib.trabajo = {total: 0, hechos: 0, nuevos: 0, repetidos: 0, yaEstaban: 0, fallos: 0, pausa: false, fin: false, inicio: Date.now(), actual: ""};
+  try{ await navigator.storage?.persist?.(); }catch(e){}
+  keepAwake(true);
+  const lista = [];
+  for await (const e of entradas){ lista.push(e); tr.total = lista.length; if(lista.length % 500 === 0) bibAviso(); }
+  bibAviso();
+  for(const e of lista){
+    while(tr.pausa && !tr.fin) await new Promise(r => setTimeout(r, 400));
+    if(tr.fin) break;
+    tr.actual = e.ruta;
+    const id = bibId(e.ruta, e.archivo.size, e.archivo.lastModified||0);
+    if(ids.has(id)){ tr.yaEstaban++; tr.hechos++; continue; }
+    // (un PDF que se queda colgado no para todo: a los 60 segundos se pasa al siguiente)
+    const r = await Promise.race([bibFichaDe(e.archivo, e.ruta), new Promise(ok => setTimeout(() => ok(null), 60000))]);
+    tr.hechos++;
+    if(!r){ tr.fallos++; continue; }
+    if(r.ficha.error) tr.fallos++;
+    if(huellas.has(r.ficha.huella)){ tr.repetidos++; continue; }
+    if(e.handle) r.ficha.acceso = "carpeta"; else if(guardarCopia) r.ficha.acceso = "copia";
+    try{
+      await bibTx(["fichas", "miniaturas", "archivos"], "readwrite", (f, m, a) => {
+        f.put(r.ficha); if(r.mini) m.put(r.mini, r.ficha.id);
+        if(e.handle) a.put(e.handle, r.ficha.id); else if(guardarCopia) a.put(e.archivo, r.ficha.id);
+      });
+    }catch(err){
+      // Sin sitio en el aparato: se para y se avisa
+      tr.sinSitio = true; tr.fin = true; break;
+    }
+    ids.add(id); huellas.add(r.ficha.huella); bib.fichas.push(r.ficha); tr.nuevos++;
+    if(tr.hechos % 5 === 0) bibAviso();
+    await new Promise(r => setTimeout(r, 0)); // deja respirar a la pantalla
+  }
+  tr.fin = true; tr.actual = ""; keepAwake(PANTALLA_ENCENDIDA.includes(view.name));
+  bibAviso();
+}
+// Todos los PDF de una carpeta del ordenador y de sus subcarpetas
+async function* bibRecorrer(dir, ruta=""){
+  for await (const [nombre, h] of dir.entries()){
+    if(h.kind === "directory"){ if(!/^\./.test(nombre)) yield* bibRecorrer(h, ruta+nombre+"/"); }
+    else if(/\.pdf$/i.test(nombre)){ try{ yield {archivo: await h.getFile(), ruta: ruta+nombre, handle: h}; }catch(e){} }
+  }
+}
+async function* bibDeLista(archivos){ for(const f of archivos) if(/\.pdf$/i.test(f.name) || f.type==="application/pdf") yield {archivo: f, ruta: f.webkitRelativePath || f.name}; }
+// El PDF de una ficha: de la carpeta (pidiendo permiso si hace falta) o de la copia guardada
+async function bibArchivo(ficha){
+  const a = await bibGet("archivos", ficha.id).catch(() => null);
+  if(!a) return null;
+  if(a instanceof Blob) return new File([a], ficha.nombre, {type: "application/pdf"});
+  if(a.getFile){
+    try{
+      if(a.queryPermission && (await a.queryPermission({mode:"read"})) !== "granted" && (await a.requestPermission({mode:"read"})) !== "granted") return null;
+      return await a.getFile();
+    }catch(e){ return null; }
+  }
+  return null;
+}
+async function bibBorrarTodo(){
+  await bibTx(["fichas", "miniaturas", "archivos", "carpetas"], "readwrite", (...as) => as.forEach(a => a.clear()));
+  bib.fichas = [];
+}
+const bibPuedeCarpeta = () => typeof window.showDirectoryPicker === "function";
+const bibHoras = ms => { const m = Math.round(ms/60000); return m < 1 ? "menos de un minuto" : m < 60 ? m+(m===1?" minuto":" minutos") : (Math.round(m/6)/10).toString().replace(".", ",")+" horas"; };
+
+let bibBusqueda = "", bibIdioma = "", bibTema = "", bibMostrar = 60;
+VISTAS.biblioteca = V => {
+  const progreso = h("div",{class:"note stack", "aria-live":"polite", hidden:true});
+  const lista = h("div",{class:"stack"});
+  const filtros = h("div",{class:"stack"});
+  const cuenta = h("p",{class:"muted"});
+  const buscador = h("input",{type:"search", class:"search", id:"bib-buscar", placeholder:"Busca: conejo, manta, granny…", value:bibBusqueda, "aria-label":"Buscar en la biblioteca",
+    oninput:e=>{ bibBusqueda = e.target.value; bibMostrar = 60; pintarLista(); }});
+  const elegirCarpeta = h("input",{type:"file", hidden:true, id:"bib-carpeta", webkitdirectory:true, multiple:true, onchange:e=>{ const fs = [...e.target.files]; e.target.value = ""; if(fs.length) empezar(bibDeLista(fs), {}); }});
+  const elegirPDFs = h("input",{type:"file", hidden:true, id:"bib-pdfs", accept:"application/pdf,.pdf", multiple:true, onchange:e=>{ const fs = [...e.target.files]; e.target.value = ""; if(fs.length) empezar(bibDeLista(fs), {guardarCopia:true}); }});
+  async function carpeta(){
+    if(!bibPuedeCarpeta()) return elegirCarpeta.click();
+    let dir; try{ dir = await window.showDirectoryPicker({mode:"read", id:"patrones"}); }catch(e){ return; }
+    try{ await bibTx("carpetas", "readwrite", a => a.put(dir, dir.name)); }catch(e){}
+    empezar(bibRecorrer(dir, dir.name+"/"), {});
+  }
+  function empezar(entradas, opts){ bibLeerMuchos(entradas, opts); pintarProgreso(); }
+  function pintarProgreso(){
+    const tr = bib.trabajo;
+    if(!document.body.contains(progreso)) return;
+    if(!tr){ progreso.hidden = true; return; }
+    progreso.hidden = false;
+    const frac = tr.total ? tr.hechos/tr.total : 0;
+    const ritmo = tr.hechos > 5 ? (Date.now()-tr.inicio)/tr.hechos : 0;
+    const queda = ritmo && tr.total > tr.hechos ? " · quedan unos "+bibHoras(ritmo*(tr.total-tr.hechos)) : "";
+    const n = (k, uno, varios) => k ? k.toLocaleString("es")+" "+(k===1 ? uno : varios) : null;
+    const resumen = [n(tr.nuevos, "nuevo", "nuevos"), n(tr.repetidos, "repetido (no se mete dos veces)", "repetidos (no se meten dos veces)"),
+      n(tr.yaEstaban, "ya estaba", "ya estaban"), n(tr.fallos, "no se puede abrir", "no se pueden abrir")].filter(Boolean).join(" · ");
+    progreso.replaceChildren(...[
+      h("p",{style:"font-weight:700"}, tr.fin ? (tr.sinSitio ? "Se ha llenado el espacio del aparato. He parado aquí." : "Terminado: "+tr.hechos.toLocaleString("es")+" PDF leídos.")
+        : !tr.hechos && tr.total ? "Buscando los PDF… "+tr.total.toLocaleString("es")+" encontrados"
+        : tr.pausa ? "En pausa: "+tr.hechos.toLocaleString("es")+" de "+tr.total.toLocaleString("es") : "Leyendo "+tr.hechos.toLocaleString("es")+" de "+tr.total.toLocaleString("es")+queda),
+      tr.fin ? null : h("div",{class:"prog"}, h("i",{style:"width:"+Math.round(frac*100)+"%"})),
+      resumen ? h("p",{class:"muted", style:"font-size:.9rem"}, resumen) : null,
+      !tr.fin && tr.actual ? h("p",{class:"muted", style:"font-size:.8rem;overflow-wrap:anywhere"}, tr.actual) : null,
+      tr.fin ? null : h("p",{class:"muted", style:"font-size:.88rem"}, "Deja esta página abierta. Si lo paras o cierras, la próxima vez sigue por donde iba y no repite los que ya están."),
+      tr.fin ? null : h("div",{class:"row"}, h("button",{class: tr.pausa ? "primary" : "", onclick:()=>{ tr.pausa = !tr.pausa; pintarProgreso(); }}, tr.pausa ? "Seguir" : "Pausar"),
+        h("button",{class:"ghost", onclick:()=>{ tr.fin = true; pintarProgreso(); }}, "Parar"))
+    ].filter(Boolean));
+  }
+  let ultimo = 0;
+  bib.avisar = () => { pintarProgreso(); if(Date.now()-ultimo > 3000 || (bib.trabajo && bib.trabajo.fin)){ ultimo = Date.now(); pintarLista(); } };
+  function chip(texto, activo, fn){ return h("button",{class:"chip-parte"+(activo?" sel":""), "aria-pressed":String(activo), onclick:fn}, texto); }
+  function pintarLista(){
+    if(!document.body.contains(lista) || !bib.fichas) return;
+    const fichas = bib.fichas;
+    if(!fichas.length){
+      filtros.replaceChildren(); cuenta.textContent = "";
+      lista.replaceChildren(h("div",{class:"empty"}, h("h3",{},"Aún no hay ningún PDF"), h("p",{class:"muted"}, "Elige la carpeta donde tienes los patrones (en el ordenador) o unos cuantos PDF (en el móvil). Leo la primera hoja de cada uno para poder buscarlos.")));
+      return;
+    }
+    const idiomas = [...new Set(fichas.map(f => f.idioma))].filter(i => NOMBRE_IDIOMA[i]);
+    const temas = Object.entries(fichas.reduce((a, f) => { f.temas.forEach(t => a[t] = (a[t]||0)+1); return a; }, {})).sort((a, b) => b[1]-a[1]).slice(0, 14);
+    filtros.replaceChildren(...[
+      idiomas.length > 1 ? h("div",{class:"tira", role:"group", "aria-label":"Idioma"}, chip("Todos los idiomas", !bibIdioma, ()=>{ bibIdioma = ""; bibMostrar = 60; pintarLista(); }),
+        idiomas.map(i => chip(NOMBRE_IDIOMA[i].charAt(0).toUpperCase()+NOMBRE_IDIOMA[i].slice(1), bibIdioma===i, ()=>{ bibIdioma = bibIdioma===i ? "" : i; bibMostrar = 60; pintarLista(); }))) : null,
+      temas.length ? h("div",{class:"tira", role:"group", "aria-label":"De qué es"}, temas.map(([t, n]) => chip(t+" ("+n.toLocaleString("es")+")", bibTema===t, ()=>{ bibTema = bibTema===t ? "" : t; bibMostrar = 60; pintarLista(); }))) : null].filter(Boolean));
+    const hay = fichas.filter(f => (!bibIdioma || f.idioma===bibIdioma) && (!bibTema || f.temas.includes(bibTema)) && bibCoincide(f, bibBusqueda))
+      .sort((a, b) => a.titulo.localeCompare(b.titulo, "es"));
+    cuenta.textContent = hay.length===fichas.length ? fichas.length.toLocaleString("es")+" patrones en la biblioteca" : hay.length.toLocaleString("es")+" de "+fichas.length.toLocaleString("es")+" patrones";
+    lista.replaceChildren(...[h("div",{class:"plist"}, hay.slice(0, bibMostrar).map(tarjeta)),
+      hay.length > bibMostrar ? h("button",{class:"big block", onclick:()=>{ bibMostrar += 60; pintarLista(); }}, "Ver más ("+(hay.length-bibMostrar).toLocaleString("es")+")") : null].filter(Boolean));
+  }
+  function tarjeta(f){
+    const img = h("img",{alt:"", loading:"lazy"});
+    bibGet("miniaturas", f.id).then(m => { if(m) img.src = m; }).catch(()=>{});
+    return h("button",{class:"pitem", onclick:()=>go({name:"bibficha", id:f.id})},
+      h("div",{class:"thumb"}, img),
+      h("div",{class:"body"}, h("h3",{}, f.titulo),
+        h("div",{class:"meta"}, f.idioma && NOMBRE_IDIOMA[f.idioma] && f.idioma!=="otro" ? h("span",{class:"chip"}, NOMBRE_IDIOMA[f.idioma]) : null, f.escaneado ? h("span",{class:"chip"}, "escaneado") : null,
+          f.error ? h("span",{class:"chip mine"}, f.error==="contraseña" ? "con contraseña" : "no se abre") : null, f.temas.slice(0, 2).map(t => h("span",{class:"chip go"}, t)))),
+      h("span",{class:"arrow", "aria-hidden":"true"}, "›"));
+  }
+  V.append(
+    volver("Más", {name:"mas"}),
+    h("div",{class:"page-title"}, h("h1",{},"Biblioteca de PDF"),
+      h("p",{class:"muted"}, "Mete todos tus PDF de patrones de una vez y búscalos por nombre, idioma o tema. Cuando abras uno, lo paso a Mis patrones o lo traduzco.")),
+    h("div",{class:"section"},
+      progreso,
+      h("div",{class:"actions"},
+        h("button",{class:"action", onclick:carpeta}, h("span",{class:"ic"}, icono("libro")), h("span",{}, "Elegir una carpeta", h("br"), h("small",{}, "En el ordenador: todos sus PDF"))),
+        h("button",{class:"action pink", onclick:()=>elegirPDFs.click()}, h("span",{class:"ic"}, icono("pdf")), h("span",{}, "Elegir PDF", h("br"), h("small",{}, "En el móvil: los que marques")))),
+      elegirCarpeta, elegirPDFs,
+      h("p",{class:"muted", style:"font-size:.88rem"}, "Se queda todo en este aparato, gratis y sin mandar nada a internet. Con miles de PDF tarda un rato (unas horas para 30.000): mejor en el ordenador y enchufado.")),
+    h("div",{class:"section"}, buscador, filtros, cuenta, lista,
+      h("details",{class:"panel"}, h("summary",{}, "Vaciar la biblioteca"),
+        h("p",{}, "Borra las fichas de la biblioteca de este aparato. No toca tus PDF ni Mis patrones."),
+        h("button",{class:"danger", onclick:async ()=>{ if(!confirm("¿Vaciar la biblioteca?")) return; if(bib.trabajo) bib.trabajo.fin = true; await bibBorrarTodo(); toast("Biblioteca vacía"); render(); }}, "Vaciar la biblioteca")))
+  );
+  pintarProgreso();
+  bibCargar().then(pintarLista);
+};
+
+// Ficha de un PDF de la biblioteca: abrirlo, pasarlo a Mis patrones o traducirlo
+let traducirPendiente = null;
+VISTAS.bibficha = V => {
+  const caja = h("div",{class:"stack"});
+  const estado = h("div",{class:"note stack", "aria-live":"polite", hidden:true});
+  const avisar = (msg, frac) => { estado.hidden = false; estado.replaceChildren(...[h("p",{style:"font-weight:700"}, msg), frac==null ? null : h("div",{class:"prog"}, h("i",{style:"width:"+Math.round(frac*100)+"%"}))].filter(Boolean)); };
+  V.append(volver("Biblioteca", {name:"biblioteca"}), caja);
+  (async () => {
+    await bibCargar();
+    const f = bib.fichas.find(x => x.id===view.id);
+    if(!f){ caja.replaceChildren(h("div",{class:"empty"}, h("p",{}, "Este PDF ya no está en la biblioteca."))); return; }
+    const mini = await bibGet("miniaturas", f.id).catch(() => null);
+    const elegir = h("input",{type:"file", hidden:true, accept:"application/pdf,.pdf", onchange:e=>{ const a = e.target.files[0]; e.target.value = ""; if(a && pendiente) pendiente(a); }});
+    let pendiente = null;
+    // El PDF: si no hay acceso guardado, se pide que lo elija (se dice cuál)
+    async function conArchivo(fn){
+      const a = await bibArchivo(f);
+      if(a) return fn(a);
+      pendiente = fn; toast("Elige el archivo «"+f.nombre+"»"); elegir.click();
+    }
+    async function aPatrones(a){
+      try{
+        const texto = (await leerPDFParaImportar(a, avisar)).trim();
+        const r = importarTexto(texto, null, true);
+        estado.hidden = true;
+        if(!r.pasos.length){ importarBorrador = texto; importarUK = null; importarSoloVueltas = true; importarArreglos = {}; importarArchivo = f.nombre; return go({name:"importar"}); }
+        const p = {id:"m-"+Date.now(), titulo: (f.titulo || r.titulo).slice(0, 80), descripcion:"De la biblioteca"+(r.ingles?", en inglés":r.ruso?", en ruso":r.otroIdioma?", en "+NOMBRE_IDIOMA[r.otroIdioma]:"")+".", nivel:"", hilo:r.hilo||"", ganchillo:r.ganchillo||"", notas:r.notas,
+          pasos:r.pasos, color:r.colorLana ? r.colorLana.hex : COLORES[state.patrones.length % COLORES.length], original:texto};
+        state.patrones.unshift(p); save(); toast("Guardado en Mis patrones"); go({name:"patron", id:p.id});
+      }catch(e){ avisar(e && e.message==="sin-conexion" ? "Necesito internet la primera vez para leer este PDF." : "No he podido leer este PDF."); }
+    }
+    function ver(a){ const url = URL.createObjectURL(a); const v = window.open(url, "_blank"); if(!v){ const l = h("a",{href:url, download:f.nombre}); document.body.append(l); l.click(); l.remove(); } setTimeout(() => URL.revokeObjectURL(url), 60000); }
+    const extranjero = f.idioma && !["es", "?", "otro"].includes(f.idioma);
+    caja.replaceChildren(...[
+      h("div",{class:"page-title"}, h("h1",{}, f.titulo), h("p",{class:"muted", style:"overflow-wrap:anywhere"}, f.ruta)),
+      mini ? h("div",{class:"detail-hero"}, h("div",{class:"thumb", style:"aspect-ratio:auto;max-width:12rem"}, h("img",{src:mini, alt:"Primera hoja del PDF", style:"height:auto"}))) : null,
+      h("div",{class:"meta row"}, NOMBRE_IDIOMA[f.idioma] ? h("span",{class:"chip"}, NOMBRE_IDIOMA[f.idioma]) : null, f.paginas ? h("span",{class:"chip"}, f.paginas+(f.paginas===1?" hoja":" hojas")) : null,
+        f.escaneado ? h("span",{class:"chip"}, "escaneado") : null, f.temas.map(t => h("span",{class:"chip go"}, t))),
+      f.error ? h("p",{class:"note"}, f.error==="contraseña" ? "Este PDF tiene contraseña. Ábrelo con «Añadir a Mis patrones» y te la pido." : "Este PDF no se pudo abrir: puede estar dañado.") : null,
+      estado,
+      h("div",{class:"stack"},
+        extranjero ? h("button",{class:"primary big block", onclick:()=>conArchivo(a => { traducirPendiente = a; go({name:"traducir"}); })}, icono("traducir"), "Traducir al español") : null,
+        h("button",{class:(extranjero?"teal":"primary")+" big block", onclick:()=>conArchivo(aPatrones)}, icono("libro"), "Añadir a Mis patrones"),
+        h("button",{class:"big block", onclick:()=>conArchivo(ver)}, icono("pdf"), "Ver el PDF")),
+      elegir,
+      f.acceso ? null : h("p",{class:"muted", style:"font-size:.88rem"}, "La app no guarda este PDF: al abrirlo te pediré que lo elijas.")
+    ].filter(Boolean));
+  })();
 };
 
 // ---------- Gráficos ----------
@@ -6286,6 +6641,7 @@ VISTAS.mas = V => {
     h("div",{class:"page-title"}, h("h1",{},"Más")),
     h("div",{class:"section"}, h("div",{class:"menu"},
       item("traducir","Traducir un patrón","Del inglés, ruso, portugués, turco o chino al español, en PDF", ()=>go({name:"traducir"})),
+      item("libro","Biblioteca de PDF","Mete miles de PDF de patrones y búscalos", ()=>go({name:"biblioteca"})),
       item("rejilla","Gráficos","Dibuja con símbolos, en filas o en redondo", ()=>go({name:"graficos"})),
       item("ovillo","Mis lanas","Los ovillos que tienes en casa", ()=>go({name:"lanas"})),
       item("circulo","Círculo perfecto","Patrón y gráfico de un círculo plano", ()=>go({name:"herramientas"})),

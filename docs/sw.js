@@ -1,7 +1,7 @@
 // Service worker de Tejiendo Ilusiones (lo genera tools/construir-web.cjs; no editar docs/sw.js a mano).
 // La app se guarda en el móvil al instalarla y funciona sin conexión. Los datos de la usuaria no pasan por aquí:
 // siguen en el almacenamiento del navegador.
-const VERSION = "0ab26544e460";
+const VERSION = "4df41cffc258";
 const APP = "app-" + VERSION;
 const OCR = "ocr-c859cd14fb45";
 const TRADUCTOR = "traductor-909d7812f973";
