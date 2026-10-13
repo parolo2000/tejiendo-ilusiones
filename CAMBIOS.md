@@ -524,3 +524,24 @@ Capturas en `tests/capturas/`.
   (título del archivo o de la traducción, «Traducido del …», vueltas, notas, ganchillo) y abre el patrón. Solo si no
   encuentra vueltas va a «Añadir un patrón» para revisarlo.
 - Sin cambios en el formato de los datos. Tests: 84 bien (los dos de guardar comprueban que queda en el móvil).
+
+## 2026-10-13 · Biblioteca de PDF (miles de patrones de una vez)
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-13-antes-biblioteca.html`.
+- `VISTAS.biblioteca` (Más → «Biblioteca de PDF», y un enlace en «Añadir un patrón»): en el ordenador se elige una
+  carpeta (`showDirectoryPicker` en Chrome/Edge, con subcarpetas; si no hay, `webkitdirectory`); en el móvil, los PDF
+  que se marquen. De cada PDF se guarda una ficha (`bibFichaDe`): título (del nombre del archivo o de la primera hoja),
+  idioma, hojas, escaneado o no, miniatura de 150 px y temas (`BIB_TEMAS`: conejo, oso, manta, granny, gorro… en
+  español, inglés, ruso, portugués, turco y chino). Buscar «conejo» encuentra «bunny», «зайка», «coelhinho».
+- Sin repetidos (`bibHuella`: tamaño + texto de la primera hoja). Se puede pausar o parar; la próxima vez sigue y no
+  repite los que ya están. Un PDF que no se abre (dañado, con contraseña) queda apuntado y no para el resto. Pantalla
+  encendida mientras lee. Con el disco lleno, para y avisa.
+- Las fichas van en IndexedDB `ti-biblioteca` (fichas, miniaturas, archivos, carpetas), aparte de los datos de siempre:
+  localStorage no se toca. En el ordenador se guarda el acceso a cada archivo de la carpeta; en el móvil, una copia del PDF.
+- `VISTAS.bibficha`: «Traducir al español» (abre el traductor con ese PDF: `traducirPendiente`), «Añadir a Mis
+  patrones» (lo guarda directamente si encuentra vueltas) y «Ver el PDF».
+- `leerPDFParaImportar` sale de «Añadir un patrón» para usarla también aquí; `abrirPDF(datos, preguntar)` no pide la
+  contraseña cuando lee muchos seguidos.
+- Medido: unos 15-25 ms por PDF aquí (1.500 en 22 s); en un ordenador normal, 30.000 en una o pocas horas.
+- Tests: 85 bien (1 nuevo: 6 PDF con repetido, escaneado y dañado; búsqueda «conejo» → ruso; filtro de idioma;
+  añadir a Mis patrones sin tocar lo que había; traducir; las fichas siguen al recargar).
