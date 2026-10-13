@@ -5188,9 +5188,22 @@ VISTAS.traducir = V => {
     catch(e){ toast(e && e.message==="sin-conexion" ? "Necesito internet la primera vez para hacer el PDF" : "No he podido hacer el PDF. Prueba otra vez."); }
     finally { boton.disabled = false; boton.textContent = txt; }
   }
+  // «Guardar en Mis patrones» lo guarda de verdad (antes llevaba a «Añadir un patrón» y había que volver a pulsar
+  // «Guardar patrón»: parecía guardado y no lo estaba). Si no se encuentran vueltas, sí va a «Añadir un patrón» para revisarlo.
   function aMisPatrones(texto){
-    importarBorrador = texto; importarUK = null; importarSoloVueltas = true; importarArreglos = {}; importarArchivo = traduccion ? traduccion.archivo : "";
-    go({name:"importar"});
+    const tr = traduccion, r = importarTexto(texto, false, true);
+    if(!r.pasos.length){
+      importarBorrador = texto; importarUK = null; importarSoloVueltas = true; importarArreglos = {}; importarArchivo = tr ? tr.archivo : "";
+      return go({name:"importar"});
+    }
+    const tit = tr && tr.bloques && tr.bloques.find(b => b.tipo==="titulo");
+    const titulo = (tituloDeArchivo(tr && tr.archivo) || (tit && tit.t) || r.titulo || "Patrón traducido").slice(0, 80);
+    const idioma = tr && tr.idioma!=="es" ? NOMBRE_IDIOMA[tr.idioma] : "";
+    const p = {id:"m-"+Date.now(), titulo, descripcion: idioma ? "Traducido del "+idioma+"." : "Importado.", nivel:"", hilo:r.hilo||"", ganchillo:r.ganchillo||"", notas:r.notas,
+      pasos:r.pasos, color:r.colorLana ? r.colorLana.hex : COLORES[state.patrones.length % COLORES.length], original:texto};
+    state.patrones.unshift(p); save();
+    toast("Guardado en Mis patrones");
+    go({name:"patron", id:p.id});
   }
   // Antes de hacer el PDF se puede corregir cualquier frase: con «Corregir el texto» cada frase pasa a un recuadro
   let editando = false;

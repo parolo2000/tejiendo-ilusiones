@@ -1646,12 +1646,14 @@ Fasten off and weave in ends.`;
     assert.match(leido.t, /El patrón original/);
     assert.ok(leido.imgs >= 2, "con la foto y el gráfico");
     assert.deepEqual(page.errores, []);
-    // y se puede guardar en «Mis patrones»: pasa por «Añadir un patrón» ya en español
+    // y «Guardar en Mis patrones» lo guarda de verdad, ya en español, y abre el patrón (sin volver a pulsar «Guardar»)
     await page.getByRole("button", { name: "Guardar en Mis patrones" }).tap();
-    await page.waitForFunction(() => view.name === "importar" && document.querySelector("ol.importados li"));
-    const r = await page.evaluate(() => importarTexto(document.querySelector("#im-texto").value, null, true));
-    assert.equal(r.pasos.filter(p => /^Vueltas? \d/.test(p)).length, 6, JSON.stringify(r.pasos));
-    assert.equal(r.revision.filter(x => x.estado === "distinto").length, 0);
+    await page.waitForFunction(() => view.name === "patron" && state.patrones.length > 0);
+    const r = await page.evaluate(() => ({ p: state.patrones[0], distintas: state.patrones[0].pasos.map(revisarLinea).filter(x => x.estado === "distinto").length, guardado: JSON.parse(localStorage.getItem("rincon-ganchillo-v1")).patrones.length }));
+    assert.equal(r.p.pasos.filter(p => /^Vueltas? \d/.test(p)).length, 6, JSON.stringify(r.p.pasos));
+    assert.equal(r.distintas, 0);
+    assert.equal(r.p.descripcion, "Traducido del ruso."); assert.ok(r.p.titulo, "con título"); assert.equal(r.guardado, 1, "guardado en el móvil");
+    await page.reload(); assert.equal(await page.evaluate(() => state.patrones.length), 1, "sigue ahí al volver a abrir la app");
     await page.context().close();
   });
   await prueba("traducir un PDF inglés del Reino Unido: «dc» es punto bajo y se puede cambiar a EE. UU.", async () => {
@@ -1703,7 +1705,7 @@ Fasten off and weave in ends.`;
     await esperarTraduccion(page);
     await page.getByText("Este patrón ya está en español.").waitFor();
     await page.getByRole("button", { name: "Guardar en Mis patrones" }).tap();
-    await page.waitForFunction(() => view.name === "importar" && /Vuelta 1: 6 pb/.test(document.querySelector("#im-texto").value));
+    await page.waitForFunction(() => view.name === "patron" && state.patrones.length === 1 && state.patrones[0].pasos.some(p => /Vuelta 1: 6 pb/.test(p)));
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });
