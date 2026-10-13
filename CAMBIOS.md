@@ -545,3 +545,18 @@ Capturas en `tests/capturas/`.
 - Medido: unos 15-25 ms por PDF aquí (1.500 en 22 s); en un ordenador normal, 30.000 en una o pocas horas.
 - Tests: 85 bien (1 nuevo: 6 PDF con repetido, escaneado y dañado; búsqueda «conejo» → ruso; filtro de idioma;
   añadir a Mis patrones sin tocar lo que había; traducir; las fichas siguen al recargar).
+
+## 2026-10-13 · De un vídeo de YouTube a papel
+
+- Copia: `versiones/tejiendo-ilusiones-2026-10-13-antes-video.html`.
+- `VISTAS.video` (Añadir un patrón → «¿Lo explica un vídeo de YouTube?»): enlace del vídeo (se ve dentro, youtube-nocookie)
+  + la transcripción copiada de YouTube («Mostrar transcripción») o un .srt/.vtt. YouTube no deja leer subtítulos
+  desde otra web y un servidor costaría dinero: por eso se pega.
+- Motor sin IA: `trozosDeTranscripcion` (minutos), `palabrasDeHabla` (números con letras, «la tercera vuelta»),
+  `transcripcionAPatron` (vueltas en orden, rangos «de la 5 a la 10», «hasta la vuelta 40», piezas nuevas «ahora las
+  orejas», montaje, rellenar/ojos/cortar/coser) e `instruccionHablada` (puntos, «lo repetimos 6 veces», «nos quedan 18»,
+  lo que se repite al enseñarlo). Español e inglés (`HABLA.es`, `HABLA.en`). Si lo pegado es un patrón escrito, va
+  por `importarTexto`.
+- Patrón: campo opcional `video: {id, t:{textoDelPaso: segundos}}` (sin cambio de versión de datos). Botón «Ver el
+  vídeo» en el patrón, «Ver este paso en el vídeo (m:ss)» al tejer y en el modo sofá, y el minuto en la hoja impresa.
+- Tests: 4 nuevos (89 en total).
