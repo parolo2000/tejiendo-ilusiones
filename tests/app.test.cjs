@@ -1886,11 +1886,97 @@ Fasten off and weave in ends.`;
     await page.context().close();
   });
 
+  console.log("Vídeo de YouTube a patrón");
+  const TRANS_ES = "0:00\nhola a todas bienvenidas a mi canal hoy\n0:03\nvamos a tejer un conejito amigurumi muy\n0:06\nfácil necesitamos lana de algodón y un\n0:09\nganchillo de tres coma cinco milímetros\n0:14\nvamos a empezar por la cabeza hacemos un\n0:17\nanillo mágico y dentro metemos seis\n0:20\npuntos bajos cerramos el anillo vale\n0:25\nahora la segunda vuelta hacemos un\n0:28\naumento en cada punto nos tienen que\n0:31\nquedar doce puntos\n0:40\nvuelta número tres un punto bajo y un\n0:44\naumento un punto bajo un aumento y así\n0:47\nlo repetimos seis veces tenemos\n0:50\ndieciocho puntos\n1:02\nen la cuarta vuelta dos puntos bajos y un\n1:05\naumento hasta el final nos quedan\n1:08\nveinticuatro puntos\n1:20\nde la vuelta cinco a la vuelta diez\n1:23\nhacemos todo punto bajo sin aumentos\n1:30\ncomo en la vuelta 2 no hay que aumentar\n1:40\nvuelta once dos puntos bajos una\n1:43\ndisminución seis veces dieciocho puntos\n1:50\nahora rellenamos la cabeza y ponemos los ojos de seguridad\n2:00\nvuelta doce un punto bajo una disminución\n2:03\nrepetimos seis veces nos quedan doce\n2:10\ncortamos el hilo y cosemos\n2:30\nahora vamos a hacer las orejas\n2:33\nanillo mágico con seis puntos bajos\n2:40\nvuelta dos seis aumentos doce puntos\n2:50\nvuelta tres de la tres a la ocho\n2:55\npunto bajo en todos los puntos\n";
+  const TRANS_EN = "0:01 hi everyone welcome back today we're making a little octopus\n0:05 you'll need a 3.5 mm hook\n0:10 start with a magic ring and put six single crochets into the ring\n0:15 round two we're going to do an increase in every stitch so you should have twelve\n0:25 round three single crochet increase single crochet increase repeat six times for a total of eighteen\n0:40 round four two single crochet and one increase all the way around you should have 24\n0:55 rounds five to twelve single crochet in each stitch\n1:10 round thirteen one single crochet one decrease repeat six times we have 12 stitches\n1:20 now stuff the head and fasten off\n";
+  await prueba("lo que dice un vídeo en español se pasa a vueltas, con partes y minutos", async () => {
+    const page = await nuevaPagina(browser);
+    const r = await page.evaluate(t => transcripcionAPatron(t), TRANS_ES);
+    assert.equal(r.idioma, "es"); assert.equal(r.ganchillo, "3,5 mm");
+    const pasos = r.pasos.map(p => p.texto);
+    assert.deepEqual(pasos.slice(0, 7), ["Parte: Cabeza", "Vuelta 1: 6 pb en el anillo mágico", "Vuelta 2: 1 aum en cada punto (12)",
+      "Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)", "Vuelta 4: *2 pb, 1 aum* alrededor (24)", "Vueltas 5 a 10: 1 pb en cada punto", "Vuelta 11: *2 pb, 1 dism* repetir 6 veces (18)"]);
+    assert.ok(pasos.includes("Rellena la pieza.") && pasos.includes("Parte: Orejas") && pasos.includes("Vueltas 3 a 8: 1 pb en cada punto"));
+    // «como en la vuelta 2» no empieza otra vuelta
+    assert.equal(pasos.filter(p => /^Vuelta 2:/.test(p)).length, 2);
+    assert.equal(r.pasos[3].t, 40);
+    // El motor de la app entiende lo que sale: las vueltas con total cuadran
+    const rev = await page.evaluate(ps => ps.map(revisarLinea).map(x => x.estado), pasos);
+    assert.equal(rev[3], "cuadra"); assert.equal(rev[4], "cuadra"); assert.equal(rev[6], "cuadra");
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("un vídeo en inglés sale en español; una fila plana y números con letras", async () => {
+    const page = await nuevaPagina(browser);
+    const r = await page.evaluate(t => transcripcionAPatron(t), TRANS_EN);
+    assert.equal(r.idioma, "en"); assert.equal(r.ganchillo, "3,5 mm");
+    assert.deepEqual(r.pasos.map(p => p.texto).slice(0, 6), ["Vuelta 1: 6 pb en el anillo mágico", "Vuelta 2: 1 aum en cada punto (12)", "Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)",
+      "Vuelta 4: *2 pb, 1 aum* alrededor (24)", "Vueltas 5 a 12: 1 pb en cada punto", "Vuelta 13: *1 pb, 1 dism* repetir 6 veces (12)"]);
+    const f = await page.evaluate(() => transcripcionAPatron("[0:08] Montamos veinte cadenetas.\n[0:15] Fila uno: un punto bajo en la segunda cadeneta desde el ganchillo y un punto bajo en cada cadeneta. Tenemos diecinueve puntos.\n[0:30] Fila dos: una cadeneta, damos la vuelta y punto bajo en todos los puntos.\n[0:45] Repetimos la fila dos hasta la fila cuarenta."));
+    assert.deepEqual(f.pasos.map(p => p.texto), ["Monta 20 cad.", "Fila 1: 1 pb, 1 pb en cada punto (19)", "Filas 2 a 40: 1 cad, 1 pb en cada punto"]);
+    assert.equal(await page.evaluate(() => revisarLinea("Fila 1: 1 pb, 1 pb en cada punto (19)").estado), "cuadra");
+    assert.deepEqual(await page.evaluate(() => [idVideo("https://youtu.be/dQw4w9WgXcQ?si=x"), idVideo("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s"), idVideo("https://m.youtube.com/shorts/dQw4w9WgXcQ"), idVideo("hola")]), ["dQw4w9WgXcQ", "dQw4w9WgXcQ", "dQw4w9WgXcQ", ""]);
+    await page.context().close();
+  });
+  await prueba("pegar la transcripción de un vídeo, guardarlo y ver cada paso en su minuto", async () => {
+    const page = await nuevaPagina(browser);
+    await page.route(/youtube(-nocookie)?\.com/, r => r.abort());
+    await page.evaluate(() => go({ name: "importar" }));
+    await page.click("#ir-video");
+    await page.fill("#vi-enlace", "https://youtu.be/dQw4w9WgXcQ");
+    await page.fill("#vi-texto", TRANS_ES);
+    await page.getByRole("button", { name: "Pasarlo a papel" }).click();
+    await page.getByText("cuadran").first().waitFor();
+    assert.equal(await page.locator(".video-marco iframe").count(), 1);
+    // Tocar el minuto de un paso pone el vídeo en ese momento
+    await page.getByRole("button", { name: "Ver en el 0:40" }).click();
+    assert.match(await page.locator(".video-marco iframe").getAttribute("src"), /start=40&autoplay=1/);
+    await page.screenshot({ path: path.join(CAPTURAS, "video-a-papel.png"), fullPage: true });
+    // Cambiar un paso antes de guardar y quitar otro dejándolo vacío
+    const campos = page.locator("textarea.video-paso");
+    const n = await campos.count();
+    await campos.nth(4).fill("Vuelta 4: *2 pb, 1 aum* repetir 6 veces (24)");
+    await campos.nth(n - 1).fill("");
+    await page.fill("#vi-nombre", "Conejito del vídeo");
+    await page.getByRole("button", { name: "Guardar patrón", exact: true }).click();
+    const st = await estado(page);
+    const p = st.patrones[0];
+    assert.equal(p.titulo, "Conejito del vídeo"); assert.equal(p.ganchillo, "3,5 mm");
+    assert.equal(p.pasos.length, n - 1);
+    assert.equal(p.video.id, "dQw4w9WgXcQ");
+    assert.equal(p.video.t["Vuelta 4: *2 pb, 1 aum* repetir 6 veces (24)"], 62);
+    assert.match(p.notas, /youtube\.com\/watch\?v=dQw4w9WgXcQ/);
+    assert.equal(await page.locator("a", { hasText: "Ver el vídeo" }).getAttribute("href"), "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    // Mientras teje: el paso tiene su enlace al minuto del vídeo
+    await page.evaluate(id => { state.progreso[id] = { paso: 3, vueltas: 0, puntos: 0 }; save(); go({ name: "tejer", id }); }, p.id);
+    assert.equal(await page.locator("a", { hasText: "Ver este paso en el vídeo (0:40)" }).getAttribute("href"), "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=40s");
+    await page.evaluate(id => go({ name: "sofa", id }), p.id);
+    await page.locator(".sofa-video", { hasText: "0:40" }).waitFor();
+    // En papel también sale el minuto
+    const hoja = await page.evaluate(id => hojaDeImpresion(buscar(id)).textContent, p.id);
+    assert.match(hoja, /En el vídeo: minuto 0:40/);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("si lo pegado ya es un patrón escrito (de la descripción del vídeo), se lee tal cual", async () => {
+    const page = await nuevaPagina(browser);
+    await page.evaluate(() => go({ name: "video" }));
+    await page.fill("#vi-texto", "Vuelta 1: 6 pb en el anillo (6)\nVuelta 2: 6 aum (12)\nVuelta 3: (1 pb, 1 aum) x 6 (18)");
+    await page.getByRole("button", { name: "Pasarlo a papel" }).click();
+    await page.getByText("ya es un patrón escrito").waitFor();
+    assert.equal(await page.locator("textarea.video-paso").count(), 3);
+    await page.fill("#vi-texto", "Hola amigas, hoy os traigo un vídeo muy bonito. No olvidéis suscribiros.");
+    await page.getByRole("button", { name: "Pasarlo a papel" }).click();
+    await page.getByText("No he encontrado las vueltas").waitFor();
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+
   console.log("Resto de la app");
   await prueba("todas las pantallas se abren sin errores, con datos reales", async () => {
     const page = await nuevaPagina(browser, {}, LEGADO);
     const vistas = [["inicio"], ["patrones"], ["patron", "m-1"], ["patron", "b-gorro"], ["tejer", "m-1"], ["sofa", "m-1"], ["importar"], ["editar"], ["editar", "m-1"],
-      ["graficos"], ["grafico", "g-1"], ["foto"], ["lanas"], ["lana", "l-1"], ["mas"], ["contador"], ["ayuda"], ["copia"], ["herramientas"], ["traducir"]];
+      ["graficos"], ["grafico", "g-1"], ["foto"], ["lanas"], ["lana", "l-1"], ["mas"], ["contador"], ["ayuda"], ["copia"], ["herramientas"], ["traducir"], ["video"]];
     for (const [name, id] of vistas) {
       await page.evaluate(([name, id]) => go({ name, id }), [name, id]);
       await page.waitForTimeout(60);
