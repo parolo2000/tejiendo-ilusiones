@@ -515,3 +515,12 @@ Capturas en `tests/capturas/`.
 - «Añadir un patrón»: si se pulsaba «Leer el patrón» y enseguida se ponía el nombre, la lectura que esperaba a que
   se dejara de escribir rehacía la pantalla y borraba el nombre (no se guardaba). Arreglado (`clearTimeout` en `leer`).
 - Sin cambios en los datos guardados. Tests: 84 bien (la de portugués, ampliada).
+
+## 2026-10-13 · «Guardar en Mis patrones» guarda de verdad
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-13-antes-guardar-traducido.html`.
+- En «Traducir un patrón», «Guardar en Mis patrones» llevaba a «Añadir un patrón» con el texto puesto y había que
+  pulsar otra vez «Guardar patrón»: parecía guardado y no lo estaba. Ahora `aMisPatrones` lo guarda directamente
+  (título del archivo o de la traducción, «Traducido del …», vueltas, notas, ganchillo) y abre el patrón. Solo si no
+  encuentra vueltas va a «Añadir un patrón» para revisarlo.
+- Sin cambios en el formato de los datos. Tests: 84 bien (los dos de guardar comprueban que queda en el móvil).
