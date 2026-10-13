@@ -498,3 +498,20 @@ Capturas en `tests/capturas/`.
   queda en el PDF traducido se dibuja como imagen (`textoComoImagen`).
 - Sin cambios en los datos guardados.
 - Tests: 3 nuevos (reglas e importar en pt/tr/zh, PDF traducido en los tres, chino escaneado). 84 bien.
+
+## 2026-10-13 · Portugués como se escribe de verdad
+
+- Copia previa: `versiones/tejiendo-ilusiones-2026-10-13-antes-portugues.html`.
+- Probado con patrones brasileños y de Portugal de varios estilos. Arreglado:
+  - Número pegado al punto («6pb», «1dim», «4corr»): el traductor los estropeaba («1dím», «6dismo»). `paraReglas`
+    los separa, pone «1» a un punto suelto («(1 pb, aum)») y pasa «(6 pts)» y «[30]» a «(6)», «(30)».
+  - «Carr 1 - 6pb…» salía como «Vueltas 1 a 6»: un tramo ya no acaba en un número seguido de un punto.
+  - Una vuelta acabada en «[30]» se comía la línea de abajo.
+  - `GLOSARIO_PT`: «crochet» de Portugal, «malha», «pc», ordinales («entre a 10ª e 11ª volta», «2.ª pc do gancho»),
+    «na 3ª corr do início», «pule 2 pontos», «no próximo», «em todos», «leque», «barbante», colores, «encha»,
+    «arremate deixando…», «passe o fio pelos pontos restantes…», «pegando as duas paredes», «esconda o fio»…
+  - `ARREGLOS_ES`: «de el» → «del», «el último cad» → «la última cad», «la 3 cad» → «las 3 cad».
+  - Al añadir el patrón: más palabras sueltas (`PALABRAS_OTRAS.pt`) y «repite 6 veces» tras un paréntesis → «x 6».
+- «Añadir un patrón»: si se pulsaba «Leer el patrón» y enseguida se ponía el nombre, la lectura que esperaba a que
+  se dejara de escribir rehacía la pantalla y borraba el nombre (no se guardaba). Arreglado (`clearTimeout` en `leer`).
+- Sin cambios en los datos guardados. Tests: 84 bien (la de portugués, ampliada).

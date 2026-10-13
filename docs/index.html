@@ -3185,7 +3185,8 @@ function pasarAlEspanol(linea, idioma, xv=false){
   if(pz && !pz.resto) return pz.es;
   const p = proteger(paraReglas(arreglarSignos(cv ? cv.resto : pz ? pz.resto : l), idioma), glosarioDe(idioma, false, xv));
   const t = enAEspanol(devolverMarcas(palabraAPalabra(p.t, idioma), p.marcas).t);
-  return mayuscula(((cv ? cv.cab+" " : pz ? pz.es+" " : "")+t).replace(/\s+([,.;:)])/g, "$1").replace(/([(¿¡])\s+/g, "$1").replace(/\s{2,}/g, " ").trim()
+  // «(1 pb, 1 aum) repite 6 veces» → «(1 pb, 1 aum) x 6», que es como se cuentan los puntos
+  return mayuscula(((cv ? cv.cab+" " : pz ? pz.es+" " : "")+t.replace(/([)*\]])\s*,?\s*repite\s+(\d+)\s*(?:veces|x)(?![\p{L}])/gu, "$1 x $2")).replace(/\s+([,.;:)])/g, "$1").replace(/([(¿¡])\s+/g, "$1").replace(/\s{2,}/g, " ").trim()
     .replace(/([.!?]\s+)(\p{Ll})/gu, (m, a, c) => a+c.toUpperCase()));
 }
 function importarTexto(texto, uk, soloVueltas=false){
@@ -3642,6 +3643,8 @@ VISTAS.importar = V => {
   };
   let leerT; const previaImp = previaGrafico();
   function leer(){
+    // (si ya se ha leído con el botón, la lectura que esperaba a que dejara de escribir sobra: borraría el nombre puesto)
+    clearTimeout(leerT);
     importarBorrador = area.value;
     if(!area.value.trim()){ res.replaceChildren(h("div",{class:"empty"}, h("p",{},"Pega aquí el patrón: copia el texto de la web o del PDF y mantén el dedo en el recuadro para pegarlo."))); return; }
     const r = importarTexto(area.value, importarUK, importarSoloVueltas);
@@ -4034,22 +4037,38 @@ const GLOSARIO_EN = uk => [
 const PT_N = TN+"\\s*"; // número delante del punto
 const GLOSARIO_PT = [
   ["\\(\\s*(?:fa[çc]a|fazer|fa[çc]a-se|tecer)\\s+"+TN+"(?:\\s*(?:vezes|pe[çc]as|unidades))?\\s*\\)", "(hacer $1)", "m"], ["\\(\\s*"+TN+"\\s*(?:pe[çc]as|unidades)\\s*\\)", "(hacer $1)", "m"],
-  ["(?:materiais|material)(?:\\s+necess[áa]rios?)?|voc[êe]\\s+vai\\s+precisar|voc[êe]\\s+precisar[áa]", "Materiales", "m"],
+  ["materia(?:is|l)\\s+(?:utilizados?|usados?)", "Materiales", "m"], ["pontos\\s+(?:usados|utilizados)", "Puntos usados", "m"],
+  ["repet(?:ir|e|a)\\s+o\\s+que\\s+est[áa]\\s+entre\\s+(?:os\\s+)?asteriscos", "repite lo que está entre los asteriscos", "m"], ["repet(?:ir|e|a)\\s+o\\s+que\\s+est[áa]\\s+entre\\s+(?:os\\s+)?par[êe]nteses", "repite lo que está entre paréntesis", "m"],
+  ["entre\\s+(?:a|as)\\s+(\\d+)\\.?[ªºa°]?\\s+e\\s+(?:a\\s+)?(\\d+)\\.?[ªºa°]?\\s+(?:carreiras?|voltas?)", "entre las vueltas $1 y $2", "m"],
+  ["pegando\\s+(?:as\\s+)?(?:duas|ambas\\s+as)\\s+(?:paredes|partes|camadas|bordas)", "uniendo las dos capas", "m"],
+  ["n[ao]\\s+[úu]ltim[ao]\\s+(?:corr|correntinha|corrente|pc)", "en la última cad", "m"],
+  ["barbante\\s+n[ºo°.]?\\s*(\\d+)", "cordón de algodón n.º $1", "m"], ["barbante", "cordón de algodón", "m"],
+  ["(?:pule|pular|pulando|salte|saltar)\\s+"+TN+"\\s+(?:pontos?|malhas?)", (m, n) => "salta "+n+(n==="1" ? " punto" : " puntos"), "m"],
+  ["(?:esconda|esconder|escondendo|arremate)\\s+(?:as\\s+|os\\s+|o\\s+|a\\s+)?(?:pontas?|fios?|sobras|rabinhos)(?:\\s+de\\s+(?:fio|linha))?", "esconde las hebras", "m"],
+  ["(?:arremate|remate)\\s+deixando\\s+(?:um\\s+)?(?:fio|rabo)\\s+(?:longo|comprido|grande)(?:\\s+para\\s+(?:a\\s+)?costura(?:r)?)?", "remata dejando una hebra larga para coser", "m"],
+  ["pass(?:e|ar)\\s+o\\s+fio\\s+(?:por|pelos|nos|em)\\s+(?:os\\s+)?(?:pontos|malhas)\\s+restantes\\s+e\\s+pux(?:e|ar)(?:\\s+para\\s+fechar)?", "pasa el hilo por los puntos restantes y tira para cerrar", "m"],
+  ["n[ao]\\s+"+TN+"\\.?[ªºa°]?\\s+(?:corr|correntinha|corrente|pc)\\s+do\\s+in[íi]cio", "en la $1ª cad del principio", "m"],
+  ["trabalh(?:e|ar)\\s+(?:s[óo]\\s+|somente\\s+|apenas\\s+)?(?:na|pela)\\s+al[çc]a\\s+de\\s+tr[áa]s", "teje solo por la hebra de atrás", "m"],
+  ["trabalh(?:e|ar)\\s+(?:s[óo]\\s+|somente\\s+|apenas\\s+)?(?:na|pela)\\s+al[çc]a\\s+da\\s+frente", "teje solo por la hebra de delante", "m"],
+  ["remate\\s+e\\s+feche", "remata y cierra", "m"], ["remate|rematar", "remata", "m"],
+  ["vire\\s+o\\s+trabalho|virar\\s+o\\s+trabalho", "gira la labor", "m"],
+  ["comece\\s+a\\s+encher|come[çc]ar\\s+a\\s+encher", "empieza a rellenar", "m"],
+  ["(?:materiais|material)(?:\\s+necess[áa]rios?)?|voc[êe]\\s+vai\\s+precisar(?:\\s+de)?|voc[êe]\\s+precisar[áa](?:\\s+de)?", "Materiales", "m"],
   ["abrevia[çc][õo]es|abreviaturas|legenda", "Abreviaturas", "m"], ["montagem", "Montaje", "m"], ["acabamento", "Acabado", "m"], ["observa[çc][õo]es|notas", "Notas", "m"],
-  ["(?:receita|padr[ãa]o|gr[áa]fico)\\s+(?:de\\s+)?(?:amigurumi\\s+)?(?:em\\s+|de\\s+)?croch[êe]", "patrón de ganchillo", "m"],
+  ["(?:receita|padr[ãa]o|gr[áa]fico)\\s+(?:de\\s+)?(?:amigurumi\\s+)?(?:em\\s+|de\\s+)?croch(?:[êe]|et)", "patrón de ganchillo", "m"],
   ["(?:trabalh(?:ad[ao]|e|ar|amos)|tec(?:id[ao]|e|er)|fa[çc]a)\\s+em\\s+espiral|em\\s+espiral", "en espiral", "m"],
   ["sem\\s+(?:fechar|unir)\\s+(?:as\\s+)?(?:carreiras|voltas)", "sin cerrar las vueltas", "m"],
-  ["entre\\s+(?:a|as)\\s+(?:carreiras?|voltas?)\\s+(\\d+)\\s+e\\s+(?:a\\s+)?(?:(?:carreira|volta)\\s+)?(\\d+)", "entre las vueltas $1 y $2", "m"],
+  ["entre\\s+(?:a|as)\\s+(?:carreiras?|voltas?|carr\\.?)\\s+(\\d+)\\s+e\\s+(?:a\\s+)?(?:(?:carreira|volta)\\s+)?(\\d+)", "entre las vueltas $1 y $2", "m"],
   ["(?:com|a)\\s+(\\d+)\\s+pontos\\s+de\\s+(?:dist[âa]ncia|intervalo|separa[çc][ãa]o)(?:\\s+entre\\s+(?:eles|si))?", "con $1 puntos de separación", "m"],
   ["n[ãa]o\\s+(?:encha|encher|enchemos|preencha)", "no rellenes", "m"], ["dobr(?:e|ar|a)\\s+(?:ao|pela)\\s+(?:meio|metade)", "dobla por la mitad", "m"],
   ["(?:monte|montar|fa[çc]a|fazer)\\s+(?:uma\\s+)?(?:corrente|correntinha|cadeia)\\s+(?:de\\s+|com\\s+)?"+TN+"\\s*(?:corr|correntinhas|correntes|pontos(?:\\s+de\\s+corrente)?|pc|ch)?", "monta una cadeneta de $1 cad", "m"],
-  ["(?:come[çc]ando\\s+)?(?:a\\s+partir\\s+)?(?:n[ao]|d[ao])\\s+"+TN+"[ªºa°]?\\s+(?:corr|correntinha|corrente|ponto)\\s+(?:a\\s+partir\\s+)?d[ao]\\s+(?:agulha|gancho)", "en la $1ª cad desde el ganchillo", "m"],
+  ["(?:come[çc]ando\\s+)?(?:a\\s+partir\\s+)?(?:n[ao]|d[ao])\\s+"+TN+"\\.?[ªºa°]?\\s+(?:corr|correntinha|corrente|ponto|pc|malha|cadeia)\\s+(?:a\\s+partir\\s+)?d[ao]\\s+(?:agulha|gancho)", "en la $1ª cad desde el ganchillo", "m"],
   ["(?:fa[çc]a|fazer)\\s+(?:um\\s+)?anel\\s+m[áa]gico", "haz un anillo mágico", "m"],
   ["(?:no|em\\s+um|num|dentro\\s+do|em)\\s+(?:anel\\s+m[áa]gico|am)", "en el anillo mágico", "m"],
-  ["am", "AM", "m"], ["anel\\s+m[áa]gico", "anillo mágico", "m"],
+  ["am", "AM", "m"], ["anel\\s+m[áa]gico", "anillo mágico", "m"], ["(?:no|ao|dentro\\s+do)\\s+anel", "en el anillo", "m"], ["anel", "anillo", "m"],
   ["(?:fech(?:e|ar|a)|un(?:a|ir|e))(?:\\s+a\\s+(?:carreira|volta))?\\s+com\\s+(?:um\\s+)?(?:pbx|ponto\\s+baix[íi]ssimo)(?:\\s+no\\s+primeiro\\s+ponto)?", "cierra con pd", "m"],
-  ["em\\s+(?:cada|todos\\s+os)\\s+pontos?(?:\\s+da\\s+(?:carreira|volta)(?:\\s+anterior)?)?|em\\s+cada\\s+pb|em\\s+todos\\s+os\\s+pb", "en cada punto", "m"],
-  ["(?:no|em\\s+um|num)\\s+mesmo\\s+ponto", "en el mismo punto", "m"], ["(?:no|em\\s+o)\\s+pr[óo]ximo\\s+ponto|no\\s+ponto\\s+seguinte", "en el siguiente punto", "m"],
+  ["em\\s+tod[oa]s(?=\\s*[(,.;]|\\s*$)|em\\s+(?:cada|todos\\s+os|todas\\s+as)\\s+(?:pontos?|malhas?)(?:\\s+da\\s+(?:carreira|volta)(?:\\s+anterior)?)?|em\\s+cada\\s+pb|em\\s+todos\\s+os\\s+pb", "en cada punto", "m"],
+  ["(?:no|em\\s+um|num|na)\\s+mesm[ao]\\s+(?:ponto|malha)", "en el mismo punto", "m"], ["(?:no|em\\s+o)\\s+pr[óo]ximo\\s+ponto|n[ao]\\s+(?:pr[óo]xima\\s+malha|(?:ponto|malha)\\s+seguinte)", "en el siguiente punto", "m"],
   ["(?:(?:somente|s[óo]|apenas)\\s+)?(?:na|pela|nas|pelas|em)\\s+(?:al[çc]as?|argolas?|la[çc]adas?|al[çc]a)\\s+(?:de\\s+tr[áa]s|traseiras?|posterior(?:es)?)|(?:al[çc]a|argola)\\s+de\\s+tr[áa]s|blo", "por la hebra de atrás", "m"],
   ["(?:(?:somente|s[óo]|apenas)\\s+)?(?:na|pela|nas|pelas|em)\\s+(?:al[çc]as?|argolas?|la[çc]adas?)\\s+(?:da\\s+frente|dianteiras?|frontal|frontais)|(?:al[çc]a|argola)\\s+da\\s+frente|flo", "por la hebra de delante", "m"],
   ["(?:em|nas|pelas)\\s+(?:ambas\\s+as|as\\s+duas)\\s+(?:al[çc]as|argolas)", "por las dos hebras", "m"],
@@ -4057,15 +4076,15 @@ const GLOSARIO_PT = [
   ["(?:arremate|arrematar|arremata)(?:\\s+e\\s+(?:corte|cortar)(?:\\s+o\\s+fio)?)?", "remata", "m"], ["(?:corte|cortar|corta)\\s+o\\s+fio", "corta el hilo", "m"],
   ["(?:deix(?:e|ar|ando))\\s+(?:um\\s+)?(?:fio|rabo|cauda|pedaço\\s+de\\s+fio)\\s+(?:longo|comprido|grande)(?:\\s+para\\s+(?:costurar|costura|a\\s+costura))?", "deja una hebra larga para coser", "m"],
   ["(?:feche|fechar|fecha)\\s+o\\s+(?:buraco|orif[íi]cio|furo)|(?:feche|fechar)\\s+(?:os\\s+)?pontos\\s+restantes", "cierra el agujero", "m"],
-  ["olhos\\s+de\\s+seguran[çc]a|olhos\\s+com\\s+trava", "ojos de seguridad", "m"], ["olho\\s+de\\s+seguran[çc]a|olho\\s+com\\s+trava", "ojo de seguridad", "m"],
+  ["olhos\\s+de\\s+seguran[çc]a|olhos\\s+com\\s+trava|olhinhos\\s+(?:de\\s+seguran[çc]a|com\\s+trava)", "ojos de seguridad", "m"], ["olhinhos|olhos", "ojos", "m"], ["olho\\s+de\\s+seguran[çc]a|olho\\s+com\\s+trava", "ojo de seguridad", "m"],
   ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+de\\s+seguran[çc]a", "de seguridad de $1", "m"],
   ["(?:fibra\\s+siliconada|fibra)\\s+para\\s+enchimento", "relleno de fibra", "m"], ["fibra\\s+siliconada|fibra\\s+de\\s+silicone|enchimento\\s+de\\s+fibra|enchimento", "relleno", "m"],
-  ["bom\\s+croch[êe]", "¡Feliz ganchillo", "m"], ["linhas", "yarns", "en"], ["linha|fio", "yarn", "en"],
+  ["bom\\s+croch(?:[êe]|et)", "¡Feliz ganchillo", "m"], ["linhas", "yarns", "en"], ["linha|fio", "yarn", "en"],
   ["agulha\\s+(?:de\\s+)?(?:tape[çc]aria|costura|l[ãa]|bordar|sem\\s+ponta|ponta\\s+romba)", "aguja lanera", "m"],
-  ["agulha\\s+(?:de\\s+)?croch[êe]\\s+(?:de\\s+)?(\\d+(?:[.,]\\d+)?\\s*mm)|agulha\\s+(\\d+(?:[.,]\\d+)?\\s*mm)", (m, a, b) => "ganchillo de "+(a||b), "m"],
-  ["agulha\\s+de\\s+croch[êe]|agulha", "ganchillo", "m"],
+  ["agulha\\s+(?:de\\s+)?croch(?:[êe]|et)\\s+(?:de\\s+)?(\\d+(?:[.,]\\d+)?\\s*mm)|agulha\\s+(\\d+(?:[.,]\\d+)?\\s*mm)", (m, a, b) => "ganchillo de "+(a||b), "m"],
+  ["agulha\\s+de\\s+croch(?:[êe]|et)|agulha", "ganchillo", "m"],
   ["marcador(?:es)?(?:\\s+de\\s+pontos?)?", "marcador", "m"],
-  ["croch[êe]", "ganchillo", "m"],
+  ["croch(?:[êe]|et)", "ganchillo", "m"],
   // Los puntos: con nombre largo, en plural o en singular; y las abreviaturas
   [PT_N+"(?:pontos?\\s+baix[íi]ssimos?)", "$1 pd", "m"], ["pontos\\s+baix[íi]ssimos", "puntos deslizados", "m"], ["ponto\\s+baix[íi]ssimo|ponto\\s+deslizado", "punto deslizado", "m"],
   [PT_N+"(?:meios?\\s+pontos?\\s+altos?)", "$1 mpa", "m"], ["meios\\s+pontos\\s+altos", "medios puntos altos", "m"], ["meio\\s+ponto\\s+alto", "medio punto alto", "m"],
@@ -4079,6 +4098,11 @@ const GLOSARIO_PT = [
   ["aum", "aum", "m"], ["dim(?:\\s+invis[íi]vel)?|dism|inv", "dism", "m"],
   ["carreiras?\\s+anterior(?:es)?|volta\\s+anterior", "vuelta anterior", "m"], ["em\\s+volta|ao\\s+redor", "alrededor", "m"],
   ["carreiras|voltas", "vueltas", "m"], ["carreira|carr\\.?", "vuelta", "m"],
+  ["n[ao]\\s+(?:pr[óo]xim[oa]|seguinte)(?=\\s*[*,.;)\\]]|\\s*$)", "en el siguiente", "m"],
+  ["leques", "abanicos", "m"], ["leque", "abanico", "m"], ["arcos", "arcos", "m"], ["arco", "arco", "m"], ["malhas", "puntos", "m"], ["malha", "punto", "m"],
+  ["padr[ãa]o|receita", "patrón", "m"], ["encha|preencha|encher", "rellena", "m"],
+  ...[["marrom|castanho","marrón"],["branc[oa]","blanco"],["pret[oa]","negro"],["rosa\\s+beb[êe]","rosa bebé"],["vermelh[oa]","rojo"],["amarel[oa]","amarillo"],["cinza|cinzent[oa]","gris"],["laranja","naranja"],["roxo|roxa|lil[áa]s","morado"],["bege","beige"],["cru|cr[úu]a","crudo"],["azul\\s+marinho","azul marino"],["verde\\s+[áa]gua","verde agua"]]
+    .map(([pt, es]) => ["(?:na\\s+cor\\s+|cor\\s+)?(?:"+pt+")", es, "m"]),
   ["pontos|pts\\.?", "puntos", "m"], ["ponto|pt\\.", "punto", "m"],
   ["(\\d+)\\s+vezes", "$1 veces", "m"], ["repita|repetir|repete", "repite", "m"]
 ];
@@ -4231,7 +4255,7 @@ function cabeceraVuelta(l, idioma){
     if((m = l.match(/^\s*(?:ряд|круг|р)\.?\s*(\d+)\s*[:;.)\-–—]?\s*/iu))) return una(m[1]);
   }
   if(idioma==="pt"){
-    if((m = l.match(/^\s*(?:carreiras?|carr\.?|voltas?|rodadas?|c|v)\s*(\d+)\s*[ªº°]?\s*(?:-|–|—|a|à|ao|até|e)\s*(?:c|v|carr\.?)?\s*(\d+)\s*[ªº°]?\s*[:;.)\-–—]?\s*/i))) return rango(m[1], m[2]);
+    if((m = l.match(/^\s*(?:carreiras?|carr\.?|voltas?|rodadas?|c|v)\s*(\d+)\s*[ªº°]?\s*(?:-|–|—|a|à|ao|até|e)\s*(?:c|v|carr\.?)?\s*(\d+)(?!\d|\s*(?:pbx|pb|pa|mpa|pad|aum|dim|dism|corr|pc|pts?|x|vezes)(?![\p{L}]))\s*[ªº°]?\s*[:;.)\-–—]?\s*/iu))) return rango(m[1], m[2]);
     if((m = l.match(/^\s*(\d+)\s*[ªº°a]?\.?\s*(?:-|–|—|a|à|ao|até|e)\s*(\d+)\s*[ªº°a]?\.?\s*(?:carreiras?|voltas?|carr\.?)\s*[:;.)\-–—]?\s*/i))) return rango(m[1], m[2]);
     if((m = l.match(/^\s*(?:fileiras?)\s*(\d+)\s*(?:-|–|—|a|até|e)\s*(\d+)\s*[:;.)\-–—]?\s*/i))) return rango(m[1], m[2], true);
     if((m = l.match(/^\s*(?:carreira|carr\.?|volta|rodada)\s*(\d+)\s*[ªº°]?\s*[:;.)\-–—]?\s*/i))) return una(m[1]);
@@ -4325,6 +4349,7 @@ const ARREGLOS_ES = [
   [/\b(las|unas|estas|esas|otras) puntos\b/gi, (m, a) => ({las:"los", unas:"unos", estas:"estos", esas:"esos", otras:"otros"})[a.toLowerCase()]+" puntos"],
   [/\bpunto (siguiente|restante)s?\b/g, "punto $1"], [/\bmisma punto\b/g, "mismo punto"], [/\bprimera punto\b/g, "primer punto"], [/\búltima punto\b/g, "último punto"],
   [/\bpuntos (restant|siguient)es\b/g, "puntos $1es"],
+  [/\bde el\b/g, "del"], [/\b(?:la|el) ([2-9]|\d{2,}) cad\b/g, "las $1 cad"], [/\b([Aa]) el\b/g, (m, a) => a==="A" ? "Al" : "al"], [/\b(un|el|primer|último|siguiente) cad\b/g, (m, a) => ({un:"una", el:"la", primer:"la primera", "último":"la última", siguiente:"la siguiente"})[a]+" cad"], [/\bla el\b/g, "el"], [/\b(\d+) ventiladores\b/g, "$1 abanicos"],
   [/\brondas\b/g, "vueltas"], [/\bronda\b/g, "vuelta"], [/\bRondas\b/g, "Vueltas"], [/\bRonda\b/g, "Vuelta"],
   [/\bbucles\b/g, "puntos"], [/\bbucle\b/g, "punto"],
   [/\bgancho de ganchillo\b/gi, "ganchillo"], [/\bgancho\b/g, "ganchillo"], [/\bGancho\b/g, "Ganchillo"], [/\baguja de crochet\b/gi, "ganchillo"],
@@ -4424,7 +4449,7 @@ function bloquesDeTexto(lineas, idioma){
     const sigue = prev && !tipo && prev.tipo!=="parte" && (
       /[,;\-–(/]$|\p{L}-$/u.test(prev.t) || /^[\p{Ll}(]/u.test(t) ||
       // la primera palabra de esta línea no cabía en la de arriba: es la misma frase partida
-      (!/[.!?:)]$/.test(prev.t) && (prev.ultLlena!=null ? prev.ultLlena : prev.ultLargo >= lleno*.6 && prev.ultLargo+1+t.split(/\s/)[0].length >= lleno*.9)));
+      (!/[.!?:)\]]$/.test(prev.t) && (prev.ultLlena!=null ? prev.ultLlena : prev.ultLargo >= lleno*.6 && prev.ultLargo+1+t.split(/\s/)[0].length >= lleno*.9)));
     if(sigue && !(prev.tipo==="leyenda" && !/^[\p{Ll}(]/u.test(t))){
       prev.t = /\p{L}-$/u.test(prev.t) && /^\p{Ll}/u.test(t) ? prev.t.slice(0, -1)+t : prev.t+" "+t;
       prev.ultLargo = t.length; prev.ultLlena = llena[i]; maxLargo = Math.max(maxLargo, t.length);
@@ -4558,7 +4583,10 @@ const PALABRAS_EN_TR = {the:"el", a:"un", and:"y", with:"con", of:"de", in:"en",
   repeat:"repite", times:"veces", yarn:"lana", color:"color", white:"blanco", black:"negro", pink:"rosa", blue:"azul", make:"haz", together:"juntos", then:"después", next:"siguiente"};
 // Portugués, turco y chino: lo justo para entender una frase de ganchillo
 const PALABRAS_OTRAS = {
-  pt: [["no\\s+topo\\s+d[ae]","arriba de"],["no\\s+topo","arriba"],["e","y"],["em","en"],["no","en el"],["na","en la"],["nos","en los"],["nas","en las"],["com","con"],["do","del"],["da","de la"],["dos","de los"],["das","de las"],["os","los"],["as","las"],["o","el"],
+  pt: [["no\\s+topo\\s+d[ae]","arriba de"],["no\\s+topo","arriba"],["o\\s+nariz","la nariz"],["a\\s+cabe[çc]a","la cabeza"],["a\\s+orelha","la oreja"],["a\\s+ponta","la punta"],["a\\s+pe[çc]a","la pieza"],["a\\s+(?:aguja|agulha)","la aguja"],["a\\s+parte","la parte"],["logo\\s+abaixo","justo debajo"],["ficou\\s+livre","quedó libre"],["(?:do|no)\\s+outro\\s+lado","en el otro lado"],
+    ["posicione|coloque","coloca"],["comece|come[çc]ar","empieza"],["termine|terminar","termina"],["contam","cuentan"],["primeir[oa]","primer"],["outr[oa]","otro"],["s[óo]","solo"],["bem","bien"],["ponta","punta"],
+    ["orelhas","orejas"],["orelha","oreja"],["bra[çc]o","brazo"],["focinho","hocico"],["perna","pierna"],["pe[çc]as","piezas"],["pe[çc]a","pieza"],["espa[çc]os","espacios"],["espa[çc]o","espacio"],["seguinte","siguiente"],["volta","vuelta"],
+    ["dica","consejo"],["se","si"],["diminua","disminuye"],["aumente","aumenta"],["livre","libre"],["abaixo","debajo"],["acima","encima"],["lado","lado"],["e","y"],["em","en"],["no","en el"],["na","en la"],["nos","en los"],["nas","en las"],["com","con"],["do","del"],["da","de la"],["dos","de los"],["das","de las"],["os","los"],["as","las"],["o","el"],
     ["um","un"],["uma","una"],["até","hasta"],["entre","entre"],["depois","después"],["então","luego"],["cabe[çc]a","cabeza"],["corpo","cuerpo"],["orelhas","orejas"],["bra[çc]os","brazos"],
     ["pernas","piernas"],["olhos","ojos"],["rabo","cola"],["cor","color"],["fio|linha","hilo"],["repita|repetir","repite"],["encha|encher","rellena"],["costure|costurar","cose"],
     ["feche|fechar","cierra"],["fa[çc]a|fazer","haz"],["vire|virar","gira"],["corte|cortar","corta"],["borde|bordar","borda"],["pr[óo]ximo","siguiente"],["mesmo","mismo"],["n[ãa]o","no"],
@@ -4574,7 +4602,8 @@ const EN_A_ES = [["the first stitch of each round","el primer punto de cada vuel
   ["yarns","hilos"],["yarn","hilo"],["stitches","puntos"],["stitch","punto"],["stuff","rellena"],["sew","cose"],["nose","nariz"],["embroider","borda"]];
 function enAEspanol(t){ for(const [en, es] of EN_A_ES) t = t.replace(new RegExp("\\b"+en+"\\b", "g"), es); return t; }
 // En turco «İ» no es la mayúscula de «i» para las reglas: se cambia por «I»
-const paraReglas = (t, idioma) => idioma==="tr" ? t.replace(/İ/g, "I") : t;
+// En portugués el número va pegado al punto («6pb», «1aum», «4corr») y el total a veces entre corchetes («[30]»)
+const paraReglas = (t, idioma) => idioma==="tr" ? t.replace(/İ/g, "I") : idioma==="pt" ? t.replace(/(\d)(pbx|pb|mpa|pad|pa|aum|dim|corr|pc|pd)(?![\p{L}])/giu, "$1 $2").replace(/([(,*]\s*)(pbx|pb|mpa|pad|pa|aum|dim)(?=\s*[),*])/giu, (m, a, b) => a+"1 "+b).replace(/\[\s*(\d+)\s*\]\s*\.?\s*$/, "($1)").replace(/\(\s*(\d+)\s*(?:pts?\.?|pontos|malhas)\s*\)/giu, "($1)") : t;
 function palabraAPalabra(t, idioma){
   if(idioma==="ru"){ for(const [p, es] of PALABRAS_RU) t = t.replace(trRx(p), (m, b) => b+es); return t; }
   if(PALABRAS_OTRAS[idioma]){ for(const [p, es] of PALABRAS_OTRAS[idioma]) t = t.replace(trRx(p), (m, b) => b+(idioma==="zh" ? " "+es+" " : es)); return idioma==="zh" ? t.replace(/\s{2,}/g, " ").trim() : t; }

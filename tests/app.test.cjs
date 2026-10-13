@@ -1410,6 +1410,7 @@ Fasten off and weave in ends.`;
     assert.match(await page.locator(".arreglo").textContent(), /Arreglada por ti/);
     await page.locator("#im-nombre").fill("Bola");
     await page.getByRole("button", { name: "Guardar patrón" }).tap();
+    await page.waitForFunction(() => state.patrones.length > 0); // se guarda al terminar de leer (a veces tarda un poco)
     assert.equal(await page.evaluate(() => state.patrones[0].pasos[2]), "Vuelta 3: *1 pb, 1 aum* x 6 (18)");
     assert.deepEqual(page.errores, []);
     await page.context().close();
@@ -1745,6 +1746,15 @@ Fasten off and weave in ends.`;
     // Turco con las letras chinas (X, V, A) y lo que confunde el lector de fotos («1s1» es «1 sı»)
     const tr2 = await page.evaluate(async () => (await traducirBloques(bloquesDeTexto(["1. tur: SH içine 6 X (6)", "2. tur: 6 V (12)", "3. tur: (1 X, 1 V) x 6 (18)", "4. tur: (1s1, Laz) x 6 (12)"], "tr"), { idioma: "tr", traductor: null })).filter(b => b.tipo === "vuelta").map(b => b.t));
     assert.deepEqual(tr2, ["Vuelta 1: 6 pb en el anillo mágico (6)", "Vuelta 2: 6 aum (12)", "Vuelta 3: (1 pb, 1 aum) x 6 (18)", "Vuelta 4: (1 pb, 1 dism) x 6 (12)"]);
+    // Portugués como se escribe de verdad: número pegado al punto («6pb»), «Carr 1 - …» (no es un tramo del 1 al 6),
+    // «(6 pts)», «[30]», «1ª volta», «V6-V11»
+    const pt2 = await page.evaluate(async () => { const ls = ["Carr 1 - 6pb no anel mágico (6 pts)", "Carr 2 - aum em todos (12 pts)", "Carr 5 a 9 - 24pb (24 pts)", "4ª volta: *2pb, 1aum* repetir 6x (24)", "V6-V11: pb em todas as malhas [30]", "Coloque os olhos entre a 10ª e 11ª volta.", "V12: (3 pb, dim) repetir 6 vezes [24]", "16ª volta: *3pb, 1dim* 6x (24)", "Arremate e esconda o fio."];
+      const bs = await traducirBloques(bloquesDeTexto(ls, "pt"), { idioma: "pt", traductor: null });
+      return { t: bs.filter(b => b.tipo !== "leyenda" && b.tipo !== "parte").map(b => b.t), imp: importarTexto(ls.join("\n"), null, false).pasos }; });
+    assert.deepEqual(pt2.t.slice(0, 5), ["Vuelta 1: 6 pb en el anillo mágico (6)", "Vuelta 2: aum en cada punto (12)", "Vueltas 5 a 9: 24 pb (24)", "Vuelta 4: *2 pb, 1 aum* repite 6x (24)", "Vueltas 6 a 11: pb en cada punto (30)"]);
+    assert.match(pt2.t[5], /entre las vueltas 10 y 11/);
+    assert.deepEqual(pt2.t.slice(6), ["Vuelta 12: (3 pb, 1 dism) repite 6 veces (24)", "Vuelta 16: *3 pb, 1 dism* 6x (24)", "Remata y esconde las hebras."]);
+    assert.ok(pt2.imp.includes("Vuelta 12: *3 pb, 1 dism* repetir 6 veces (24)") && pt2.imp.includes("Vuelta 1: 6 pb en el anillo mágico (6)"), JSON.stringify(pt2.imp));
     // En «Añadir un patrón» avisa del idioma
     await page.evaluate(() => go({ name: "importar" }));
     await page.locator("#im-texto").fill(PT.join("\n"));
