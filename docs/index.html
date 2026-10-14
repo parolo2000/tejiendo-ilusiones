@@ -388,6 +388,7 @@ ol.steps li.parte-v textarea{color:var(--accent)}
 button.min{min-height:2.4rem;padding:.2rem .5rem;font-size:.92rem}
 details.dice summary{min-height:2.4rem;font-size:.92rem;color:var(--muted)}
 details.dice p{margin:.2rem 0 0;font-size:.9rem}
+a.marcador{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);cursor:grab}
 .sofa-video{flex:none;display:inline-flex;align-items:center;gap:.35rem;font-weight:700;font-size:.95rem;color:var(--accent)}
 .sofa-video[hidden]{display:none}
 .sofa-apunte{margin:0;font-size:.95rem;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:.6rem;padding:.35rem .6rem;flex:none}
@@ -4298,6 +4299,50 @@ function juntarCapturas(textos){
   return todas.join("\n");
 }
 let videoBorrador = {url:"", texto:""};
+
+// En el ordenador: un marcador del navegador que, tocado en un vídeo de YouTube, abre la transcripción y la trae a la
+// app. Funciona porque se ejecuta dentro de la página de YouTube (desde la app, el navegador no deja leerla). No se
+// llama nunca desde la app: es el código que se guarda en el marcador (sin comentarios dentro, que van en él).
+function marcadorYouTube(APP){
+  var w = window.open("about:blank", "_blank");
+  var id = new URLSearchParams(location.search).get("v") || "";
+  var panel = function(){ return document.querySelector('ytd-engagement-panel-section-list-renderer[target-id*="transcript"]'); };
+  var trozos = function(){ var p = panel(); return p ? Array.prototype.slice.call(p.querySelectorAll("ytd-transcript-segment-renderer, transcript-segment-view-model")) : []; };
+  var leer = function(){ return trozos().map(function(s){ var t = s.querySelector(".segment-timestamp, [class*=Timestamp], [class*=timestamp]"), x = s.querySelector(".segment-text, yt-formatted-string, [class*=Text]"); return t && x ? t.textContent.trim()+"\n"+x.textContent.replace(/\s+/g, " ").trim() : s.innerText.trim(); }).join("\n"); };
+  var subtitulos = async function(){
+    try{
+      var pr = window.ytInitialPlayerResponse; if(!pr || !pr.videoDetails || pr.videoDetails.videoId!==id) return "";
+      var ps = pr.captions.playerCaptionsTracklistRenderer.captionTracks, c = ps.find(function(x){ return x.kind!=="asr"; }) || ps[0];
+      var j = await (await fetch(c.baseUrl+"&fmt=json3")).json();
+      return j.events.filter(function(e){ return e.segs; }).map(function(e){ var s = Math.floor(e.tStartMs/1000); return Math.floor(s/60)+":"+String(s%60).padStart(2, "0")+"\n"+e.segs.map(function(x){ return x.utf8; }).join("").replace(/\s+/g, " ").trim(); }).join("\n");
+    }catch(e){ return ""; }
+  };
+  var mal = function(msg){ if(w) w.close(); alert(msg); };
+  (async function(){
+    if(!/(^|\.)youtube\.com$/.test(location.hostname) || !id) return mal("Abre primero un vídeo en YouTube y toca este marcador allí.");
+    if(!trozos().length){
+      var b = document.querySelector("ytd-video-description-transcript-section-renderer button") || Array.prototype.find.call(document.querySelectorAll("button"), function(x){ return /transcri/i.test((x.getAttribute("aria-label")||"")+" "+x.textContent); });
+      if(b) b.click();
+      for(var i=0; i<40 && !trozos().length; i++) await new Promise(function(r){ setTimeout(r, 250); });
+    }
+    var t = leer() || await subtitulos();
+    if(!t) return mal("Este vídeo no tiene transcripción (o YouTube no me la deja leer). Prueba a abrir «Mostrar transcripción» y toca otra vez el marcador.");
+    var u = APP+"#video="+encodeURIComponent(id)+"&texto="+encodeURIComponent(t);
+    if(w) w.location.href = u; else location.href = u;
+  })();
+}
+const enlaceMarcador = () => "javascript:"+encodeURIComponent("("+marcadorYouTube.toString()+")("+JSON.stringify(window.TI_LOCAL ? location.origin+location.pathname : APP_URL)+");void 0");
+// Lo que trae el marcador: «#video=ID&texto=…». Va al recuadro, para revisarlo como lo pegado.
+function abrirVideoRecibido(){
+  if(!/^#video=/.test(location.hash)) return false;
+  const q = new URLSearchParams(location.hash.slice(1));
+  try{ history.replaceState(history.state, "", location.pathname+location.search); }catch(e){}
+  const id = idVideo(q.get("video")||""), texto = (q.get("texto")||"").replace(/\r/g, "").slice(0, 300000);
+  videoBorrador = {url: id ? "https://youtu.be/"+id : "", texto};
+  go({name:"video"});
+  return true;
+}
+addEventListener("hashchange", abrirVideoRecibido);
 VISTAS.video = V => {
   const id = () => idVideo(enlace.value);
   const marco = h("div",{class:"video-marco", hidden:true});
@@ -4402,8 +4447,16 @@ VISTAS.video = V => {
         h("ol",{class:"pasos-instalar"},
           h("li",{}, "Abre el vídeo en YouTube, abre la descripción («…más») y toca «Mostrar transcripción». Si no sale, ese vídeo no tiene subtítulos."),
           h("li",{}, h("b",{}, "En el móvil: "), "la app de YouTube no deja copiar ese texto. Haz capturas de pantalla de la transcripción, bajando un poco cada vez, y toca aquí «Capturas de la transcripción» para elegirlas todas. Yo las leo."),
-          h("li",{}, h("b",{}, "En el ordenador: "), "arrastra con el ratón desde la primera línea hasta la última, copia y pégalo en el recuadro.")),
+          h("li",{}, h("b",{}, "En el ordenador: "), "usa el botón de abajo, que lo hace solo. O arrastra con el ratón desde la primera línea hasta la última, copia y pégalo en el recuadro.")),
         h("p",{class:"muted"}, "¿El patrón viene escrito en la descripción del vídeo? Cópialo y pégalo aquí también: lo leo igual.")),
+      h("details",{class:"panel", id:"vi-marcador"},
+        h("summary",{}, "En el ordenador: traerlo de YouTube con un toque"),
+        h("p",{}, "Pon este botón en la barra de marcadores del navegador una sola vez. Después, con el vídeo abierto en YouTube, tócalo: abre la transcripción y la trae aquí."),
+        h("p",{}, h("a",{class:"btn marcador", href:enlaceMarcador(), draggable:"true", title:"Arrástralo a la barra de marcadores", onclick:e=>{ e.preventDefault(); toast("Arrástralo a la barra de marcadores"); }}, "🧶 Pasar a Tejiendo Ilusiones")),
+        h("ol",{class:"pasos-instalar"},
+          h("li",{}, "Si no ves la barra de marcadores, pulsa a la vez Ctrl, Mayús y B (en Mac: Cmd, Mayús y B)."),
+          h("li",{}, "Arrastra el botón rosa con el ratón hasta esa barra y suéltalo."),
+          h("li",{}, "En YouTube, con el vídeo abierto, toca «Pasar a Tejiendo Ilusiones» en la barra. Se abre esta pantalla con todo puesto."))),
       h("div",{class:"row"}, h("button",{class:"big", id:"vi-btn-capturas", onclick:()=>elegirCapturas.click()}, icono("foto",20), "Capturas de la transcripción"), elegirCapturas),
       estadoCap,
       area,
@@ -7464,6 +7517,7 @@ document.documentElement.lang = document.documentElement.lang || "es"; // lector
 if(nubeActiva()) sesion = leerSesion();
 render();
 abrirEnlaceRecibido();
+abrirVideoRecibido();
 pedirAlmacenamientoFijo();
 arrancarNube().then(()=>{ if(sesion){ vigilarAvisos(); if(pendienteClave()) go({name:"clave"}, true); else render(); } });
 </script>

@@ -2001,6 +2001,47 @@ Fasten off and weave in ends.`;
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });
+  await prueba("en el ordenador: el marcador lee la transcripción en YouTube y la trae a la app", async () => {
+    const page = await nuevaPagina(browser);
+    await page.route(/cdn\.jsdelivr\.net/, r => r.abort());
+    await page.evaluate(() => go({ name: "video" }));
+    const href = await page.locator("a.marcador").getAttribute("href");
+    assert.match(href, /^javascript:/);
+    // El marcador lleva a la app publicada; aquí se cambia por la de las pruebas
+    const codigo = decodeURIComponent(href.slice("javascript:".length)).replace(JSON.stringify("https://parolo2000.github.io/tejiendo-ilusiones/"), JSON.stringify(await page.evaluate(() => location.origin + location.pathname)));
+    assert.ok(codigo.includes(await page.evaluate(() => location.origin + location.pathname)));
+    // Una página como la de YouTube: la transcripción se abre con el botón de la descripción
+    const lineas = TRANS_ES.trim().split("\n"), filas = [];
+    for (let i = 0; i < lineas.length; i += 2) filas.push([lineas[i], lineas[i + 1]]);
+    const html = `<!doctype html><meta charset="utf-8"><style>*{display:block}</style><h1>Conejito</h1>
+      <ytd-video-description-transcript-section-renderer><button aria-label="Mostrar transcripción">Mostrar transcripción</button></ytd-video-description-transcript-section-renderer>
+      <script>document.querySelector("button").onclick = () => setTimeout(() => {
+        const p = document.createElement("ytd-engagement-panel-section-list-renderer"); p.setAttribute("target-id", "engagement-panel-searchable-transcript");
+        p.innerHTML = "<h2>Transcripción</h2>" + ${JSON.stringify(filas)}.map(([t, x]) => '<ytd-transcript-segment-renderer><div class="segment-timestamp"> ' + t + ' </div><yt-formatted-string class="segment-text">' + x + '</yt-formatted-string></ytd-transcript-segment-renderer>').join("");
+        document.body.append(p); }, 300);<\/script>`;
+    const yt = await page.context().newPage();
+    await yt.route(/youtube\.com\/watch/, r => r.fulfill({ body: html, contentType: "text/html; charset=utf-8" }));
+    await yt.goto("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    const [nueva] = await Promise.all([page.context().waitForEvent("page"), yt.evaluate(c => { eval(c); }, codigo)]);
+    await nueva.waitForURL(/tejiendo-ilusiones\.html/);
+    await nueva.locator("textarea.video-paso").first().waitFor();
+    assert.equal(await nueva.inputValue("#vi-enlace"), "https://youtu.be/dQw4w9WgXcQ");
+    assert.match(await nueva.inputValue("#vi-texto"), /^0:00\nhola a todas/);
+    const pasos = await nueva.$$eval("textarea.video-paso", xs => xs.map(x => x.value));
+    assert.ok(pasos.includes("Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)"));
+    assert.equal(await nueva.evaluate(() => location.hash), "");
+    // Si la transcripción no se abre, prueba con los subtítulos del vídeo
+    const html2 = `<!doctype html><meta charset="utf-8"><h1>Otro</h1><script>window.ytInitialPlayerResponse = {videoDetails:{videoId:"abcdefghijk"}, captions:{playerCaptionsTracklistRenderer:{captionTracks:[{baseUrl:"https://www.youtube.com/api/timedtext?v=abcdefghijk&lang=en", kind:"asr"}]}}};<\/script>`;
+    await yt.route(/youtube\.com\/watch\?v=abcdefghijk/, r => r.fulfill({ body: html2, contentType: "text/html; charset=utf-8" }));
+    await yt.route(/youtube\.com\/api\/timedtext/, r => r.fulfill({ contentType: "application/json", body: JSON.stringify({ events: [{ tStartMs: 0, segs: [{ utf8: "round one six single crochet" }] }, { tStartMs: 65000, segs: [{ utf8: "round two" }, { utf8: " increase in each stitch, you should have twelve" }] }] }) }));
+    await yt.goto("https://www.youtube.com/watch?v=abcdefghijk");
+    const [otra] = await Promise.all([page.context().waitForEvent("page"), yt.evaluate(c => { eval(c); }, codigo)]);
+    await otra.locator("textarea.video-paso").first().waitFor({ timeout: 20000 });
+    assert.equal(await otra.inputValue("#vi-texto"), "0:00\nround one six single crochet\n1:05\nround two increase in each stitch, you should have twelve");
+    assert.deepEqual(await otra.$$eval("textarea.video-paso", xs => xs.map(x => x.value)), ["Vuelta 1: 6 pb", "Vuelta 2: 1 aum en cada punto (12)"]);
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
   await prueba("si lo pegado ya es un patrón escrito (de la descripción del vídeo), se lee tal cual", async () => {
     const page = await nuevaPagina(browser);
     await page.evaluate(() => go({ name: "video" }));
