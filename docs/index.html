@@ -3517,7 +3517,7 @@ function otroIdiomaLectura(d){
   if(palabras.length >= 8 && (d.confidence||0) < 65 && (buenas < palabras.length*.35 || mayus > .45)) return ["chi_sim","eng"];
   return null;
 }
-async function leerImagenes(imgs, avisar, porPagina=false){
+async function leerImagenes(imgs, avisar, porPagina=false, {renglones=false}={}){
   await cargarScript(TESSERACT);
   // Comprueba que los datos del lector están publicados junto a la app antes de arrancarlo
   const prueba = await fetch(OCR_DIR+"worker.min.js", {method:"HEAD"}).catch(()=>null);
@@ -3533,7 +3533,8 @@ async function leerImagenes(imgs, avisar, porPagina=false){
       errorHandler: ()=>{}
     })]).finally(()=>clearTimeout(plazo));
     // Página en automático: así respeta las columnas (muchos patrones van a dos columnas) en vez de mezclar las líneas
-    try{ await w.setParameters({tessedit_pageseg_mode: "3", preserve_interword_spaces: "1"}); }catch(e){}
+    // (las capturas de una lista, como la transcripción de YouTube, se leen renglón a renglón: el minuto y su frase juntos)
+    try{ await w.setParameters({tessedit_pageseg_mode: renglones ? "6" : "3", preserve_interword_spaces: "1"}); }catch(e){}
     return w;
   };
   let worker = await crear(OCR_BASE);
@@ -3555,7 +3556,7 @@ async function leerImagenes(imgs, avisar, porPagina=false){
         else { if(worker) await worker.terminate(); worker = await crear(OCR_BASE); }
       }
       soltarLienzo(img);
-      let t = null; try{ t = textoEnColumnas(d, ancho); }catch(e){} textos.push(t || d.text);
+      let t = null; if(!renglones) try{ t = textoEnColumnas(d, ancho); }catch(e){} textos.push(t || d.text);
     }
     return porPagina ? textos.map(arreglarLectura) : arreglarLectura(textos.join("\n\n"));
   } finally { if(worker) worker.terminate(); }
@@ -3836,6 +3837,9 @@ const HABLA = {
     y: "y",
     ord: {primer:1, primera:1, primero:1, segunda:2, segundo:2, tercer:3, tercera:3, tercero:3, cuarta:4, cuarto:4, quinta:5, quinto:5, sexta:6, sexto:6, septima:7, setima:7, septimo:7, octava:8, octavo:8, novena:9, noveno:9, decima:10, decimo:10, undecima:11, onceava:11, duodecima:12, doceava:12, treceava:13, catorceava:14, quinceava:15, decimoprimera:11, decimosegunda:12, decimotercera:13, decimocuarta:14, decimoquinta:15, decimosexta:16, decimoseptima:17, decimoctava:18, decimonovena:19, vigesima:20},
     ronda: "vuelta|fila|hilera|ronda|carrera",
+    de: "de|desde", a: "a|al|hasta",
+    empieza: /\b(?:anillo|aro|circulo|cadenetas?|cadenas?)\b/,
+    explica: /\b(?:es decir|significa|quiere decir|o sea|si no sab\w*|recuerd\w*|os enseno|os explico)\b(?:\s+[^\s.]+){0,8}/g,
     ref: /(?:como (?:en )?(?:la|el)?|igual que (?:en )?(?:la|el)?|lo mismo que (?:en )?(?:la|el)?|desde)\s*$/,
     hasta: /(?:hasta|hasta llegar a)\s+(?:la\s+)?$/,
     reemplazos: [
@@ -3863,7 +3867,7 @@ const HABLA = {
     totalSuelto: /\b(\d+)\s+puntos?\b(?!\s+(?:bajos?|altos?|deslizados?|enanos?|rasos?|dobles?))/g,
     partes: {cabeza:"Cabeza", cuerpo:"Cuerpo", orejas:"Orejas", oreja:"Orejas", brazos:"Brazos", brazo:"Brazos", piernas:"Piernas", pierna:"Piernas", patas:"Patas", pata:"Patas", pies:"Pies", pie:"Pies", cola:"Cola", colita:"Cola", hocico:"Hocico", morro:"Hocico", nariz:"Nariz", alas:"Alas", ala:"Alas", manos:"Manos", mano:"Manos", base:"Base", tapa:"Tapa", asas:"Asas", asa:"Asas", gorro:"Gorro", gorrito:"Gorro", sombrero:"Sombrero", cuernos:"Cuernos", cuerno:"Cuernos", cresta:"Cresta", pico:"Pico", aletas:"Aletas", aleta:"Aletas", tentaculos:"Tentáculos", tentaculo:"Tentáculos", petalos:"Pétalos", petalo:"Pétalos", hojas:"Hojas", hoja:"Hojas", mejillas:"Mejillas", trompa:"Trompa", melena:"Melena", flor:"Flor", corazon:"Corazón"},
     artParte: "la|el|las|los|una|un|otra|otro|con la|con el|por la|por el",
-    nuevaPieza: /\b(?:AM|empezamos|empezar|comenzamos|otra pieza|nueva pieza|siguiente pieza|segunda pieza|pieza nueva)\b/,
+    nuevaPieza: /\b(?:anillo|aro|empezamos|empezar|comenzamos|otra pieza|nueva pieza|siguiente pieza|segunda pieza|pieza nueva)\b/,
     acciones: [
       [/\brellen/, "Rellena la pieza."],
       [/\bojos? de seguridad\b|\b(?:ponemos|colocamos|poner|colocar) (?:los )?ojos\b/, "Pon los ojos de seguridad."],
@@ -3877,6 +3881,10 @@ const HABLA = {
     y: null,
     ord: {first:1, second:2, third:3, fourth:4, fifth:5, sixth:6, seventh:7, eighth:8, ninth:9, tenth:10, eleventh:11, twelfth:12, thirteenth:13, fourteenth:14, fifteenth:15, sixteenth:16, seventeenth:17, eighteenth:18, nineteenth:19, twentieth:20},
     ronda: "round|rnd|row",
+    de: "from", a: "to|through|thru|until",
+    guion: true, articulo: /^an?$/, trasArticulo: /^(?:increase|decrease|single|double|half|chain|slip|treble|triple|magic)/,
+    empieza: /\b(?:magic|ring|chains?)\b/,
+    explica: /\b(?:if you don'?t know|remember|which means|that means)\b(?:\s+[^\s.]+){0,8}/g,
     ref: /(?:same as|like (?:in )?|just like (?:in )?|as in|from)\s*$/,
     hasta: /(?:until|up to|through|till|to)\s+$/,
     reemplazos: [
@@ -3904,7 +3912,7 @@ const HABLA = {
     totalSuelto: /\b(\d+)\s+(?:stitches|sts)\b/g,
     partes: {head:"Cabeza", body:"Cuerpo", ears:"Orejas", ear:"Orejas", arms:"Brazos", arm:"Brazos", legs:"Piernas", leg:"Piernas", feet:"Pies", foot:"Pies", tail:"Cola", snout:"Hocico", muzzle:"Hocico", nose:"Nariz", wings:"Alas", wing:"Alas", hands:"Manos", hand:"Manos", base:"Base", lid:"Tapa", handles:"Asas", handle:"Asas", hat:"Gorro", horns:"Cuernos", horn:"Cuernos", beak:"Pico", fins:"Aletas", fin:"Aletas", tentacles:"Tentáculos", petals:"Pétalos", leaves:"Hojas", cheeks:"Mejillas", trunk:"Trompa", mane:"Melena", flower:"Flor", heart:"Corazón"},
     artParte: "the|a|an|another|with the|on the",
-    nuevaPieza: /\b(?:AM|start|starting|begin|another piece|next piece|new piece)\b/,
+    nuevaPieza: /\b(?:magic|ring|start|starting|begin|another piece|next piece|new piece)\b/,
     acciones: [
       [/\bstuff/, "Rellena la pieza."],
       [/\bsafety eyes?\b|\b(?:insert|place|put) (?:the |in the )?eyes\b/, "Pon los ojos de seguridad."],
@@ -3912,40 +3920,184 @@ const HABLA = {
       [/\bsew\b|\bsewing\b/, "Cose la pieza."]
     ],
     ganchillo: /\b(\d+(?:[.,]\d+)?)(?:\s+point\s+(\d+)|\s+and\s+a\s+(half))?\s*(?:mm|millimeters?|millimetres?)\s+(?:crochet\s+)?hook\b|\bhook\b[^.]{0,40}?\b(\d+(?:[.,]\d+)?)(?:\s+point\s+(\d+)|\s+and\s+a\s+(half))?\s*(?:mm|millimeters?|millimetres?)\b/
+  },
+  // Ruso, ya en letras latinas («столбик без накида» → «stolbik bez nakida»)
+  ru: {
+    num: {odin:1, odna:1, odno:1, odnu:1, odnogo:1, odnoi:1, dva:2, dve:2, dvuh:2, tri:3, treh:3, chetyre:4, chetyreh:4, pjat:5, pjati:5, shest:6, shesti:6, sem:7, semi:7, vosem:8, vosmi:8, devjat:9, devjati:9, desjat:10, desjati:10,
+      odinnadcat:11, odinnadcati:11, dvenadcat:12, dvenadcati:12, trinadcat:13, trinadcati:13, chetyrnadcat:14, chetyrnadcati:14, pjatnadcat:15, pjatnadcati:15, shestnadcat:16, shestnadcati:16, semnadcat:17, semnadcati:17, vosemnadcat:18, vosemnadcati:18, devjatnadcat:19, devjatnadcati:19,
+      dvadcat:20, dvadcati:20, tridcat:30, tridcati:30, sorok:40, soroka:40, pjatdesjat:50, pjatidesjati:50, shestdesjat:60, shestidesjati:60, semdesjat:70, vosemdesjat:80, devjanosto:90, sto:100},
+    y: null, cifraOrdinal: "siempre",
+    ord: {},
+    ordRx: /^(perv|vtor|tret|chetvert|pjat|shest|sedm|vosm|devjat|desjat|odinnadcat|dvenadcat|trinadcat|chetyrnadcat|pjatnadcat|shestnadcat|semnadcat|vosemnadcat|devjatnadcat|dvadcat)(?:yi|oi|ii|aja|oe|ogo|omu|om|uju|ye|yh|ym|ei|e|ja|ego|emu|em|ju)$/,
+    ordRaiz: {perv:1, vtor:2, tret:3, chetvert:4, pjat:5, shest:6, sedm:7, vosm:8, devjat:9, desjat:10, odinnadcat:11, dvenadcat:12, trinadcat:13, chetyrnadcat:14, pjatnadcat:15, shestnadcat:16, semnadcat:17, vosemnadcat:18, devjatnadcat:19, dvadcat:20},
+    ronda: "rjad|rjada|rjadu|rjade|rjadom|rjady|rjadov|rjadah|krug|kruga|krugu|kruge|krugom|krugi|krugov",
+    de: "s|so|ot", a: "po|do",
+    ref: /(?:kak v|kak i v|tak zhe kak v|analogichno|povtorjaem|povtorit)\s*$/,
+    hasta: /(?:\bdo)\s+$/,
+    empieza: /\b(?:kolc\w*|vozdushn\w*|cepochk\w*)\b/,
+    explica: /\b(?:to est|eto znachit|esli vy ne umeete|esli ne umeete|napominaju)\b(?:\s+[^\s.]+){0,8}/g,
+    reemplazos: [
+      [/\bbez (?:pribavok|ubavok|pribavlenii|ubavlenii|pribavlenija|ubavlenija)\b|\bne (?:pribavljaem|ubavljaem)\b/g, " SINAUM "],
+      [/\bpolustolbik\w* s nakidom\b|\bpssn\b/g, " mpa "],
+      [/\bstolbik\w* s (?:2|dvumja) nakid\w*\b|\bs2n\b/g, " pad "],
+      [/\bstolbik\w* s nakidom\b|\bssn\b/g, " pa "],
+      [/\bsoedinitel\w* (?:stolbik|polustolbik|petl)\w*\b|\bpolustolbik\w*\b/g, " pd "],
+      [/\bstolbik\w* bez nakida\b|\bsbn\b|\bstolbik\w*\b/g, " pb "],
+      [/\bv kazhd\w* (?:vozdushn\w* )?petl\w* (?:cepochki|vp)\b/g, " ECP "],
+      [/\bvozdushn\w* petel\w*\b|\bvozdushn\w* petl\w*\b|\bvp\b|\bcepochk\w*\b/g, " cad "],
+      [/\bpribav(?:k|ok|l)\w*\b|\bpribavit\w*\b|\bpribavim\b/g, " aum "],
+      [/\bubav(?:k|ok|l)\w*\b|\bubavit\w*\b|\bubavim\b/g, " dism "],
+      [/\bkolc\w* amigurumi\b|\bvolshebn\w* kolc\w*\b|\bkolc\w*\b/g, " AM "],
+      [/\bvse\s+(pb|pa|mpa)\b/g, " 1 $1 ECP "],
+      [/\bv (?:1|tu zhe|etu zhe|odnu i tu zhe) petl\w*\b/g, " EMP "],
+      [/\bv sledujusch\w* petl\w*\b/g, " ESIG "],
+      [/\bv kazhd\w* (?:petl\w*|pb|pa|mpa)\b|\bv kazhduju\b|\bvo vse petli\b/g, " ECP "],
+      [/\bpo krugu\b|\bdo konca(?: rjada)?\b|\bves rjad\b/g, " ALR "],
+      [/\b(\d+) raz(?:a)?\b/g, " REP$1 "]
+    ],
+    total: /\b(?:dolzhno poluchitsja|dolzhno byt|dolzhno ostatsja|poluchitsja|poluchaetsja|poluchilos|poluchaem|ostanetsja|ostalos|itogo|vsego|v itoge|u nas)\s+(?:po\s+)?(\d+)(?:\s+(?:petel|petli|petlja|pb))?/g,
+    totalSuelto: /\b(\d+)\s+(?:petel|petli|petlja)\b/g,
+    partes: {golova:"Cabeza", golovu:"Cabeza", golovy:"Cabeza", golovka:"Cabeza", golovku:"Cabeza", golovki:"Cabeza", telo:"Cuerpo", tulovische:"Cuerpo", telce:"Cuerpo", ushki:"Orejas", ushko:"Orejas", ushi:"Orejas", ruchki:"Brazos", ruchku:"Brazos", ruki:"Brazos", lapki:"Patas", lapku:"Patas", nozhki:"Piernas", nozhku:"Piernas", nogi:"Piernas", hvostik:"Cola", hvost:"Cola", mordochka:"Hocico", mordochku:"Hocico", nosik:"Nariz", nos:"Nariz", krylja:"Alas", krylyshki:"Alas", schechki:"Mejillas", shapochka:"Gorro", shapochku:"Gorro", rozhki:"Cuernos", kljuv:"Pico", hobot:"Trompa"},
+    artParte: "",
+    nuevaPieza: /\b(?:kolc\w*|nachinaem|nachnem|nachinaem vjazat|sledujusch\w* detal\w*|drug\w* detal\w*|nov\w* detal\w*)\b/,
+    acciones: [
+      [/\bnabiva\w*|\bnabit\w*|\bnabivk\w*/, "Rellena la pieza."],
+      [/\b(?:vstavljaem|vstavit|ustanavlivaem|stavim) glaz\w*|\bglazki na (?:zamochk|zaglushk)\w*/, "Pon los ojos de seguridad."],
+      [/\b(?:zakrepljaem|zakrepit|obrezaem|otrezaem) nit\w*|\bzakrepljaem\b/, "Corta el hilo y remata."],
+      [/\bprishiva\w*|\bprishit\w*|\bsshiva\w*/, "Cose la pieza."]
+    ],
+    ganchillo: /\bkrjuch\w*\s+(?:nomer\s+)?(\d+(?:[.,]\d+)?)(?:\s+s\s+(polovin\w*))?|\b(\d+(?:[.,]\d+)?)(?:\s+s\s+(polovin\w*))?\s*(?:mm|millimetr\w*)\s+krjuch\w*/
+  },
+  pt: {
+    num: {um:1, uma:1, dois:2, duas:2, tres:3, quatro:4, cinco:5, seis:6, sete:7, oito:8, nove:9, dez:10, onze:11, doze:12, treze:13, catorze:14, quatorze:14, quinze:15, dezesseis:16, dezasseis:16, dezessete:17, dezassete:17, dezoito:18, dezenove:19, dezanove:19,
+      vinte:20, trinta:30, quarenta:40, cinquenta:50, sessenta:60, setenta:70, oitenta:80, noventa:90, cem:100, cento:100},
+    y: "e",
+    ord: {primeira:1, primeiro:1, segunda:2, segundo:2, terceira:3, terceiro:3, quarta:4, quarto:4, quinta:5, quinto:5, sexta:6, sexto:6, setima:7, setimo:7, oitava:8, oitavo:8, nona:9, nono:9, decima:10, decimo:10, vigesima:20, vigesimo:20},
+    ronda: "carreira|volta|fileira|carr",
+    de: "da|de|desde", a: "a|ate|ate a",
+    ref: /(?:como na|como a|como em|igual a|igual na|mesmo que na|repetir a|repita a|repete a|repetimos a)\s*$/,
+    hasta: /(?:\bate a|\bate)\s+$/,
+    empieza: /\b(?:anel|circulo|correntinhas?|correntes?)\b/,
+    explica: /\b(?:ou seja|significa|quer dizer|se voce nao sabe|se nao sabe|lembre\w*|lembrando)\b(?:\s+[^\s.]+){0,8}/g,
+    reemplazos: [
+      [/\bsem (?:fazer )?(?:aumentos?|aumentar|diminuic(?:ao|oes)|diminuir)\b|\bnao (?:vamos )?(?:aumentar|diminuir|fazer aumentos|fazer diminuicoes)\b/g, " SINAUM "],
+      [/\b(?:o|um|a|uma) (aumento|diminuicao) (?:e|sao|significa|consiste)\b[^.,;]*/g, " "],
+      [/\bmeios? pontos? altos?\b|\bmpa\b/g, " mpa "],
+      [/\bpontos? altos? duplos?\b|\bpad\b/g, " pad "],
+      [/\bpontos? altos?\b|\bpa\b/g, " pa "],
+      [/\bpontos? baixissimos?\b|\bpbx\b|\bpontos? deslizados?\b/g, " pd "],
+      [/\bpontos? baixos?\b|\bpb\b/g, " pb "],
+      [/\bem cada (?:correntinha|corrente|corr)\b/g, " ECP "],
+      [/\bna (?:\S+ )?(?:correntinha|corrente)(?: a partir da agulha)?\b/g, " "],
+      [/\bcorrentinhas?\b|\bcorrentes?\b|\bcorr\b/g, " cad "],
+      [/\baumentos?\b|\baumentamos\b|\baumentar\b|\baum\b/g, " aum "],
+      [/\bdiminuic(?:ao|oes)\b|\bdiminuimos\b|\bdiminuir\b|\bdim\b/g, " dism "],
+      [/\banel magico\b|\bcirculo magico\b|\banel\b/g, " AM "],
+      [/\b(?:tod[oa]s?|tudo)\s+(?:em\s+|de\s+)?(pb|pa|mpa)\b/g, " 1 $1 ECP "],
+      [/\bno mesmo ponto\b|\bno mesmo\b/g, " EMP "],
+      [/\bno (?:ponto )?seguinte\b|\bno proximo(?: ponto)?\b/g, " ESIG "],
+      [/\b(?:em|por) (?:cada|todos os|todas as) (?:pontos?|pb|pa|mpa|um|uma)\b|\bem cada um\b|\bem todos\b/g, " ECP "],
+      [/\bao redor\b|\bate o final(?: da carreira| da volta)?\b|\b(?:em )?toda a (?:carreira|volta)\b|\ba (?:carreira|volta) toda\b|\bate completar a (?:carreira|volta)\b/g, " ALR "],
+      [/\b(\d+) vezes\b/g, " REP$1 "]
+    ],
+    total: /\b(?:vamos ter|temos|teremos|ficamos com|ficaremos com|fica com|ficam|ficou com|deve ter|devemos ter|tem que ter|tem que ficar|vai ficar com|total de|no total)\s+(?:de\s+)?(?:(?:os|as)\s+)?(\d+)(?:\s+(?:pontos?|pb|pa|mpa))?(?:\s+no total)?|\b(\d+)\s+(?:pontos?|pb)\s+(?:no total|ao final)/g,
+    totalSuelto: /\b(\d+)\s+pontos?\b(?!\s+(?:baixos?|altos?|baixissimos?|duplos?|deslizados?))/g,
+    partes: {cabeca:"Cabeza", corpo:"Cuerpo", orelhas:"Orejas", orelha:"Orejas", bracos:"Brazos", braco:"Brazos", pernas:"Piernas", perna:"Piernas", patas:"Patas", pata:"Patas", pes:"Pies", rabo:"Cola", rabinho:"Cola", focinho:"Hocico", nariz:"Nariz", asas:"Alas", asa:"Alas", maos:"Manos", base:"Base", tampa:"Tapa", alcas:"Asas", gorro:"Gorro", chapeu:"Sombrero", chifres:"Cuernos", bico:"Pico", bochechas:"Mejillas", tromba:"Trompa", juba:"Melena", flor:"Flor", coracao:"Corazón"},
+    artParte: "a|o|as|os|uma|um|outra|outro|com a|com o|pela|pelo",
+    nuevaPieza: /\b(?:anel|comecamos|comecar|vamos comecar|outra peca|nova peca|proxima peca|segunda peca)\b/,
+    acciones: [
+      [/\benche\w*|\benchimento\b/, "Rellena la pieza."],
+      [/\bolhos? de seguranca\b|\b(?:colocamos|colocar|pomos|por) os olhos\b/, "Pon los ojos de seguridad."],
+      [/\b(?:cortamos|cortar|corta|corto) (?:o |a )?(?:fio|linha|la)\b|\barremat\w*/, "Corta el hilo y remata."],
+      [/\bcostur\w*/, "Cose la pieza."]
+    ],
+    ganchillo: /\b(?:agulha|croche)\b[^.]{0,40}?\b(\d+(?:[.,]\d+)?)(?:\s+(?:virgula|ponto)\s+(\d+)|\s+e\s+(meio|meia))?\s*(?:mm|milimetros)\b/
+  },
+  // Turco, ya sin letras especiales («sık iğne» → «sik igne»)
+  tr: {
+    num: {bir:1, iki:2, uc:3, dort:4, bes:5, alti:6, yedi:7, sekiz:8, dokuz:9, on:10, yirmi:20, otuz:30, kirk:40, elli:50, altmis:60, yetmis:70, seksen:80, doksan:90, yuz:100},
+    y: null, diezYUno: true, cifraOrdinal: "punto",
+    ord: {birinci:1, ikinci:2, ucuncu:3, dorduncu:4, besinci:5, altinci:6, yedinci:7, sekizinci:8, dokuzuncu:9, onuncu:10, yirminci:20, otuzuncu:30},
+    ronda: "tur|tura|turda|turu|turun|turdan|turlar|turlari|turlarda|turdaki|sira|sirada|sirayi|siradan",
+    de: "dan|den", a: "kadar",
+    ref: /(?:aynen|aynisi)\s*$/,
+    hasta: /$^/,
+    refDespues: /^\s*(?:gibi|ile ayni|aynisi|daki gibi)\b/,
+    hastaDespues: /^\s*kadar\b/,
+    empieza: /\b(?:halka\w*|zincir\w*)\b/,
+    explica: /\b(?:yani|demek ki|bilmiyorsaniz|hatirlatayim)\b(?:\s+[^\s.]+){0,8}/g,
+    reemplazos: [
+      [/\b(?:arttirma|artirma|azaltma)\w* (?:yapmadan|yapmiyoruz|yok|olmadan)\b|\b(?:arttirmasiz|artirmasiz|arttirmadan|artirmadan|azaltmadan|azaltmasiz)\b|\bduz (?:or\w*|devam\w*)\b/g, " SINAUM "],
+      [/\byarim cubuk\w*\b/g, " mpa "],
+      [/\bcift cubuk\w*\b/g, " pad "],
+      [/\b(?:tek )?cubuk\w*\b/g, " pa "],
+      [/\bgizli igne\w*\b|\bkaydirma\w*\b|\bterbiye\w*\b/g, " pd "],
+      [/\bsiki? igne\w*\b|\bsik\b|\bsc\b/g, " pb "],
+      [/\bzincir\w*\b/g, " cad "],
+      [/\bart+irma\w*\b|\bart+ir\w*\b/g, " aum "],
+      [/\bazaltma\w*\b|\bazalt\w*\b/g, " dism "],
+      [/\b(?:sihirli|amigurumi) halka\w*\b|\bhalka\w*\b/g, " AM "],
+      [/\bher (?:ilmek\w*|ilmeg\w*|igne\w*|pb)\b/g, " ECP "],
+      [/\bayni (?:ilmek\w*|ilmeg\w*|igne\w*)\b|\b1 ilmeg\w*\b/g, " EMP "],
+      [/\bsonraki ilme\w*\b|\bbir sonraki\b/g, " ESIG "],
+      [/\btur boyunca\b|\bsonuna kadar\b|\bbutun tur\w*\b|\btum tur\w*\b/g, " ALR "],
+      [/\b(\d+) (?:kez|kere|defa|tekrar\w*)\b/g, " REP$1 "]
+    ],
+    total: /\btoplam(?:da)?\s+(\d+)|\b(\d+)\s+(?:ilmek|ilmeg\w*|ilmeklik)\s+(?:olacak|olmali|oldu|olur|var|elde)/g,
+    totalSuelto: /\b(\d+)\s+ilme\w*\b/g,
+    partes: {kafa:"Cabeza", kafayi:"Cabeza", kafasi:"Cabeza", govde:"Cuerpo", govdeyi:"Cuerpo", vucut:"Cuerpo", kulak:"Orejas", kulaklar:"Orejas", kulaklari:"Orejas", kol:"Brazos", kollar:"Brazos", kollari:"Brazos", bacak:"Piernas", bacaklar:"Piernas", bacaklari:"Piernas", ayak:"Pies", ayaklar:"Pies", ayaklari:"Pies", kuyruk:"Cola", kuyrugu:"Cola", burun:"Nariz", burnu:"Nariz", kanat:"Alas", kanatlar:"Alas", kanatlari:"Alas", sapka:"Gorro", sapkayi:"Gorro", boynuz:"Cuernos", boynuzlar:"Cuernos", gaga:"Pico", yanak:"Mejillas", hortum:"Trompa"},
+    artParte: "",
+    nuevaPieza: /\b(?:halka\w*|basl\w*|parca\w*)\b/,
+    acciones: [
+      [/\belyaf\w*|\bdoldur\w*/, "Rellena la pieza."],
+      [/\bguvenlik goz\w*|\bgoz\w* (?:takiyoruz|takalim|takin|takacagiz)/, "Pon los ojos de seguridad."],
+      [/\bip\w* kes\w*|\bkesiyoruz\b|\bkesip\b/, "Corta el hilo y remata."],
+      [/\bdik(?:iyoruz|elim|ecegiz|mek|in|ip)\b/, "Cose la pieza."]
+    ],
+    ganchillo: /\b(\d+(?:[.,]\d+)?)(?:\s+(bucuk))?\s*(?:mm|numara)\s+tig\w*|\btig\w*[^.]{0,30}?\b(\d+(?:[.,]\d+)?)(?:\s+(bucuk))?\s*(?:mm|numara)\b/
   }
 };
 
 // Palabras con su minuto; los números dichos con letras pasan a cifras («treinta y seis» → 36) y los ordinales
 // junto a «vuelta» a «3ª» («la tercera vuelta» → «la 3ª vuelta»)
+// El ruso y el turco se pasan a letras latinas («ряд» → «rjad», «sık» → «sik»): así las reglas de todos los
+// idiomas se escriben igual (y \b funciona, que con letras rusas no)
+const CIRILICO = {а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ж:"zh",з:"z",и:"i",й:"i",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"c",ч:"ch",ш:"sh",щ:"sch",ъ:"",ы:"y",ь:"",э:"e",ю:"ju",я:"ja",ı:"i"};
+const aLatino = t => t.replace(/[а-яı]/g, c => CIRILICO[c]);
 function palabrasDeHabla(trozos, L){
   const pal = [];
   for(const tr of trozos) for(const w of tr.txt.split(/\s+/)){ if(!w) continue;
-    const k = sinTildes(w).replace(/^[^\p{L}\p{N}]+/u, "");
+    const k = aLatino(sinTildes(w)).replace(/^[^\p{L}\p{N}]+/u, "");
     const m = k.match(/^(\d+(?:[.,]\d+)?(?=[^\d]|$)|[\p{L}\p{N}ªº'-]*)(.*)$/u);
     // «twenty-four»: se separa en dos palabras
     const base = m[1].replace(/[-']+$/, ""), signo = /[.,;:!?]/.test(m[2]) ? m[2].replace(/[^.,;:!?]/g, "").slice(0,1) : "";
-    if(L.y==null && /^[a-z]+-[a-z]+$/.test(base)){ const [a, b] = base.split("-"); pal.push({w, k:a, t:tr.t, s:""}, {w:"", k:b, t:tr.t, s:signo}); continue; }
+    if(L.guion && /^[a-z]+-[a-z]+$/.test(base)){ const [a, b] = base.split("-"); pal.push({w, k:a, t:tr.t, s:""}, {w:"", k:b, t:tr.t, s:signo}); continue; }
     pal.push({w, k:base, t:tr.t, s:signo});
   }
   const RONDA = new RegExp("^(?:"+L.ronda+")s?$");
+  const ordDe = k => { if(!k) return null; if(L.ord[k]!=null) return L.ord[k]; const m = L.ordRx && k.match(L.ordRx); return m ? L.ordRaiz[m[1]] : null; };
   const out = [];
   for(let i=0; i<pal.length; i++){
     const p = pal[i];
-    // Ordinal junto a «vuelta»: «tercera vuelta», «vuelta tercera», «décima tercera vuelta»
-    if(L.ord[p.k]!=null){
-      let v = L.ord[p.k], j = i+1;
-      if(v===10 && pal[j] && L.ord[pal[j].k]!=null && L.ord[pal[j].k]<10){ v += L.ord[pal[j].k]; j++; }
-      const cerca = (pal[j] && RONDA.test(pal[j].k)) || (pal[j+1] && /^(?:la|el|the)$/.test(pal[j].k) && RONDA.test(pal[j+1].k)) || (out.length && RONDA.test(out[out.length-1].k));
-      if(cerca){ out.push({...p, k:v+"ª", s:pal[j-1].s}); i = j-1; continue; }
+    // Ordinales: «tercera vuelta» → «3ª vuelta», «décima tercera» → «13ª», «двадцать первый» → «21ª»
+    const o = ordDe(p.k);
+    if(o!=null){
+      let v = o, j = i+1;
+      if(v===10 && ordDe(pal[j] && pal[j].k)!=null && ordDe(pal[j].k)<10){ v += ordDe(pal[j].k); j++; }
+      const ant = out[out.length-1];
+      if(v<10 && ant && /^\d+$/.test(ant.k) && +ant.k>=10 && +ant.k%10===0 && +ant.k<100){ out.pop(); v += +ant.k; }
+      out.push({...p, k:v+"ª", s:pal[j-1].s}); i = j-1; continue;
     }
+    // «3. tur» (turco) o «3-й ряд» (ruso): una cifra justo antes de «vuelta» es ordinal
+    if(L.cifraOrdinal && /^\d+$/.test(p.k) && pal[i+1] && RONDA.test(pal[i+1].k) && (L.cifraOrdinal==="siempre" || p.s===".")){ out.push({...p, k:p.k+"ª", s:""}); continue; }
     // Número dicho con letras
     let v = null, j = i;
     const nm = x => pal[x] ? L.num[pal[x].k] : undefined;
-    if(nm(j)!=null && !(L.y==null && /^an?$/.test(pal[j].k) && !(pal[j+1] && /^(?:increase|decrease|single|double|half|chain|slip|treble|triple|magic)/.test(pal[j+1].k)))){
+    if(nm(j)!=null && !(L.articulo && L.articulo.test(pal[j].k) && !(pal[j+1] && L.trasArticulo.test(pal[j+1].k)))){
       v = 0;
       if(nm(j)>=100){ v += nm(j); j++; if(pal[j] && /^and$/.test(pal[j].k) && nm(j+1)!=null) j++; }
-      else if(L.y==null && nm(j)<10 && pal[j+1] && pal[j+1].k==="hundred"){ v += nm(j)*100; j += 2; if(pal[j] && pal[j].k==="and" && nm(j+1)!=null) j++; }
-      if(nm(j)!=null && nm(j)>=20 && nm(j)<100 && nm(j)%10===0){ v += nm(j); j++;
+      else if(L.guion && nm(j)<10 && pal[j+1] && pal[j+1].k==="hundred"){ v += nm(j)*100; j += 2; if(pal[j] && pal[j].k==="and" && nm(j+1)!=null) j++; }
+      if(nm(j)!=null && (nm(j)>=20 || (nm(j)===10 && L.diezYUno)) && nm(j)<100 && nm(j)%10===0){ v += nm(j); j++;
         if(L.y && pal[j] && pal[j].k===L.y && nm(j+1)!=null && nm(j+1)>0 && nm(j+1)<10){ v += nm(j+1); j += 2; }
         else if(!L.y && nm(j)!=null && nm(j)>0 && nm(j)<10){ v += nm(j); j++; }
       } else if(nm(j)!=null && nm(j)<100 && j<pal.length && (v===0 || v>=100)){ v += nm(j); j++; }
@@ -3961,7 +4113,7 @@ function transcripcionAPatron(texto){
   const {trozos, hayTiempos} = trozosDeTranscripcion(texto);
   const todo = trozos.map(x=>x.txt).join(" ");
   const idi = idiomaDe(todo);
-  const idioma = idi==="en" ? "en" : idi==="es" || !/[a-z]/i.test(todo) ? "es" : idi==="ru"||idi==="zh"||idi==="tr"||idi==="pt" ? idi : "es";
+  const idioma = ["en","ru","pt","tr","zh"].includes(idi) ? idi : "es";
   const res = {idioma, hayTiempos, pasos:[], ganchillo:"", partes:0};
   if(!HABLA[idioma]) return res;
   const L = HABLA[idioma];
@@ -3974,27 +4126,30 @@ function transcripcionAPatron(texto){
   const dice = (a, b) => { const i0 = palEn(a), i1 = b>=S.length ? pal.length : palEn(b); const t = pal.slice(i0, i1).map(p=>p.w).filter(Boolean).join(" "); return t.length>280 ? t.slice(0, 277)+"…" : t; };
 
   // Las vueltas que va nombrando: «vuelta 3», «la 3ª vuelta», «vueltas 5 a 10», «de la vuelta 5 a la 10»
-  const R = L.ronda, N = "(?:(?:numero|number|n)\\s+)?";
-  const rxRango = new RegExp("\\b(?:(?:de|desde|from)\\s+(?:la\\s+|the\\s+)?)?("+R+")s?\\s+"+N+"(\\d+)ª?\\s+(?:a|al|hasta|to|through|thru|until)\\s+(?:la\\s+|the\\s+)?(?:(?:"+R+")s?\\s+)?"+N+"(\\d+)ª?(?![\\d])", "g");
+  const R = L.ronda, N = "(?:(?:numero|number|nomer|n)\\s+)?", DE = L.de, A = L.a, ART = "(?:(?:la|the|a|o)\\s+)?";
+  const rxRango = new RegExp("\\b(?:(?:"+DE+")\\s+"+ART+")?("+R+")s?\\s+"+N+"(?:(?:"+DE+")\\s+"+ART+")?(\\d+)ª?\\s+(?:"+A+")\\s+"+ART+"(?:(?:"+R+")s?\\s+)?"+N+"(\\d+)ª?(?![\\d])", "g");
+  // «de la 5ª a la 10ª vuelta», «с 5 по 10 ряд»
+  const rxRangoAntes = new RegExp("\\b(?:"+DE+")\\s+"+ART+"(\\d+)ª?\\s+(?:"+A+")\\s+"+ART+"(\\d+)ª?\\s+("+R+")s?\\b", "g");
   const rxUna = new RegExp("\\b("+R+")s?\\s+"+N+"(\\d+)ª?(?![\\dª])|\\b(\\d+)ª\\s+("+R+")\\b|\\b("+R+")\\s+(\\d+)ª", "g");
   const marcas = [];
   for(const m of S.matchAll(rxRango)) marcas.push({pos:m.index, fin:m.index+m[0].length, a:+m[2], b:+m[3], nombre:m[1]});
+  for(const m of S.matchAll(rxRangoAntes)) if(!marcas.some(x=>m.index<x.fin && x.pos<m.index+m[0].length)) marcas.push({pos:m.index, fin:m.index+m[0].length, a:+m[1], b:+m[2], nombre:m[3]});
   for(const m of S.matchAll(rxUna)){ if(marcas.some(x=>m.index>=x.pos && m.index<x.fin)) continue;
     marcas.push({pos:m.index, fin:m.index+m[0].length, a:+(m[2]||m[3]||m[6]), b:null, nombre:m[1]||m[4]||m[5]}); }
   marcas.sort((x, y)=>x.pos-y.pos);
-  const rxParte = new RegExp("\\b(?:"+L.artParte+")\\s+("+Object.keys(L.partes).join("|")+")\\b", "g");
+  const rxParte = new RegExp("\\b"+(L.artParte ? "(?:"+L.artParte+")\\s+" : "")+"("+Object.keys(L.partes).join("|")+")\\b", "g");
   // La última parte nombrada entre «desde» y «hasta» (y dónde se nombra)
   const parteEn = (desde, hasta) => { desde = Math.max(0, desde); let r = null; for(const m of S.slice(desde, hasta).matchAll(rxParte)) r = {nombre:L.partes[m[1]], pos:desde+m.index}; return r; };
-  const rxPieza = new RegExp(L.nuevaPieza.source.replace("AM|", "anillo|aro|magic|ring|")+"|\\b(?:"+L.artParte+")\\s+(?:"+Object.keys(L.partes).join("|")+")\\b");
+  const rxPieza = new RegExp(L.nuevaPieza.source+"|"+rxParte.source);
 
   // Se queda con las que siguen el orden (1, 2, 3…); «como en la vuelta 2» o «hasta la vuelta 10» no empiezan otra.
   // Una vuelta 1 (o 2) después de otras más altas es una pieza nueva si antes dice cuál («ahora las orejas»).
   const tramos = []; let cur = 0, finAnt = 0;
-  const rxDeLa = new RegExp("^\\s*[,.]?\\s*(?:de|desde|from)\\s+(?:la\\s+|the\\s+)?(\\d+)ª?\\s+(?:a|hasta|to|through|until)\\s+(?:la\\s+|the\\s+)?(\\d+)ª?(?![\\d])");
+  const rxDeLa = new RegExp("^\\s*[,.]?\\s*(?:"+DE+")\\s+"+ART+"(\\d+)ª?\\s+(?:"+A+")\\s+"+ART+"(\\d+)ª?(?![\\d])");
   for(const mk of marcas){
-    const antes = S.slice(Math.max(0, mk.pos-30), mk.pos);
-    if(L.hasta.test(antes)){ const ult = tramos[tramos.length-1]; if(ult && ult.tipo==="vuelta" && mk.a>cur && mk.a<=cur+80){ ult.b = mk.a; cur = mk.a; } continue; }
-    if(L.ref.test(antes)) continue;
+    const antes = S.slice(Math.max(0, mk.pos-30), mk.pos), despues = S.slice(mk.fin, mk.fin+20);
+    if(L.hasta.test(antes) || (L.hastaDespues && L.hastaDespues.test(despues))){ const ult = tramos[tramos.length-1]; if(ult && ult.tipo==="vuelta" && mk.a>cur && mk.a<=cur+80){ ult.b = mk.a; cur = mk.a; } continue; }
+    if(L.ref.test(antes) || (L.refDespues && L.refDespues.test(despues))) continue;
     // «vuelta 3, de la 3 a la 8»
     const dl = !mk.b && S.slice(mk.fin, mk.fin+40).match(rxDeLa);
     if(dl && +dl[1]===mk.a && +dl[2]>mk.a){ mk.b = +dl[2]; mk.fin += dl[0].length; }
@@ -4007,7 +4162,7 @@ function transcripcionAPatron(texto){
       const pz = ventana.search(rxPieza);
       if(pz<0) continue;
       const parte = parteEn(desde, mk.pos);
-      inicio = Math.min(desde+pz, parte ? parte.pos : mk.pos, mk.pos);
+      inicio = Math.min(parte ? parte.pos : desde+pz, mk.pos);
       if(tramos.length && tramos[tramos.length-1].tipo==="vuelta") tramos[tramos.length-1].fin = inicio;
       tramos.push({tipo:"parte", pos:inicio, nombre:parte && parte.nombre});
     } else if(!(cur===0 ? mk.a<=3 : mk.a>cur && mk.a<=cur+2)) continue;
@@ -4026,10 +4181,11 @@ function transcripcionAPatron(texto){
 
   // Ganchillo: «ganchillo de tres coma cinco milímetros»
   const g = S.match(L.ganchillo);
-  if(g){ const [n, d, med] = g[1] ? [g[1], g[2], g[3]] : [g[4], g[5], g[6]]; res.ganchillo = n.replace(".", ",")+(d ? ","+d : med ? ",5" : "")+" mm"; }
+  if(g){ const nums = g.slice(1).filter(x=>x && /^\d/.test(x)), med = g.slice(1).some(x=>x && /^(?:medio|half|meio|polovin|bucuk)/.test(x));
+    res.ganchillo = nums[0].replace(".", ",")+(nums[1] && !/[.,]/.test(nums[0]) ? ","+nums[1] : med ? ",5" : "")+" mm"; }
 
   const ponerPaso = (texto, t, d) => res.pasos.push({texto, t, dice:d});
-  const esCad = /^(?:fila|row|hilera)/;
+  const esCad = /^(?:fila|row|hilera|fileira|sira)/;
   let nPieza = 0, accionesHechas = new Set();
   for(let i=0; i<tramos.length; i++){
     const tr = tramos[i];
@@ -4039,7 +4195,7 @@ function transcripcionAPatron(texto){
     if(tr.a<=2 && (!antTr || antTr.tipo==="parte")){
       const desde = Math.max(antTr ? antTr.pos : 0, tr.pos-260), previo = S.slice(desde, tr.pos);
       const ins = instruccionHablada(previo, L, true);
-      const dondeEmpieza = previo.search(/\b(?:anillo|aro|circulo|cadenetas?|cadenas?|magic|ring|chains?)\b/);
+      const dondeEmpieza = previo.search(L.empieza);
       const t0 = tEn(desde + Math.max(0, dondeEmpieza));
       if(ins.texto && /\b(?:AM|cad)\b/.test(ins.crudo)){
         if(tr.a===2) ponerPaso((esCad.test(tr.nombre) ? "Fila" : "Vuelta")+" 1: "+ins.texto, t0, dice(desde + Math.max(0, dondeEmpieza), tr.pos));
@@ -4066,22 +4222,26 @@ function instruccionHablada(trozo, L, montaje){
   let t = " "+trozo+" ";
   // El total («nos tienen que quedar 18 puntos») se aparta para que no cuente como puntos que tejer
   let total = 0;
-  t = t.replace(L.total, (m, a, b) => { total = +(a||b); return " . "; });
+  t = t.replace(L.total, (m, ...gs) => { total = +gs.find(x=>typeof x==="string" && /^\d+$/.test(x)); return " . "; });
   // «… dieciocho puntos» dicho al final, sin más: también es el total (si es un número de vuelta, 6 o más)
   if(!total) t = t.replace(L.totalSuelto, (m, a) => { if(+a>=6){ total = +a; return " . "; } return m; });
   // Lo que explica algo («si no sabes hacer el aumento…», «es decir…»): fuera esas palabras y las que le siguen
-  t = t.replace(/\b(?:es decir|significa|quiere decir|o sea|si no sab\w*|recuerd\w*|os enseno|os explico|if you don'?t know|remember|which means|that means)\b(?:\s+[^\s.]+){0,8}/g, " . ");
+  t = t.replace(L.explica, " . ");
   for(const [rx, r] of L.reemplazos) t = t.replace(rx, r);
   const toks = t.split(/\s+/).filter(Boolean);
-  const grupos = []; let rep = 0, alr = false, am = false, sinAum = false;
+  const grupos = []; let rep = 0, alr = false, am = false, sinAum = false, pendiente = "";
   for(let i=0; i<toks.length; i++){
     const k = toks[i];
     if(/^(?:pb|pa|mpa|pad|pd|cad|aum|dism)$/.test(k)){
       const n = /^\d+$/.test(toks[i-1]||"") ? Math.min(+toks[i-1], 300) : 1;
-      grupos.push({n, k, mod:""});
+      grupos.push({n, k, mod:pendiente}); pendiente = "";
     } else if(k==="AM") am = true;
     else if(k==="SINAUM") sinAum = true;
-    else if(/^(?:ECP|EMP|ESIG)$/.test(k)){ const g = grupos[grupos.length-1]; if(g && !g.mod) g.mod = k; else if(!g) alr = true; }
+    else if(/^(?:ECP|EMP|ESIG)$/.test(k)){
+      // «her ilmeğe 1 arttırma», «в каждую петлю по 2 сбн»: el sitio va antes del punto
+      const sig = toks.slice(i+1, i+4).join(" ");
+      if(/(?:^|\s)(?:pb|pa|mpa|pad|pd|cad|aum|dism)(?:\s|$)/.test(sig) && !(grupos.length && !grupos[grupos.length-1].mod && toks[i-1]===grupos[grupos.length-1].k)) pendiente = k;
+      else { const g = grupos[grupos.length-1]; if(g && !g.mod) g.mod = k; else if(!g) alr = true; } }
     else if(k==="ALR"){ const g = grupos[grupos.length-1]; if(g && grupos.length===1 && !g.mod) g.mod = "ECP"; else alr = true; }
     else if(/^REP\d+$/.test(k)) { if(grupos.length) rep = rep || +k.slice(3); }
   }
@@ -4113,6 +4273,30 @@ function instruccionHablada(trozo, L, montaje){
   return {texto, crudo, am};
 }
 
+// En el móvil la app de YouTube no deja copiar la transcripción: se hacen capturas de pantalla bajando poco a poco
+// y se leen como fotos. Cada captura repite algunas líneas de la anterior: se quitan. La hora de arriba de la
+// pantalla («21:05») parece un minuto del vídeo: un minuto mayor que el siguiente de la misma captura no vale.
+function juntarCapturas(textos){
+  const RX_MIN = /^\s*\[?(\d{1,2})\s*[:.;]\s*(\d{2})\b\]?\s*/;
+  const norm = l => l.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const todas = [];
+  for(const texto of textos){
+    let ls = String(texto||"").split("\n").map(l=>l.trim()).filter(Boolean)
+      .map(l => { const m = l.match(RX_MIN); return m && +m[2]<60 ? m[1]+":"+m[2]+(l.slice(m[0].length) ? "\n"+l.slice(m[0].length) : "") : l; }).join("\n").split("\n");
+    const seg = l => { const m = l.match(/^(\d{1,2}):(\d{2})$/); return m ? +m[1]*60 + +m[2] : null; };
+    const tiempos = ls.map(seg);
+    ls = ls.filter((l, i) => { if(tiempos[i]==null) return true; const sig = tiempos.slice(i+1).find(x=>x!=null); return sig==null || tiempos[i]<=sig; });
+    // Lo de antes del primer minuto (la barra de arriba, el título «Transcripción») sobra
+    const primero = ls.findIndex(l=>seg(l)!=null);
+    if(primero>0) ls = ls.slice(primero);
+    // El trozo que ya estaba al final de la captura anterior
+    let solape = 0;
+    for(let k=Math.min(ls.length, todas.length); k>0; k--){ let ok = true; for(let i=0; i<k; i++) if(norm(todas[todas.length-k+i])!==norm(ls[i])){ ok = false; break; } if(ok){ solape = k; break; } }
+    if(!solape){ const ult = todas.slice(-60).filter(l=>seg(l)!=null); const ya = new Set(ult); const i = ls.findIndex(l=>seg(l)!=null && !ya.has(l) && (!ult.length || seg(l)>seg(ult[ult.length-1]))); if(ult.length && i>0) solape = i; }
+    todas.push(...ls.slice(solape));
+  }
+  return todas.join("\n");
+}
 let videoBorrador = {url:"", texto:""};
 VISTAS.video = V => {
   const id = () => idVideo(enlace.value);
@@ -4127,6 +4311,25 @@ VISTAS.video = V => {
   const area = h("textarea",{id:"vi-texto", style:"min-height:10rem", placeholder:"0:00\nhola a todas, hoy vamos a tejer…\n0:12\nhacemos un anillo mágico con seis puntos bajos…", oninput:e=>{ videoBorrador.texto = e.target.value; }}, videoBorrador.texto);
   const res = h("div",{class:"stack", "aria-live":"polite"});
   const pegarEn = (campo, alPegar) => navigator.clipboard && navigator.clipboard.readText ? h("button",{class:"big", onclick:async()=>{ try{ campo.value = (await navigator.clipboard.readText()).trim(); campo.dispatchEvent(new Event("input")); alPegar && alPegar(); }catch(e){ toast("No me deja pegar. Mantén el dedo en el recuadro y elige Pegar."); } }}, "Pegar") : null;
+  // Capturas de pantalla de la transcripción (en el móvil): se leen como fotos, en el propio móvil
+  const estadoCap = h("div",{class:"note stack leyendo", "aria-live":"polite", hidden:true});
+  const avisarCap = (msg, frac) => { estadoCap.hidden = false; estadoCap.replaceChildren(...[h("p",{style:"font-weight:700"}, msg), frac==null ? null : h("div",{class:"prog"}, h("i",{style:"width:"+Math.round(frac*100)+"%"}))].filter(Boolean)); };
+  const elegirCapturas = h("input",{type:"file", accept:"image/*", multiple:true, hidden:true, id:"vi-capturas", onchange:async e=>{
+    const fs = [...e.target.files].sort((a, b)=>(a.lastModified-b.lastModified) || a.name.localeCompare(b.name, undefined, {numeric:true})); e.target.value = "";
+    if(!fs.length) return;
+    const btn = document.getElementById("vi-btn-capturas"); if(btn) btn.disabled = true;
+    try{
+      avisarCap("Preparando "+(fs.length===1 ? "la captura" : "las "+fs.length+" capturas")+"…", null);
+      const textos = await leerImagenes(fs.map(f => () => prepararFoto(f)), avisarCap, true, {renglones:true});
+      const texto = juntarCapturas(textos).trim();
+      if(!document.body.contains(area)) return;
+      if(!texto){ avisarCap("No he podido leer las capturas. Prueba con capturas más nítidas, sin el vídeo tapando el texto.", null); return; }
+      estadoCap.hidden = true;
+      area.value = (area.value.trim() ? area.value.trim()+"\n" : "")+texto; videoBorrador.texto = area.value;
+      sacar();
+    } catch(err){ avisarCap(err && err.message==="sin-conexion" ? "Necesito internet la primera vez que leo una foto. Conéctate y vuelve a probar." : "No he podido leer las capturas.", null); }
+    finally { if(btn) btn.disabled = false; }
+  }});
   function sacar(alCargar){
     videoBorrador.texto = area.value;
     const texto = area.value.trim();
@@ -4138,7 +4341,7 @@ VISTAS.video = V => {
       const im = importarTexto(texto, null, false);
       if(im.pasos.length && (lineasVuelta>=2 || !r.pasos.length)){ r = {...r, pasos: im.pasos.map(t=>({texto:t, t:null, dice:""})), ganchillo: r.ganchillo || im.ganchillo}; escrito = true; }
     }
-    if(!HABLA[r.idioma] && !escrito){ res.replaceChildren(h("div",{class:"empty"}, h("h3",{}, "De momento entiendo vídeos en español y en inglés"), h("p",{class:"muted"}, "Este parece estar en "+(NOMBRE_IDIOMA[r.idioma]||"otro idioma")+". Si el patrón está escrito en la descripción del vídeo, cópialo y pégalo aquí."))); return; }
+    if(!HABLA[r.idioma] && !escrito){ res.replaceChildren(h("div",{class:"empty"}, h("h3",{}, "De momento entiendo vídeos en español, inglés, ruso, portugués y turco"), h("p",{class:"muted"}, "Este parece estar en "+(NOMBRE_IDIOMA[r.idioma]||"otro idioma")+". Si el patrón está escrito en la descripción del vídeo, cópialo y pégalo aquí."))); return; }
     if(!r.pasos.length){ res.replaceChildren(h("div",{class:"empty"}, h("h3",{}, "No he encontrado las vueltas"), h("p",{class:"muted"}, "Busco cuando dice «vuelta 1», «la segunda vuelta», «round 3»… Si en el vídeo no las nombra, mira si el patrón está escrito en la descripción y pégalo aquí."))); return; }
     const pasos = r.pasos.map(p=>({...p}));
     const nombre = h("input",{type:"text", id:"vi-nombre", value:"", placeholder:"Ponle un nombre"});
@@ -4162,7 +4365,7 @@ VISTAS.video = V => {
       if(!finales.length){ err.textContent = "No queda ningún paso."; err.hidden = false; return; }
       const v = id(), tiempos = {};
       if(v) for(const p of finales) if(p.t!=null && !(p.texto in tiempos)) tiempos[p.texto] = p.t;
-      const pat = {id:"m-"+Date.now(), titulo, descripcion: escrito ? "Copiado de la descripción de un vídeo." : "Pasado a papel de un vídeo"+(r.idioma==="en" ? " en inglés" : "")+".", nivel:"", hilo:"", ganchillo:gan.value.trim(),
+      const pat = {id:"m-"+Date.now(), titulo, descripcion: escrito ? "Copiado de la descripción de un vídeo." : "Pasado a papel de un vídeo"+(r.idioma!=="es" ? " en "+NOMBRE_IDIOMA[r.idioma] : "")+".", nivel:"", hilo:"", ganchillo:gan.value.trim(),
         notas: v ? "Vídeo: "+enlaceVideo(v) : "", pasos: finales.map(p=>p.texto), color: COLORES[state.patrones.length % COLORES.length]};
       if(v) pat.video = {id:v, t:tiempos};
       // La transcripción entera solo si no es enorme (el móvil tiene poco sitio para guardar)
@@ -4174,7 +4377,7 @@ VISTAS.video = V => {
     const cuadran = pasos.filter(p=>revisarLinea(p.texto).estado==="cuadra").length, sinSacar = pasos.filter(p=>/mira el vídeo/.test(p.texto)).length;
     res.replaceChildren(...[
       escrito ? h("div",{class:"note"}, "Lo que has pegado ya es un patrón escrito: lo he leído tal cual.")
-        : h("div",{class:"note"}, "He sacado las vueltas de lo que dice la persona del vídeo"+(r.idioma==="en" ? " (en inglés, ya pasado a español)" : "")+". Revísalas: se puede cambiar cualquier paso y, si dejas uno vacío, se quita."),
+        : h("div",{class:"note"}, "He sacado las vueltas de lo que dice la persona del vídeo"+(r.idioma!=="es" ? " (en "+NOMBRE_IDIOMA[r.idioma]+", ya pasado a español)" : "")+". Revísalas: se puede cambiar cualquier paso y, si dejas uno vacío, se quita."),
       h("div",{class:"row"}, h("span",{class:"chip go"}, pasos.length+" pasos"), cuadran ? h("span",{class:"chip ok"}, cuadran+" cuadran") : null, sinSacar ? h("span",{class:"chip mine"}, sinSacar+" para mirar en el vídeo") : null),
       h("div",{class:"two"}, h("label",{class:"f"}, "Nombre", nombre), h("label",{class:"f"}, "Ganchillo", gan)),
       lista, err,
@@ -4187,7 +4390,7 @@ VISTAS.video = V => {
   }
   V.append(
     volver("Añadir un patrón", {name:"importar"}),
-    h("div",{class:"page-title"}, h("h1",{}, "De un vídeo de YouTube"), h("p",{class:"muted"}, "Pega el enlace del vídeo y lo que dice (su transcripción). Saco las vueltas por escrito y cada una se queda con su minuto, para volver a verlo mientras tejes. Entiende vídeos en español y en inglés.")),
+    h("div",{class:"page-title"}, h("h1",{}, "De un vídeo de YouTube"), h("p",{class:"muted"}, "Pega el enlace del vídeo y lo que dice (su transcripción). Saco las vueltas por escrito y cada una se queda con su minuto, para volver a verlo mientras tejes. Entiende vídeos en español, inglés, ruso, portugués y turco.")),
     h("div",{class:"section"},
       h("label",{class:"f", for:"vi-enlace"}, "1. El enlace del vídeo", h("small",{}, "En YouTube: Compartir → Copiar enlace.")),
       h("div",{class:"row"}, enlace, pegarEn(enlace)),
@@ -4197,11 +4400,12 @@ VISTAS.video = V => {
       h("details",{class:"panel", open: !videoBorrador.texto},
         h("summary",{}, "Cómo copiar lo que dice el vídeo"),
         h("ol",{class:"pasos-instalar"},
-          h("li",{}, "Abre el vídeo en YouTube. Es más fácil en el ordenador."),
-          h("li",{}, "Debajo del vídeo, abre la descripción («…más») y toca «Mostrar transcripción». Si no sale, ese vídeo no tiene subtítulos."),
-          h("li",{}, "En la transcripción, mantén pulsado (o arrastra con el ratón) desde la primera línea hasta la última, y elige Copiar."),
-          h("li",{}, "Vuelve aquí y pégalo en el recuadro.")),
+          h("li",{}, "Abre el vídeo en YouTube, abre la descripción («…más») y toca «Mostrar transcripción». Si no sale, ese vídeo no tiene subtítulos."),
+          h("li",{}, h("b",{}, "En el móvil: "), "la app de YouTube no deja copiar ese texto. Haz capturas de pantalla de la transcripción, bajando un poco cada vez, y toca aquí «Capturas de la transcripción» para elegirlas todas. Yo las leo."),
+          h("li",{}, h("b",{}, "En el ordenador: "), "arrastra con el ratón desde la primera línea hasta la última, copia y pégalo en el recuadro.")),
         h("p",{class:"muted"}, "¿El patrón viene escrito en la descripción del vídeo? Cópialo y pégalo aquí también: lo leo igual.")),
+      h("div",{class:"row"}, h("button",{class:"big", id:"vi-btn-capturas", onclick:()=>elegirCapturas.click()}, icono("foto",20), "Capturas de la transcripción"), elegirCapturas),
+      estadoCap,
       area,
       h("div",{class:"row"}, h("button",{class:"primary big", onclick:()=>sacar()}, "Pasarlo a papel"), pegarEn(area, ()=>sacar())),
       res)

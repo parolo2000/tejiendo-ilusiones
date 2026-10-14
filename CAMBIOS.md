@@ -560,3 +560,15 @@ Capturas en `tests/capturas/`.
 - Patrón: campo opcional `video: {id, t:{textoDelPaso: segundos}}` (sin cambio de versión de datos). Botón «Ver el
   vídeo» en el patrón, «Ver este paso en el vídeo (m:ss)» al tejer y en el modo sofá, y el minuto en la hoja impresa.
 - Tests: 4 nuevos (89 en total).
+
+## 2026-10-14 · Vídeos en ruso, portugués y turco; capturas de la transcripción en el móvil
+
+- Copia: `versiones/tejiendo-ilusiones-2026-10-14-antes-video-idiomas.html`.
+- `HABLA.ru`, `HABLA.pt`, `HABLA.tr`: números y ordinales dichos con letras (también «3-й ряд», «3. tur»), nombres de
+  los puntos, totales, «N раз / vezes / kez», partes y acciones. El ruso y el turco se pasan a letras latinas
+  (`aLatino`) para que las reglas funcionen igual. El sitio puede ir antes del punto («her ilmeğe 1 arttırma»).
+- Móvil: la app de YouTube no deja copiar la transcripción (comprobado en guías públicas: no se puede seleccionar el
+  texto). Botón «Capturas de la transcripción»: varias capturas se leen con el lector de fotos renglón a renglón
+  (`leerImagenes(..., {renglones:true})`, psm 6) y `juntarCapturas` quita lo repetido entre capturas, la hora del
+  móvil y el título.
+- Tests: 2 nuevos (91 en total).
