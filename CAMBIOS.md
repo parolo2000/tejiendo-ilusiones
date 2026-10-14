@@ -572,3 +572,16 @@ Capturas en `tests/capturas/`.
   (`leerImagenes(..., {renglones:true})`, psm 6) y `juntarCapturas` quita lo repetido entre capturas, la hora del
   móvil y el título.
 - Tests: 2 nuevos (91 en total).
+
+## 2026-10-14 · Marcador «Pasar a Tejiendo Ilusiones» (ordenador)
+
+- Copia: `versiones/tejiendo-ilusiones-2026-10-14-antes-marcador.html`.
+- `marcadorYouTube(APP)`: el código de un marcador del navegador. Se ejecuta en la página del vídeo de YouTube
+  (desde la app el navegador no deja leerla): abre «Mostrar transcripción», lee las líneas
+  (`ytd-transcript-segment-renderer`, o el diseño nuevo `transcript-segment-view-model`) y, si no puede, prueba con
+  los subtítulos del vídeo (`ytInitialPlayerResponse` → `fmt=json3`). Abre la app con `#video=ID&texto=…`.
+- `abrirVideoRecibido`: lo recibe, lo pone en «De un vídeo de YouTube» y saca las vueltas. En esa pantalla, el botón
+  rosa se arrastra a la barra de marcadores (`enlaceMarcador`).
+- Sin servidor, 0 €. Solo ordenador (en el móvil siguen las capturas). Probado con páginas que imitan YouTube; si
+  YouTube cambia su página, hay que ajustar los selectores.
+- Tests: 1 nuevo (92 en total).
