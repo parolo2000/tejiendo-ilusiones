@@ -1958,6 +1958,49 @@ Fasten off and weave in ends.`;
     assert.deepEqual(page.errores, []);
     await page.context().close();
   });
+  await prueba("vídeos en ruso, portugués y turco también salen en español", async () => {
+    const page = await nuevaPagina(browser);
+    const [ru, pt, tr] = await page.evaluate(ts => ts.map(t => transcripcionAPatron(t)), ["0:00\nвсем привет сегодня вяжем зайчика крючок номер 2,5\n0:10\nначинаем с головы делаем кольцо амигуруми и вяжем в него шесть столбиков без накида\n0:20\nвторой ряд в каждую петлю делаем прибавку должно получиться двенадцать петель\n0:35\nтретий ряд один столбик без накида прибавка и так повторяем шесть раз у нас получится восемнадцать петель\n0:50\nв четвертом ряду два сбн и прибавка по кругу итого 24 петли\n1:05\nс пятого по десятый ряд вяжем без прибавок\n1:20\nодиннадцатый ряд два столбика без накида убавка повторяем 6 раз 18 петель\n1:30\nнабиваем голову и вставляем глазки\n1:40\nтеперь вяжем ушки кольцо амигуруми шесть столбиков без накида\n1:50\n2 ряд 6 прибавок 12 петель\n", "0:00 olá meninas hoje vamos fazer um coelhinho com agulha de dois e meio milímetros\n0:08 vamos começar pela cabeça fazemos um anel mágico com seis pontos baixos\n0:18 segunda carreira um aumento em cada ponto ficamos com doze pontos\n0:30 terceira carreira um ponto baixo um aumento repetimos seis vezes no total de dezoito pontos\n0:45 da quinta à décima carreira sem aumentos\n0:55 carreira onze dois pontos baixos e uma diminuição seis vezes\n1:05 enchemos a cabeça com fibra e colocamos os olhos\n", "0:00 merhaba arkadaşlar bugün tavşan örüyoruz 2,5 numara tığ kullanıyoruz\n0:10 kafadan başlıyoruz sihirli halka içine altı sık iğne\n0:20 ikinci tur her ilmeğe bir arttırma toplam on iki ilmek\n0:30 üçüncü tur bir sık bir arttırma altı kez tekrar toplam on sekiz\n0:45 dördüncü tur iki sık bir arttırma tur boyunca 24 ilmek olacak\n1:00 beşinci turdan onuncu tura kadar arttırma yapmadan düz örüyoruz\n1:15 on birinci tur iki sık bir azaltma 6 kez\n1:25 elyaf ile dolduruyoruz\n"]);
+    assert.equal(ru.idioma, "ru"); assert.equal(pt.idioma, "pt"); assert.equal(tr.idioma, "tr");
+    const comunes = ["Vuelta 1: 6 pb en el anillo mágico", "Vuelta 2: 1 aum en cada punto (12)", "Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)"];
+    for (const r of [ru, pt, tr]) { assert.equal(r.ganchillo, "2,5 mm"); for (const c of comunes) assert.ok(r.pasos.some(p => p.texto === c), r.idioma + ": falta " + c); assert.ok(r.pasos.some(p => p.texto === "Vueltas 5 a 10: 1 pb en cada punto"), r.idioma); assert.ok(r.pasos.some(p => /^Vuelta 11: \*2 pb, 1 dism\* repetir 6 veces/.test(p.texto)), r.idioma); assert.ok(r.pasos.some(p => p.texto === "Rellena la pieza."), r.idioma); }
+    // Ruso: «в четвертом ряду», partes (голова, ушки) y «2 ряд 6 прибавок»
+    assert.deepEqual(ru.pasos.filter(p => /^Parte/.test(p.texto)).map(p => p.texto), ["Parte: Cabeza", "Parte: Orejas"]);
+    assert.ok(ru.pasos.some(p => p.texto === "Vuelta 4: *2 pb, 1 aum* alrededor (24)"));
+    assert.equal(ru.pasos[ru.pasos.length - 1].texto, "Vuelta 2: 6 aum (12)");
+    assert.ok(tr.pasos.some(p => p.texto === "Vuelta 4: *2 pb, 1 aum* alrededor (24)"));
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
+  await prueba("en el móvil: capturas de pantalla de la transcripción se leen y se juntan sin repetir", async () => {
+    const page = await nuevaPagina(browser);
+    // Lo que sale de leer dos capturas: la hora del móvil arriba, el título y líneas repetidas entre una y otra
+    const junto = await page.evaluate(() => juntarCapturas(["21:05 85%\nTranscripción\n0:00\nhola\n0:10 vuelta uno seis puntos bajos\n0:20\nvuelta dos", "21:06\nTranscripción\n0:10 vuelta uno seis puntos bajos\n0:20\nvuelta dos\n0.30\ndoce puntos"]));
+    assert.equal(junto, "0:00\nhola\n0:10\nvuelta uno seis puntos bajos\n0:20\nvuelta dos\n0:30\ndoce puntos");
+    await page.route(/cdn\.jsdelivr\.net\/npm\/tesseract\.js@5\.1\.1\/dist\/tesseract\.min\.js$/, (r) => r.fulfill({ path: path.join(VENDOR, "tesseract.min.js"), contentType: "text/javascript" }));
+    // Capturas como las de la app de YouTube (la barra de arriba, el vídeo, «Transcripción» y las líneas)
+    const lineas = TRANS_ES.trim().split("\n"), filas = [];
+    for (let i = 0; i < lineas.length; i += 2) filas.push([lineas[i], lineas[i + 1]]);
+    // (las capturas de un móvil de verdad tienen mucha resolución)
+    const ctxMk = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
+    const mk = await ctxMk.newPage();
+    const capturas = [];
+    for (const [a, z] of [[0, 8], [6, 14], [12, 20]]) {
+      await mk.setContent(`<body style="margin:0;font-family:Arial;background:#fff"><div style="height:28px;font-size:13px;padding:4px 14px;display:flex;justify-content:space-between"><b>21:05</b><span>85%</span></div><div style="height:200px;background:#111"></div><div style="padding:12px 16px;font-size:18px;font-weight:600">Transcripción</div>` +
+        filas.slice(a, z).map(([t, x]) => `<div style="display:flex;gap:14px;padding:10px 16px"><span style="background:#eee;border-radius:6px;padding:2px 6px;font-size:13px">${t}</span><span style="font-size:15px">${x}</span></div>`).join("") + `</body>`);
+      capturas.push(await mk.screenshot());
+    }
+    await ctxMk.close();
+    await page.evaluate(() => go({ name: "video" }));
+    await page.setInputFiles("#vi-capturas", capturas.map((buffer, i) => ({ name: "Screenshot_" + (i + 1) + ".png", mimeType: "image/png", buffer })));
+    await page.locator("textarea.video-paso").first().waitFor({ timeout: 180000 }).catch(async e => { throw new Error(e.message.split("\n")[0] + " · " + (await page.locator("#vi-texto").inputValue()).slice(0, 300) + " · " + await page.locator(".leyendo").innerText().catch(() => "")); });
+    const pasos = await page.$$eval("textarea.video-paso", xs => xs.map(x => x.value));
+    assert.deepEqual(pasos.slice(0, 5), ["Vuelta 1: 6 pb en el anillo mágico", "Vuelta 2: 1 aum en cada punto (12)", "Vuelta 3: *1 pb, 1 aum* repetir 6 veces (18)", "Vuelta 4: *2 pb, 1 aum* alrededor (24)", "Vueltas 5 a 10: 1 pb en cada punto"]);
+    assert.match(await page.inputValue("#vi-texto"), /^0:00\n/);
+    await page.screenshot({ path: path.join(CAPTURAS, "video-capturas.png") });
+    assert.deepEqual(page.errores, []);
+    await page.context().close();
+  });
   await prueba("si lo pegado ya es un patrón escrito (de la descripción del vídeo), se lee tal cual", async () => {
     const page = await nuevaPagina(browser);
     await page.evaluate(() => go({ name: "video" }));
