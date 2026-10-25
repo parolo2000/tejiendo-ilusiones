@@ -3422,12 +3422,15 @@ function maquetarPagina(its){
 // Cabeceras y pies: la misma línea (con otro número de página) arriba o abajo en la mitad de las hojas o más
 function quitarRepetidas(paginas){
   if(paginas.length < 2) return paginas;
-  const clave = t => t.toLowerCase().replace(/\d+/g, "#").replace(/\s+/g, " ").trim();
+  const clave = t => { const k = t.toLowerCase().replace(/\d+/g, "#").replace(/\s+/g, " ").trim(), letras = k.replace(/[^\p{L}#]/gu, ""); return letras.length >= 8 ? letras : k; };
   const bordes = p => { const ls = p.filter(Boolean); return [...ls.slice(0, 2), ...ls.slice(-2)]; };
   const veces = {};
   for(const p of paginas) for(const k of new Set(bordes(p).map(clave))) veces[k] = (veces[k]||0)+1;
   const min = Math.max(2, Math.ceil(paginas.filter(p=>p.some(Boolean)).length/2));
-  return paginas.map(p => { const b = new Set(bordes(p)); return p.filter(l => !(b.has(l) && l && veces[clave(l)] >= min && !/^\s*(vueltas?|rnds?|rounds?|rows?|filas?|ряд)\s*\d/i.test(l))); });
+  // (también si al final el lector ha añadido letras de un adorno: «Noelle doll - daisytinythings LAT AR»)
+  const frecuentes = Object.keys(veces).filter(k => veces[k] >= min && k.length >= 12);
+  const repetida = l => veces[clave(l)] >= min || frecuentes.some(k => clave(l).startsWith(k));
+  return paginas.map(p => { const b = new Set(bordes(p)); return p.filter(l => !(b.has(l) && l && repetida(l) && !/^\s*(vueltas?|rnds?|rounds?|rows?|filas?|ряд)\s*\d/i.test(l))); });
 }
 async function paginasDePDF(doc, avisar){
   const paginas = [];
@@ -3518,7 +3521,7 @@ function otroIdiomaLectura(d){
   if(palabras.length >= 8 && (d.confidence||0) < 65 && (buenas < palabras.length*.35 || mayus > .45)) return ["chi_sim","eng"];
   return null;
 }
-async function leerImagenes(imgs, avisar, porPagina=false, {renglones=false}={}){
+async function leerImagenes(imgs, avisar, porPagina=false, {renglones=false, detalle=false}={}){
   await cargarScript(TESSERACT);
   // Comprueba que los datos del lector están publicados junto a la app antes de arrancarlo
   const prueba = await fetch(OCR_DIR+"worker.min.js", {method:"HEAD"}).catch(()=>null);
@@ -3538,15 +3541,16 @@ async function leerImagenes(imgs, avisar, porPagina=false, {renglones=false}={})
     try{ await w.setParameters({tessedit_pageseg_mode: renglones ? "6" : "3", preserve_interword_spaces: "1"}); }catch(e){}
     return w;
   };
-  let worker = await crear(OCR_BASE);
+  let worker = await crear(OCR_BASE), decidido = false;
   try{
-    const textos = [];
+    const textos = [], detalles = [];
     for(; actual<imgs.length; actual++){
       const img = typeof imgs[actual]==="function" ? await imgs[actual]() : imgs[actual], ancho = img.width;
       let d = (await worker.recognize(img, {}, {text:true, blocks:true})).data;
       // La primera hoja dice en qué idioma está el patrón
       const otro = actual===0 && otroIdiomaLectura(d);
       if(otro){
+        decidido = true;
         avisar(otro[0]==="por" ? "Está en portugués: lo leo otra vez con sus letras…" : otro[0]==="tur" ? "Está en turco: lo leo otra vez con sus letras…" : "Parece chino: lo leo otra vez con letras chinas…", null);
         // (de uno en uno: dos lectores a la vez no caben en la memoria de un móvil)
         await worker.terminate(); worker = null;
@@ -3556,20 +3560,98 @@ async function leerImagenes(imgs, avisar, porPagina=false, {renglones=false}={})
         if(d2 && (otro[0]!=="chi_sim" || (d2.text.match(RX_CJK)||[]).length >= 10)) d = d2;
         else { if(worker) await worker.terminate(); worker = await crear(OCR_BASE); }
       }
+      // Con los tres idiomas a la vez, en un patrón en inglés salen letras rusas en las fotos y «chl», «RE» por «ch1», «R6».
+      // En cuanto una hoja tiene texto de verdad se sabe el idioma y se sigue leyendo solo con ese.
+      if(!decidido && !renglones && (d.text.match(/\p{L}/gu)||[]).length >= 150){
+        decidido = true;
+        const solo = {en:["eng"], es:["spa","eng"], ru:["rus","eng"]}[idiomaDe(d.text)];
+        if(solo){
+          await worker.terminate(); worker = null;
+          worker = await crear(solo).catch(() => null);
+          const d2 = worker ? await worker.recognize(img, {}, {text:true, blocks:true}).then(r => r.data).catch(() => null) : null;
+          if(d2) d = d2; else { if(worker) await worker.terminate(); worker = await crear(OCR_BASE); }
+        }
+      }
+      if(renglones){ soltarLienzo(img); textos.push(d.text); continue; }
+      let ls = null, cajas = []; try{ ls = lineasDeLectura(d, ancho); cajas = cajasDeFotos(d, img.width, img.height, ls); ls = sinLetrasDeFotos(ls, cajas); }catch(e){}
+      if(detalle) detalles.push({lineas: ls || d.text.split("\n").map(t => ({t})), fotos: recortarFotos(img, cajas), ancho, alto: img.height});
       soltarLienzo(img);
-      let t = null; if(!renglones) try{ t = textoEnColumnas(d, ancho); }catch(e){} textos.push(t || d.text);
+      textos.push(ls ? ls.map(l => l.t).join("\n") : d.text);
     }
+    if(detalle) return detalles.map((x, i) => {
+      // (los arreglos no cambian el número de líneas: cada línea sigue sabiendo dónde estaba en la hoja)
+      const t = arreglarLectura(textos[i]).split("\n");
+      return {...x, lineas: t.length===x.lineas.length ? x.lineas.map((l, k) => ({...l, t: t[k]})) : t.map(t => ({t}))};
+    });
     return porPagina ? textos.map(arreglarLectura) : arreglarLectura(textos.join("\n\n"));
   } finally { if(worker) worker.terminate(); }
 }
+// Lo que el lector marca como foto o dibujo (no como texto)
+const RX_BLOQUE_FOTO = /IMAGE|PICTURE|LINE/;
+// Letras que el lector «ve» en una foto o en un adorno: líneas con poca seguridad y sin una palabra clara
+function renglonDeRuido(ws, conf, umbral){
+  const t = ws.map(w => w.text).join(" ").trim();
+  if(!/[\p{L}\d]/u.test(t) || (!/\p{L}/u.test(t) && t.length <= 3)) return true;
+  // Una vuelta («R20: 15sc») se queda aunque el lector dude
+  if(/^[RrSs$Вв]\s?[\dIlOoSE|]{1,3}\b.*\d/.test(t) || cabeceraVuelta(t)) return false;
+  // (en chino una palabra puede ser una sola letra)
+  const palabra = w => /\p{L}{3}|\d|[\u3400-\u9fff]/u.test(w.text);
+  if(!ws.some(palabra)) return true;
+  // Si menos de la mitad de las palabras se leen con seguridad, es ruido (salvo que la hoja entera se lea mal)
+  const claras = ws.filter(w => w.confidence >= 70 && palabra(w)).length;
+  return claras < ws.length*.5 && conf < umbral;
+}
+// Las líneas de una hoja leída, en orden de lectura y con su sitio: [{t, x0, y0, x1, y1}], y {t:""} entre párrafos
+function lineasDeLectura(d, ancho){
+  const confs = (d.blocks||[]).filter(b => !RX_BLOQUE_FOTO.test(b.blocktype||"")).map(b => b.confidence||0);
+  const media = confs.length ? confs.reduce((a, b) => a+b, 0)/confs.length : (d.confidence||0);
+  const umbral = Math.max(40, Math.min(75, media-10));
+  const bloques = []; let par = 0;
+  // (las letras dudosas que caen dentro de una foto son de la foto, aunque el lector las pegue a una línea de texto)
+  const fotos = (d.blocks||[]).filter(b => RX_BLOQUE_FOTO.test(b.blocktype||"") && b.bbox).map(b => b.bbox);
+  const enFoto = w => w.confidence < 60 && fotos.some(c => (w.bbox.x0+w.bbox.x1)/2 > c.x0 && (w.bbox.x0+w.bbox.x1)/2 < c.x1 && (w.bbox.y0+w.bbox.y1)/2 > c.y0 && (w.bbox.y0+w.bbox.y1)/2 < c.y1);
+  for(const b of d.blocks||[]){
+    if(RX_BLOQUE_FOTO.test(b.blocktype||"")) continue;
+    const lineas = [];
+    for(const p of b.paragraphs||[]){ par++; for(const l of p.lines||[]){
+      const ws = (l.words||[]).filter(w=>w && w.text && w.text.trim() && w.bbox && !enFoto(w));
+      if(!ws.length || renglonDeRuido(ws, l.confidence||0, umbral)) continue;
+      ws.par = par; lineas.push(ws);
+    } }
+    if(lineas.length) bloques.push({tipo: b.blocktype||"", bbox: b.bbox, lineas});
+  }
+  // Una hoja que casi no se entiende y con poco texto es una foto (con letras de adorno encima)
+  const letras = bloques.flatMap(b => b.lineas.flat()).map(w => w.text).join("");
+  if(media < 50 && !/[\u3400-\u9fff]/.test(letras) && letras.replace(/[^\p{L}]/gu, "").length < 200) return [];
+  const todas = bloques.flatMap(b => b.lineas);
+  // Toda la hoja a dos columnas; si no, puede ir a dos columnas solo un trozo (dos pies de foto uno al lado del otro)
+  let out = ordenarColumnas(todas, 0, ancho, 30);
+  if(!out){
+    out = [];
+    for(const b of bloques){
+      const o = (b.tipo==="TABLE" && b.bbox && ordenarColumnas(b.lineas, b.bbox.x0, b.bbox.x1-b.bbox.x0, 8)) || ordenarColumnas(b.lineas, 0, 0, Infinity, true);
+      if(out.length) out.push({t:""});
+      out.push(...o);
+    }
+  }
+  // El lector a veces corta un párrafo en dos («…close and finish off the» / «hole.»): si la frase no ha acabado,
+  // la línea de abajo empieza en minúscula y está justo debajo, siguen juntas
+  return out.filter((l, i) => {
+    if(l.t || !out[i-1] || !out[i+1] || !out[i-1].t || !out[i+1].t || out[i-1].y1==null || out[i+1].y0==null) return true;
+    const a = out[i-1], b = out[i+1], alto = Math.max(8, a.y1-a.y0);
+    return /[.!?:;)\]]\s*$/.test(a.t) || !/^\p{Ll}/u.test(b.t) || b.y0-a.y1 > alto*2.5 || Math.abs(b.x0-a.x0) > alto*3;
+  });
+}
 // Una página a dos columnas: el lector a veces junta la línea de la izquierda con la de la derecha. Con la
 // posición de cada palabra se busca el hueco vertical entre columnas y se lee primero una y luego la otra.
-function textoEnColumnas(d, ancho){
-  const lineas = []; let par = 0;
-  for(const b of d.blocks||[]) for(const p of b.paragraphs||[]){ par++; for(const l of p.lines||[]){ const ws = (l.words||[]).filter(w=>w && w.text && w.text.trim() && w.bbox); if(ws.length){ ws.par = par; lineas.push(ws); } } }
-  const palabras = lineas.flat(); if(palabras.length<30 || !ancho) return null;
+// (con «tal cual», las líneas en el orden del lector, con una línea en blanco entre párrafos)
+function ordenarColumnas(lineas, x0, ancho, minPalabras, talCual=false){
+  const renglon = (ws, f=()=>true) => { const s = ws.filter(f).sort((a,b)=>a.bbox.x0-b.bbox.x0); return s.length ? {t: s.map(w=>w.text).join(" "), conf: s.reduce((a, w) => a+(w.confidence||0), 0)/s.length, x0: Math.min(...s.map(w=>w.bbox.x0)), x1: Math.max(...s.map(w=>w.bbox.x1)), y0: Math.min(...s.map(w=>w.bbox.y0)), y1: Math.max(...s.map(w=>w.bbox.y1))} : null; };
+  const conPar = xs => { const out = []; xs.forEach((x, i) => { if(i && x.p!==xs[i-1].p) out.push({t:""}); out.push(x.r); }); return out; };
+  if(talCual) return conPar(lineas.map(ws => ({r: renglon(ws), p: ws.par})));
+  const palabras = lineas.flat(); if(palabras.length<minPalabras || !ancho) return null;
   let mejor = null;
-  for(let x=Math.round(ancho*.3); x<=ancho*.7; x+=Math.max(2, Math.round(ancho/200))){
+  for(let x=Math.round(x0+ancho*.3); x<=x0+ancho*.7; x+=Math.max(2, Math.round(ancho/200))){
     const cruzan = palabras.filter(w=>w.bbox.x0<x && w.bbox.x1>x).length;
     const izq = palabras.filter(w=>w.bbox.x1<=x).length, der = palabras.length-izq-cruzan;
     if(izq<palabras.length*.2 || der<palabras.length*.2) continue;
@@ -3582,36 +3664,87 @@ function textoEnColumnas(d, ancho){
   const huecos = lineas.map(ws => { const a = ws.filter(w=>w.bbox.x1<=mejor.x), b = ws.filter(w=>w.bbox.x0>=mejor.x);
     return a.length && b.length ? Math.min(...b.map(w=>w.bbox.x0)) - Math.max(...a.map(w=>w.bbox.x1)) : null; }).filter(x=>x!==null).sort((a,b)=>a-b);
   if(huecos.length && huecos[Math.floor(huecos.length/2)] < alto*1.2) return null;
-  // Las líneas que cruzan el hueco (títulos centrados) van arriba; luego la columna izquierda y después la derecha
-  const lado = (ws, f) => ws.filter(f).sort((a,b)=>a.bbox.x0-b.bbox.x0).map(w=>w.text).join(" ");
-  const arriba = [], izq = [], der = [];
-  for(const ws of lineas){
-    if(ws.some(w=>w.bbox.x0<mejor.x && w.bbox.x1>mejor.x)){ arriba.push({y:ws[0].bbox.y0, t:lado(ws, ()=>true), p:"a"+ws.par}); continue; }
-    const y = ws[0].bbox.y0, a = lado(ws, w=>w.bbox.x1<=mejor.x), b = lado(ws, w=>w.bbox.x0>=mejor.x);
-    if(a) izq.push({y, t:a, p:"i"+ws.par}); if(b) der.push({y, t:b, p:"d"+ws.par});
+  // (ni si alguna línea larga pasa de un lado al otro con un espacio normal: es una sola columna con fotos al lado)
+  if(huecos.filter(x => x < alto*1.5).length > Math.max(0, huecos.length*.2)) return null;
+  // Las líneas que cruzan el hueco (títulos, o una vuelta larga) parten la hoja en franjas: en cada franja se lee
+  // primero la columna izquierda y después la derecha, y la línea que cruza va en su sitio, entre una franja y otra
+  const orden = lineas.slice().sort((a, b) => a[0].bbox.y0-b[0].bbox.y0), out = [];
+  let izq = [], der = [];
+  const cerrar = () => { if(izq.length){ if(out.length) out.push({t:""}); out.push(...conPar(izq)); } if(der.length){ if(out.length) out.push({t:""}); out.push(...conPar(der)); } izq = []; der = []; };
+  for(const ws of orden){
+    if(ws.some(w=>w.bbox.x0<mejor.x && w.bbox.x1>mejor.x)){
+      cerrar();
+      const ult = out[out.length-1];
+      if(ult && ult.t && ult.p!=="a"+ws.par) out.push({t:""});
+      out.push({...renglon(ws), p:"a"+ws.par});
+      continue;
+    }
+    const a = renglon(ws, w=>w.bbox.x1<=mejor.x), b = renglon(ws, w=>w.bbox.x0>=mejor.x);
+    if(a) izq.push({r:a, p:"i"+ws.par}); if(b) der.push({r:b, p:"d"+ws.par});
   }
-  // Entre párrafos, una línea en blanco: así se sabe dónde acaba una vuelta larga
-  const orden = xs => { const o = xs.sort((a,b)=>a.y-b.y), out = []; o.forEach((x,i)=>{ if(i && x.p!==o[i-1].p) out.push(""); out.push(x.t); }); return out; };
-  // Un título que cruza y va por debajo de las columnas (pie de página) se queda al final
-  const yIni = Math.min(...[...izq, ...der].map(x=>x.y));
-  return [...orden(arriba.filter(x=>x.y<=yIni)), "", ...orden(izq), "", ...orden(der), "", ...orden(arriba.filter(x=>x.y>yIni))].join("\n");
+  cerrar();
+  return out.map(({p, ...l}) => l);
+}
+// Las fotos de una hoja leída como foto: lo que el lector marca como imagen
+function cajasDeFotos(d, W, H, lineas){
+  const margen = Math.round(W*.015), textos = (lineas||[]).filter(l => l.t && l.x0!=null);
+  let cajas = (d.blocks||[]).filter(b => RX_BLOQUE_FOTO.test(b.blocktype||"") && b.bbox).map(b => ({...b.bbox}));
+  cajas = cajas.map(c => {
+    // Dentro de una foto, el lector «ve» letras sin sentido; pero si dentro hay texto claro, la «foto» abarca
+    // también el texto de al lado: se queda con la parte sin texto
+    const dentro = textos.filter(l => (l.x0+l.x1)/2 > c.x0 && (l.x0+l.x1)/2 < c.x1 && (l.y0+l.y1)/2 > c.y0 && (l.y0+l.y1)/2 < c.y1 && (l.conf==null || l.conf >= 75));
+    if(dentro.length < 3) return c;
+    const der = Math.max(...dentro.map(l => l.x1)), izq = Math.min(...dentro.map(l => l.x0));
+    if(c.x1 - der > (c.x1-c.x0)*.3) return {...c, x0: der + margen};
+    if(izq - c.x0 > (c.x1-c.x0)*.3) return {...c, x1: izq - margen};
+    return null;
+  }).filter(Boolean).filter(c => c.x1-c.x0 >= W*.07 && c.y1-c.y0 >= W*.07 && (c.x1-c.x0)*(c.y1-c.y0) >= W*H*.012);
+  // Las que se tocan son la misma foto (o fotos juntas, como una tira de pasos)
+  for(let cambio = true; cambio;){
+    cambio = false;
+    for(let i=0; i<cajas.length && !cambio; i++) for(let j=i+1; j<cajas.length && !cambio; j++){
+      const a = cajas[i], b = cajas[j];
+      if(a.x0 <= b.x1+margen && b.x0 <= a.x1+margen && a.y0 <= b.y1+margen && b.y0 <= a.y1+margen){
+        cajas[i] = {x0:Math.min(a.x0, b.x0), y0:Math.min(a.y0, b.y0), x1:Math.max(a.x1, b.x1), y1:Math.max(a.y1, b.y1)}; cajas.splice(j, 1); cambio = true;
+      }
+    }
+  }
+  return cajas.sort((a, b) => a.y0-b.y0 || a.x0-b.x0);
+}
+// Lo escrito dentro de una foto (rótulos, o letras que el lector se inventa) va con la foto, no con el texto
+function sinLetrasDeFotos(lineas, cajas){
+  if(!lineas || !cajas.length) return lineas;
+  const fuera = lineas.filter(l => !l.t || l.x0==null || !cajas.some(c => (l.x0+l.x1)/2 > c.x0 && (l.x0+l.x1)/2 < c.x1 && (l.y0+l.y1)/2 > c.y0 && (l.y0+l.y1)/2 < c.y1));
+  return fuera.filter((l, i) => l.t || (i > 0 && i < fuera.length-1 && fuera[i-1].t));
+}
+function recortarFotos(img, cajas){
+  const W = img.width, H = img.height, margen = Math.round(W*.015);
+  return cajas.map(c => {
+    const x0 = Math.max(0, c.x0-margen), y0 = Math.max(0, c.y0-margen), x1 = Math.min(W, c.x1+margen), y1 = Math.min(H, c.y1+margen);
+    return {x0, y0, x1, y1, ...lienzoAJpeg(img, 1400, .85, x0, y0, x1-x0, y1-y0)};
+  });
 }
 // Errores típicos al leer letras en un patrón: «(l2)» es «(12)» y «(3O)» es «(30)»
 // Con el ruso cargado, en un patrón en español a veces lee «тр» por «mp» o «о» cirílica por «o»
 const PARECIDAS = {"а":"a","е":"e","о":"o","р":"p","с":"c","у":"y","х":"x","т":"m","м":"m","к":"k","і":"i","А":"A","Е":"E","О":"O","Р":"P","С":"C","Т":"T","М":"M","К":"K","Х":"X","Н":"H","В":"B"};
 // «R4-RS:», «RO:», «Rl:»: el lector confunde los números de las vueltas con letras (8 y S, 0 y O, 1 y l). Como las
 // vueltas van seguidas, se elige el número que toca (la anterior más uno; y una que acaba justo antes de la siguiente)
-const LETRA_NUMERO = {S:"58", s:"58", B:"8", O:"09", o:"0", D:"0", Q:"0", I:"1", l:"1", "|":"1", i:"1", Z:"2", z:"2", g:"9", q:"9", G:"6", b:"6"};
-const RX_CAB_R = /^(\s*R\s*)([0-9SsBOoDQIl|iZzgqGb]{1,3})(?:(\s*[-–~]\s*R?\s*)([0-9SsBOoDQIl|iZzgqGb]{1,3}))?(?=\s*[:：.)])/;
+// («RE:» es R6 y «RY:» R1: una letra que no se parece a ningún número vale el que toque)
+const LETRA_NUMERO = {S:"58", s:"58", B:"8", O:"09", o:"0", D:"0", Q:"0", I:"1", l:"1", L:"1", "|":"1", i:"1", Z:"2", z:"2", g:"9", q:"9", G:"6", b:"6", E:"56"};
+const RX_CAB_R = /^(\s*R\s*)([0-9SsBOoDQIl|iZzgqGbEL]{1,3}|[A-Z])(?:(\s*[-–~]\s*R?\s*)([0-9SsBOoDQIl|iZzgqGbEL]{1,3}))?(?=\s*(?:\([^()]{1,15}\)\s*)?[:：.)])/;
 function arreglarNumerosVuelta(t){
-  const opciones = tok => tok.split("").reduce((acc, c) => acc.flatMap(a => (/\d/.test(c) ? c : LETRA_NUMERO[c] || "").split("").map(d => a+d)), [""]).filter(Boolean).map(Number);
+  const opciones = tok => tok.split("").reduce((acc, c) => acc.flatMap(a => (/\d/.test(c) ? c : LETRA_NUMERO[c] || (tok.length===1 ? "0123456789" : "")).split("").map(d => a+d)), [""]).filter(Boolean).map(Number).filter(n => n > 0);
   const lineas = t.split("\n"), cabs = [];
-  lineas.forEach((l, i) => { const m = l.match(RX_CAB_R); if(m && (/\d/.test(m[2]) || m[4] || /^[SsBOoDQIl|iZzgqGb]$/.test(m[2]))) cabs.push({i, m, a: opciones(m[2]), b: m[4] ? opciones(m[4]) : null}); });
+  // («RS: Right side» en la lista de abreviaturas no es la vuelta 5: una vuelta lleva números)
+  lineas.forEach((l, i) => { const m = l.match(RX_CAB_R); if(m && (/\d/.test(m[2]) || m[4] || /\d/.test(l.slice(m[0].length)))) cabs.push({i, m, a: opciones(m[2]), b: m[4] ? opciones(m[4]) : null}); });
   if(cabs.filter(c => /^\d+$/.test(c.m[2])).length < 2) return t; // no es un patrón con «R1:», «R2:»
   let antes = 0;
   cabs.forEach((c, k) => {
     const elegir = (ops, quiero) => ops.includes(quiero) ? quiero : ops.filter(n => n > antes).sort((x, y) => x-y)[0] ?? ops[0];
-    const a = c.a.length ? (c.a.includes(1) && antes > 1 && !c.a.includes(antes+1) ? 1 : elegir(c.a, antes+1)) : null;
+    const comodin = /^[A-Z]$/.test(c.m[2]) && !LETRA_NUMERO[c.m[2]];
+    // (una pieza nueva empieza otra vez en la vuelta 1: si la siguiente es la 2, esta es la 1)
+    const sig = cabs[k+1] ? cabs[k+1].a : [];
+    const a = comodin ? (!sig.includes(antes+2) && sig.includes(2) ? 1 : antes+1) : c.a.length ? (c.a.includes(1) && antes > 1 && !c.a.includes(antes+1) ? 1 : elegir(c.a, antes+1)) : null;
     if(a==null) return;
     let b = null;
     if(c.b){
@@ -3631,13 +3764,33 @@ function arreglarLectura(t){
   if((t.match(RX_CJK)||[]).length >= 10) t = t.replace(/([\u3400-\u9fff\uff08-\uff1f])[ \t]+(?=[\u3400-\u9fff\uff08-\uff1f])/g, "$1");
   const cir = (t.match(/[а-яё]/gi)||[]).length, lat = (t.match(/[a-záéíóúñ]/gi)||[]).length;
   if(cir && cir < (cir+lat)*.05) t = t.replace(/[\u0400-\u04FF]+/g, w => [...w].every(c=>PARECIDAS[c]) ? [...w].map(c=>PARECIDAS[c]).join("") : w);
-  return t.replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"')
+  t = t.replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"')
     .replace(/\*([^*"]{2,60})"(?=\s*[xх×])/g, "*$1*")
     .replace(/(^|[\s,(*])[lI|]\s?(?=(au|aum|mp|pb|pa|dis|dism|cad|var|mv|mpa)\b)/g, (m, a) => a+"1 ")
     .replace(/\(\s*([\dlIOo|]{1,4})\s*\)/g, (m, n) => /\d/.test(n) ? "("+n.replace(/[lI|]/g,"1").replace(/[Oo]/g,"0")+")" : m)
     .replace(/\b(vueltas?|rnds?|rounds?|rows?|filas?|hileras?)\s+([lI|])(?=\s*[:.)\-–])/gi, "$1 1")
     .replace(/(^|\n)(\s*R)[lI|](?=\s*[:.)\-–])/g, "$1$21")
     .replace(/[ \t]+\n/g, "\n");
+  return (t.match(/\d\s?(?:sc|hdc|dc|ch|inc)\b|\b(?:sc dec|sl st)\b/gi)||[]).length >= 3 ? arreglarLecturaInglesa(t) : t;
+}
+// Un patrón en inglés leído de una foto: el «1» sale como «I», «l», «i» o «]», el «5» como «S» y la «c» como «¢»
+// («Isc» es 1sc, «chl» es ch1, «Ssc» es 5sc, «T1sc» es 11sc, «SI:» es la hebra S1)
+const ST_EN = "(?:sc|hdc|dc|tr|ch|inc|dec|sts?|slst)";
+function arreglarLecturaInglesa(t){
+  return t.replace(/s¢|sc¢/g, "sc").replace(/(\d)¢ch\b/g, "$1ch").replace(/¢h\b/g, "ch")
+    .replace(new RegExp("(^|[\\s,(*:;<>])[Il|](?="+ST_EN+"\\b)", "gm"), "$11")
+    .replace(new RegExp("(^|[\\s,(*:;<>])[TN][1Iil|](?="+ST_EN+"\\b)", "gm"), "$111")
+    .replace(/(^|[\s,(*:;<>])[TI](?=(?:hdc|dc|sc|FPdc|BPdc)\b)/gm, "$11")
+    .replace(new RegExp("(^|[\\s,(*:;<>])S(\\d?)(?="+ST_EN+"\\b)", "gm"), "$15$2")
+    .replace(new RegExp("(^|[\\s,(*:;<>])Z(\\d)(?="+ST_EN+"\\b)", "gm"), "$12$2")
+    .replace(/\b(\d+)[Oo](\d*)(?=(?:sc|hdc|dc|ch|inc|sts?)\b)/g, "$10$2")
+    .replace(/\bch(?:[lIi|\]]|il|li)(?![\p{L}\d])/gu, "ch1")
+    .replace(/\b[Il|]st\b/g, "1st")
+    .replace(/\bsl stand\b/g, "sl st and")
+    .replace(/(^|\s)S(?=mm\b)/gm, "$15")
+    .replace(/\*\s?[sS](?=\s*\(|\s*,|\s*$)/gm, "*5")
+    // las hebras del pelo: «SI:», «$6:», «$22 - 24»
+    .replace(/^(\s*)(?:\$|S)([Il|]|\d{1,2})(?=\s*(?:[:;]|[-–]\s*\d))/gm, (m, a, n) => a+"S"+n.replace(/[Il|]/, "1"));
 }
 // Lee un PDF para «Añadir un patrón» (y la Biblioteca): el texto con su maquetación; las hojas escaneadas, como una foto
 const conFoto = fn => async ()=>{ try{ return await fn(); } catch(e){ const err = e instanceof Error ? e : new Error(String(e)); err.foto = true; throw err; } };
@@ -4658,6 +4811,13 @@ const PUNTOS_EN_ES = {
   uk: [["dc2tog|dc\\s*2\\s*tog", "dism"], ["tr2tog", "dism de pa"], ["htr2tog", "dism de mpa"], ["invdec|inv\\s*dec", "dism invisible"],
        ["ttr", "pad"], ["dtr", "pad"], ["htr", "mpa"], ["tr", "pa"], ["dc", "pb"]]
 };
+// Los colores de la lana («<White yarn (106)>», «Join Beige color»)
+const COLORES_EN = [["avocado\\s+green", "verde aguacate"], ["willow\\s+green", "verde sauce"], ["dark\\s+chocolate", "chocolate oscuro"], ["brown\\s+cinnamon|cinnamon", "canela"],
+  ["light\\s+gr[ae]y", "gris claro"], ["dark\\s+gr[ae]y", "gris oscuro"], ["light\\s+pink", "rosa claro"], ["navy(?:\\s+blue)?", "azul marino"], ["sky\\s+blue|light\\s+blue", "azul claro"],
+  ["white", "blanco"], ["black", "negro"], ["beige", "beige"], ["brown", "marrón"], ["red", "rojo"], ["green", "verde"], ["blue", "azul"], ["pink", "rosa"], ["yellow", "amarillo"],
+  ["orange", "naranja"], ["gr[ae]y", "gris"], ["cream|ecru|off\\s*white", "crudo"], ["terracotta|terracota", "terracota"], ["purple", "morado"], ["lilac", "lila"], ["mint", "verde menta"], ["gold(?:en)?", "dorado"], ["skin|nude", "color carne"]];
+const COLORES_EN_RX = COLORES_EN.map(c => c[0]).join("|");
+const colorEnEspanol = c => (COLORES_EN.find(([p]) => new RegExp("^(?:"+p+")$", "i").test(c.trim())) || [0, c])[1];
 const GLOSARIO_EN = uk => [
   ["(?:is\\s+)?work(?:ed|ing)?\\s+in\\s+(?:a\\s+)?(?:continuous\\s+)?(?:spiral|continuous\\s+rounds|rounds\\s+without\\s+joining)", "se teje en espiral", "m"],
   ["\\(\\s*make\\s+"+TN+"\\s*\\)", "(hacer $1)", "m"],
@@ -4665,6 +4825,21 @@ const GLOSARIO_EN = uk => [
   ["\\(\\s*(?:us|american|usa)\\s+terms?\\s*\\)|(?:us|american)\\s+terms", "(términos de EE. UU.)", "m"], ["\\(\\s*(?:uk|british)\\s+terms?\\s*\\)|(?:uk|british)\\s+terms", "(términos del Reino Unido)", "m"],
   ["abbreviations|stitches\\s+used|stitch\\s+guide", "Abreviaturas", "m"], ["assembly|assembling|construction", "Montaje", "m"], ["finishing", "Acabado", "m"],
   ["materials|supplies|you\\s+will\\s+need", "Materiales", "m"],
+  // Nombres de piezas y frases que el traductor no conoce («crochet pattern» salía «patrón de ganchado», «stuff» «cosas»)
+  ["(?:crochet|amigurumi)\\s+pattern", "patrón de ganchillo", "m"], ["\\(\\s*rnds?\\s*\\)", "(en redondo)", "m"],
+  ["(?:start(?:ing)?|begin(?:ning)?)\\s+to\\s+stuff(?:ing)?", "empieza a rellenar", "m"], ["(?:insert|put)\\s+(?:the\\s+)?wires?\\s+and\\s+stuff", "mete el alambre y rellena", "m"],
+  ["stuff(?:ing)?\\s+(?:for\\s+)?the\\s+neck", "rellena el cuello", "m"], ["stuff\\s+(?:it|them)\\s+(?:tight(?:ly)?|firmly)", "rellénalas bien", "m"],
+  ["\\(\\s*"+TN+"\\s*sts?\\s+left\\s*\\)", "(quedan $1 puntos)", "m"], [TN+"\\s*sts?\\s+left", "quedan $1 puntos", "m"], ["(?:sk|skip)\\s+"+TN+"\\s*sts", "salta $1 puntos", "m"],
+  ["front\\s+post\\s+double\\s+crochet|fpdc", "pa en relieve por delante", "m"], ["back\\s+post\\s+double\\s+crochet|bpdc", "pa en relieve por detrás", "m"],
+  ["overall\\s+dress|overalls?", "pichi", "m"], ["front\\s+panel", "panel delantero", "m"], ["back\\s+panel", "panel trasero", "m"],
+  ["mini\\s+mushroom", "miniseta", "m"], ["mushroom\\s+cap", "sombrero de la seta", "m"], ["mushroom", "seta", "m"],
+  ["(?:join\\s+)?("+COLORES_EN_RX+")(?:\\s+(?:yarn|colou?r)(?=\\s*(?:\\(|»|>|$))|(?=\\s*\\(\\d))", (m, c) => (/^join/i.test(m) ? "une el " : "")+"hilo "+colorEnEspanol(c), "m"],
+  ["overall\\s+buckles", "hebillas del pichi", "m"], ["[«<]\\s*continue\\.*\\s*[»>]", "(continuación)", "m"],
+  ["left\\s+leg", "pierna izquierda", "m"], ["right\\s+leg", "pierna derecha", "m"], ["left\\s+arm", "brazo izquierdo", "m"], ["right\\s+arm", "brazo derecho", "m"],
+  ["left\\s+body", "lado izquierdo del cuerpo", "m"], ["right\\s+body", "lado derecho del cuerpo", "m"], ["front\\s+body", "parte delantera del cuerpo", "m"],
+  ["arm\\s*holes?", "sisa", "m"], ["hat(?=\\s*\\()", "Gorro", "m"],
+  ["arms?\\s*x\\s*"+TN, "Brazos (x $1)", "m"], ["legs?\\s*x\\s*"+TN, "Piernas (x $1)", "m"], ["ears?\\s*x\\s*"+TN, "Orejas (x $1)", "m"], ["shoes?\\s*x\\s*"+TN, "Zapatos (x $1)", "m"],
+  ["(?:ch\\s*"+TN+"|"+TN+"\\s*ch)\\s+and\\s+turn", (m, a, b) => (a||b)+" cad y gira", "m"], ["and\\s+turn(?=\\s*(?:[(,.;]|$))", "y gira", "m"],
   ["will\\s+curl", "will roll up", "en"], ["curls?|curling", "rolls up", "en"],
   ["start(?:ing)?\\s+(?:in|into)\\s+(?:the\\s+)?"+TN+"(?:st|nd|rd|th)\\s+(?:ch|chain)\\s+from\\s+(?:the\\s+)?hook", "empezando en la $1ª cad desde el ganchillo", "m"], ["make\\s+"+TN+"(?=\\s*$)", "hacer $1", "m"],
   ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+safety\\s+eyes", "ojos de seguridad de $1", "m"], ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+(?:crochet\\s+)?hook", "ganchillo de $1", "m"],
@@ -4715,7 +4890,7 @@ const GLOSARIO_EN = uk => [
   [uk ? "double\\s+crochets?" : "double\\s+crochets?", uk ? "punto bajo" : "punto alto", "m"], [uk ? "treble\\s+crochets?|trebles?" : "treble\\s+crochets?|trebles?", uk ? "punto alto" : "punto alto doble", "m"],
   ["chains", "cadenetas", "m"], ["chain", "cadeneta", "m"],
   ...PUNTOS_EN_ES[uk ? "uk" : "us"].map(([p, es]) => [p, es, "m"]),
-  ["ch", "cad", "m"], ["inc", "aum", "m"], ["dec", "dism", "m"], ["sk|skip", "salta", "m"], ["yo|yarn\\s+over", "lazada", "m"],
+  ["ch\\s?"+TN, "$1 cad", "m"], ["ch", "cad", "m"], ["inc", "aum", "m"], ["dec", "dism", "m"], ["sk|skip", "salta", "m"], ["yo|yarn\\s+over", "lazada", "m"],
   ["sts", "stitches", "en"], ["st", "stitch", "en"], ["rnds", "rounds", "en"], ["rnd|rd", "round", "en"], ["rep", "repeat", "en"], ["tog", "together", "en"],
   ["beg", "beginning", "en"], ["approx\\.?", "approximately", "en"], ["rem", "remaining", "en"], ["foll", "following", "en"], ["cont", "continue", "en"],
   ["lps", "loops", "en"], ["lp", "loop", "en"], ["sp", "space", "en"], ["ea", "each", "en"], ["prev", "previous", "en"], ["pm", "place marker", "en"], ["blo", "back loop", "en"]
@@ -5098,7 +5273,8 @@ function arreglarLecturaTurca(t){
     .replace(/(^|[\s,(])[Ll|I]\s?art(?![\p{L}])/gu, (m, a) => a+"1 art").replace(/(\d)\s*(?:YG|yG|Yç|Y[cÇ])(?![\p{L}])/gu, "$1 yç").replace(/(^|\n)\s*(?:YG|Yç)\s*:/gu, "$1yç:");
 }
 function bloquesDeTexto(lineas, idioma){
-  const ls = lineas.map(l => typeof l==="string" ? {t:l} : l).map(l => !l.t ? l : idioma==="ru" ? {...l, t: arreglarLecturaRusa(l.t)} : idioma==="zh" ? {...l, t: normalizarChino(l.t).trim()} : idioma==="tr" ? {...l, t: arreglarLecturaTurca(l.t)} : l);
+  // («<White yarn (106)>»: entre comillas el traductor lo entiende; con «<» y «>» salía «<Inhilo blanco»)
+  const ls = lineas.map(l => typeof l==="string" ? {t:l} : l).map(l => l.t && /[<>]/.test(l.t) ? {...l, t: l.t.replace(/[<«‹]\s*([^<>«»\n]{2,60}?)\s*[>»›]/g, "«$1»")} : l).map(l => !l.t ? l : idioma==="ru" ? {...l, t: arreglarLecturaRusa(l.t)} : idioma==="zh" ? {...l, t: normalizarChino(l.t).trim()} : idioma==="tr" ? {...l, t: arreglarLecturaTurca(l.t)} : l);
   const altos = ls.filter(l=>l.t && l.t.trim() && l.h).map(l=>l.h).sort((a,b)=>a-b), altoNormal = altos[Math.floor(altos.length/2)] || 0;
   // Largo de una línea llena (para saber si una línea sin punto final sigue en la de abajo)
   const largos = ls.map(l => (l.t||"").trim().length).filter(n => n > 0).sort((a,b)=>a-b), lleno = largos[Math.floor(largos.length*.8)] || 60;
@@ -5147,7 +5323,7 @@ function bloquesDeTexto(lineas, idioma){
     const b = {tipo: tipo || "texto", t, h: l.h||0, y: l.y, pagina: l.pagina, ultLargo: t.length, ultLlena: llena[i]};
     bloques.push(b); parrafo.push(b); maxLargo = Math.max(maxLargo, t.length);
   }
-  const out = bloques.map(({tipo, t, h, y, img, pagina}) => ({tipo, t, h, y, img, pagina}));
+  const out = bloques.map(({tipo, t, h, y, img, pagina}) => ({tipo, t: t && /[<>]/.test(t) ? t.replace(/[<«‹]\s*([^<>«»\n]{2,60}?)\s*[>»›]/g, "«$1»") : t, h, y, img, pagina}));
   // El título: el primer bloque corto, si va con la letra más grande de la primera hoja (o es lo primero de todo)
   const primero = out.findIndex(b => b.tipo!=="imagen");
   if(primero >= 0){
@@ -5560,7 +5736,7 @@ async function leerParaTraducir(archivo, avisar){
       }).filter(Boolean);
       originales.push(lienzoAJpeg(c, 1500, .78));
       soltarLienzo(c); pag.cleanup();
-      paginas.push({n:i, lineas, info, imagenes, giro: its.giro||0});
+      paginas.push({n:i, lineas, info, imagenes, giro: its.giro||0, anchoPt: vista[2]});
     }
     // Un logo o un adorno que sale en varias hojas no es una foto del patrón
     const repetidas = id => id && vecesId[id] >= 2 && n >= 2;
@@ -5574,17 +5750,24 @@ async function leerParaTraducir(archivo, avisar){
     if(leerComoFoto.length){
       avisar(leerComoFoto.length===paginas.length ? "Este PDF es una imagen escaneada. Lo leo como una foto…" : "Algunas hojas son imágenes. Las leo como una foto…", null);
       let leidas = [];
-      try{ leidas = await leerImagenes(paginasComoImagen(doc, MAX_HOJAS_TR, leerComoFoto.map(p=>p.n)), avisar, true); }
+      try{ leidas = await leerImagenes(paginasComoImagen(doc, MAX_HOJAS_TR, leerComoFoto.map(p=>p.n)), avisar, true, {detalle:true}); }
       catch(e){ if(leerComoFoto.length===paginas.length){ const err = e instanceof Error ? e : new Error(String(e)); err.foto = true; throw err; } }
       leerComoFoto.forEach((p, i) => {
-        const t = leidas[i];
-        if(t==null) return;
-        const letras = t.replace(/[^\p{L}]/gu, "").length;
+        const x = leidas[i];
+        if(x==null) return;
+        const t = x.lineas.map(l => l.t).join("\n"), letras = t.replace(/[^\p{L}]/gu, "").length;
         // Casi sin letras: es una hoja de fotos. Va entera como imagen.
         if(letras < 40){ if(!p.imagenes.length || p.imagenes.every(im => im.fondo)) p.imagenes = [{...originales[p.n-1], hoja:true, y1:Infinity, x0:-Infinity, x1:Infinity}]; p.lineas = []; p.info = []; return; }
-        p.lineas = t.split("\n"); p.info = []; p.leidaComoFoto = true;
-        p.imagenes = p.imagenes.filter(im => !im.fondo);
+        // Cada línea y cada foto con su sitio en la hoja (en puntos, contando desde abajo, como el texto de un PDF):
+        // así las fotos del patrón salen en el PDF traducido junto a su parte
+        const k = (p.anchoPt || 595)/x.ancho, abajo = y => (x.alto - y)*k;
+        p.lineas = x.lineas.map(l => l.t);
+        p.info = x.lineas.map(l => l.x0==null ? {} : {h:(l.y1-l.y0)*k, y:abajo(l.y1), x0:l.x0*k, x1:l.x1*k});
+        p.leidaComoFoto = true; p.conSitio = true;
+        p.imagenes = [...p.imagenes.filter(im => !im.fondo), ...x.fotos.map(f => ({url:f.url, w:f.w, h:f.h, x0:f.x0*k, x1:f.x1*k, y0:abajo(f.y1), y1:abajo(f.y0), anchoPt:(f.x1-f.x0)*k}))];
       });
+      // El pie de página de las hojas leídas («Noelle doll - daisytinythings», el número de página) tampoco se traduce
+      quitarRepetidasConInfo(paginas);
     }
     for(const p of paginas) p.imagenes = p.imagenes.filter(im => !im.fondo || im.hoja);
     return {paginas, originales, total: doc.numPages};
@@ -5596,7 +5779,7 @@ function lineasDelDocumento(leido){
   for(const p of leido.paginas){
     const lineas = p.lineas.map((t, i) => ({t: juntarEspaciado(t||""), ...(p.info[i]||{}), pagina:p.n||1}));
     const antes = lineas.map(()=>[]), despues = lineas.map(()=>[]), alFinal = [];
-    const conSitio = !p.giro && !p.leidaComoFoto;
+    const conSitio = !p.giro && (!p.leidaComoFoto || p.conSitio);
     const cruza = (l, im) => l.x0==null || (l.x0 < im.x1 && l.x1 > im.x0);
     for(const im of p.imagenes.slice().sort((a, b) => b.y1-a.y1)){
       const x = {img: {url: im.url, w: im.w, h: im.h, anchoPt: im.anchoPt, hoja: !!im.hoja}, pagina:p.n||1};

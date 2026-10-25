@@ -1818,6 +1818,54 @@ Fasten off and weave in ends.`;
     assert.deepEqual(page.errores.filter(e => !/Estimating resolution|diacritics|Empty page|Parameter not found/.test(e)), []);
     await page.context().close();
   });
+  // Un patrón en inglés hecho todo de fotos (cada hoja es una imagen): vueltas a la izquierda, una foto a la derecha,
+  // una vuelta larga que pasa por encima de la foto y el pie de página en todas las hojas
+  const hojaFoto = (cuerpo, n) => `<style>body{margin:0;width:800px;height:1130px;background:#efe6d8;font:19px Arial;position:relative}
+    p{margin:0 0 15px 50px} h2{font-size:21px;color:#c22;margin:50px 0 22px 50px} canvas{position:absolute;right:50px;top:330px}
+    .pie{position:absolute;bottom:60px;width:100%;text-align:center;color:#c22;font:18px monospace}</style>${cuerpo}<canvas id="c" width="260" height="300"></canvas>
+    <div class="pie">Lulu doll - tinythings<br><br>${n}</div>
+    <script>const c = document.getElementById("c").getContext("2d"); const g = c.createRadialGradient(130,150,10,130,150,170); g.addColorStop(0,"#f6d6c8"); g.addColorStop(1,"#6a8fb5"); c.fillStyle = g; c.fillRect(0,0,260,300);
+    for(let i=0;i<4000;i++){ c.fillStyle = "hsl("+(i*37%360)+",40%,"+(30+i%50)+"%)"; c.fillRect((i*97)%260,(i*53)%300,3,3); }
+    c.fillStyle="#fff"; c.beginPath(); c.arc(130,140,70,0,7); c.fill(); c.fillStyle="#333"; c.fillRect(105,125,10,10); c.fillRect(145,125,10,10);</script>`;
+  const hojasNoelle = [
+    hojaFoto(`<h2>CROCHET PATTERN</h2><h2>ARM X 2: (Rnd) Begin with &lt;White yarn (106)&gt; 2.0mm hook</h2><p>R1: 6sc in MR (6)</p><p>R2: 6inc (12)</p><p>R3: (sc, inc)*6 (18)</p>
+      <p>R4: (2sc, inc)*6 (24)</p><p>R5: (3sc, inc)*6 (30)</p><p>R6: 12sc, ch1, sk 1 st, 6sc, ch1, sk 1 st, 10sc (30) With 2 holes for the safety eyes.</p><p>R7: (3sc, sc dec)*6 (24)</p>
+      <p>R8: (2sc, sc dec)*6 (18)</p><p>R9: (sc, sc dec)*6 (12)</p><p>R10: &lt;Willow green yarn (395)&gt; 12sc</p><p>R11: 6 sc dec (6)</p>`, 1),
+    hojaFoto(`<h2>LEGS &lt;Continue...&gt;</h2><p>R12: 12sc</p><p>R13: (sc, inc)*6 (18)</p><p>R14: 18sc, sl st and ch1</p><p>R15: (sc, sc dec)*6 (12)</p>
+      <p>Fasten off, leave a long tail, close and finish off the hole.</p>`, 2)];
+  const fxN = await browser.newPage({ viewport: { width: 800, height: 1130 } });
+  let htmlNoelle = "";
+  for (const hoja of hojasNoelle) { await fxN.setContent(hoja); htmlNoelle += `<img src="data:image/png;base64,${(await fxN.screenshot()).toString("base64")}" style="width:100%;display:block;page-break-after:always">`; }
+  await fxN.setContent(`<style>body{margin:0}</style>${htmlNoelle}`);
+  const pdfNoelle = await fxN.pdf({ format: "A4", margin: { top: 0, bottom: 0, left: 0, right: 0 } });
+  await fxN.close();
+  await prueba("traducir un PDF inglés hecho de fotos: solo con letras inglesas, las vueltas en orden, las fotos en el PDF y sin el pie de página", async () => {
+    const page = await paginaWeb();
+    await page.evaluate(() => go({ name: "traducir" }));
+    await subir(page, "#tr-pdf", "Lulu doll.pdf", "application/pdf", pdfNoelle);
+    await esperarTraduccion(page);
+    const tr = await page.evaluate(() => ({ idioma: traduccion.idioma, bloques: traduccion.bloques.map(b => ({ tipo: b.tipo, t: b.t, foto: !!(b.img && !b.img.hoja) })) }));
+    const todo = JSON.stringify(tr.bloques.map(b => b.t));
+    assert.equal(tr.idioma, "en");
+    assert.equal(tr.bloques[0].t, "Patrón de ganchillo", "«crochet pattern» no es «patrón de ganchado»");
+    const vueltas = tr.bloques.filter(b => b.tipo === "vuelta").map(b => b.t);
+    assert.deepEqual(vueltas.map(v => +v.match(/^Vuelta (\d+)/)[1]), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], todo);
+    assert.match(vueltas[5], /^Vuelta 6: 12 pb, 1 cad, salta 1 punto, 6 pb, 1 cad, salta 1 punto, 10 pb \(30\)/, "la vuelta larga sigue en su sitio");
+    assert.match(vueltas[9], /hilo verde sauce \(395\)/i, "el color de la lana en español");
+    assert.match(vueltas[13], /pd y 1 cad/);
+    assert.ok(tr.bloques.some(b => /hilo blanco \(106\)/i.test(b.t)), todo);
+    assert.ok(!/tinythings/.test(todo), "el pie de página no se traduce: " + todo);
+    assert.ok(tr.bloques.some(b => b.foto), "las fotos de las hojas van en el PDF traducido");
+    assert.ok(!/\|/.test(todo), "las letras que el lector ve en la foto no se pegan a las vueltas: " + todo);
+    assert.ok(tr.bloques.some(b => /agujero/.test(b.t) && /cierra/.test(b.t)), "«…finish off the» y «hole.» son la misma frase: " + todo);
+    // Lo que el lector confunde en inglés
+    const r = await page.evaluate(() => [arreglarLecturaInglesa("R9: inc, Tisc (13)\nCrochet (Isc, 4hdc, Isc) in MR\nR11 - 14 (4 rounds): S4sc\nR17: 18sc, ch], sk 1st, chl\nSI: 22ch, Isc on ch\n$6: 17ch\nR72: (sc dec)*s (5)"),
+      arreglarNumerosVuelta("R3: 9sc\nR4: 24sc\nRE: 4sc, sc dec (16)\nR7: 12sc\nRS: Right side")]);
+    assert.equal(r[0], "R9: inc, 11sc (13)\nCrochet (1sc, 4hdc, 1sc) in MR\nR11 - 14 (4 rounds): 54sc\nR17: 18sc, ch1, sk 1st, ch1\nS1: 22ch, 1sc on ch\nS6: 17ch\nR72: (sc dec)*5 (5)");
+    assert.equal(r[1], "R3: 9sc\nR4: 24sc\nR5: 4sc, sc dec (16)\nR7: 12sc\nRS: Right side");
+    assert.deepEqual(page.errores.filter(e => !/Estimating resolution|diacritics|Empty page|Parameter not found/.test(e)), []);
+    await page.context().close();
+  });
   await prueba("se llega a «Traducir un patrón» desde Inicio, Más y Añadir un patrón", async () => {
     const page = await nuevaPagina(browser);
     for (const [desde, boton] of [["inicio", /Traducir un patrón de otro idioma/], ["mas", /Traducir un patrón/], ["importar", /Traducir un patrón/]]) {
