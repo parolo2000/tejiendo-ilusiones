@@ -585,3 +585,25 @@ Capturas en `tests/capturas/`.
 - Sin servidor, 0 €. Solo ordenador (en el móvil siguen las capturas). Probado con páginas que imitan YouTube; si
   YouTube cambia su página, hay que ajustar los selectores.
 - Tests: 1 nuevo (92 en total).
+
+## 2026-10-25 · Patrones hechos de fotos: traducción que se entiende y con sus fotos
+
+- Copia: `versiones/tejiendo-ilusiones-2026-10-25-antes-noelle.html`.
+- Caso real: «Noelle Sweet Christmas Doll» (inglés, 29 hojas que son imágenes). Salía «PATRÓN DE GANCHADO», letras
+  rusas, vueltas fuera de su sitio, el texto de las fotos traducido y sin ninguna foto.
+- `leerImagenes`: en cuanto una hoja tiene texto se sabe el idioma y se sigue leyendo solo con ese (inglés, español
+  o ruso; antes siempre con los tres). Opción `{detalle:true}`: devuelve cada línea con su sitio y las fotos de la hoja.
+- `lineasDeLectura` (sustituye a `textoEnColumnas`): quita lo que el lector marca como foto, las líneas de ruido
+  (`renglonDeRuido`: pocas palabras seguras) y las letras dudosas dentro de una foto. `ordenarColumnas` ya no toma
+  por columnas una hoja de texto con fotos al lado, y las líneas que cruzan parten la hoja en franjas (antes iban
+  todas al final). Junta un párrafo que el lector corta en dos.
+- `cajasDeFotos`, `sinLetrasDeFotos`, `recortarFotos`: las fotos de cada hoja se recortan y van en el PDF traducido
+  junto a su parte (`p.conSitio` en `lineasDelDocumento`). Una hoja que casi no se entiende es una foto entera.
+- `quitarRepetidas`: el pie de página se reconoce aunque el lector lo lea un poco distinto.
+- `arreglarLecturaInglesa`: «Isc» 1sc, «chl»/«chi»/«ch]» ch1, «Ssc» 5sc, «T1sc» 11sc, «SI:» S1, «*s» *5, «Smm» 5mm.
+  `arreglarNumerosVuelta`: «RE:» es R6 o R5, una letra suelta vale el número que toca, «R5 (RS):» y «R11 - 14 (4
+  rounds):» también se arreglan; «RS: Right side» (abreviatura) no.
+- Glosario inglés: crochet pattern, (Rnd), stuff, sts left, FPdc/BPdc, overall dress (pichi), panel, seta, piezas
+  «x 2», ch1, and turn, colores de la lana («<White yarn (106)>» → «hilo blanco (106)»), pierna/brazo izquierdo…
+  Lo que va entre «<» y «>» pasa a «« »» para que el traductor lo entienda.
+- Tests: 1 nuevo (93 en total).
