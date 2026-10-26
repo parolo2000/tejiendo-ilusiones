@@ -3323,8 +3323,9 @@ function trozosDeLinea(its, h, umbral){
   const out = [];
   for(const it of its){
     const s = out[out.length-1];
-    // Los espacios que da el PDF entre palabras (texto justificado) unen, no separan
-    if(!it.t.trim()){ if(s && it.x - s.x1 <= h*umbral){ s.x1 = Math.max(s.x1, it.x+it.w); if(!/\s$/.test(s.t)) s.t += " "; } continue; }
+    // Los espacios que da el PDF entre palabras (texto justificado) unen, no separan; un espacio muy ancho es el hueco
+    // entre dos celdas de una tabla («Row 5       (work all sts BLO)…»)
+    if(!it.t.trim()){ if(s && it.x - s.x1 <= h*umbral && it.w <= h*1.2){ s.x1 = Math.max(s.x1, it.x+it.w); if(!/\s$/.test(s.t)) s.t += " "; } continue; }
     if(s && it.x - s.x1 <= h*umbral){ if(it.x - s.x1 > h*0.12 && !/\s$/.test(s.t) && !/^\s/.test(it.t)) s.t += " "; s.t += it.t; s.x1 = Math.max(s.x1, it.x+it.w); }
     else out.push({x:it.x, x1:it.x+it.w, t:it.t});
   }
@@ -3354,12 +3355,12 @@ function partirColumnas(lineas){
   const empiezaVuelta = t => pareceVuelta(t) || RX_NUMERADA.test(t);
   let mejor = null;
   for(let x = x0+ancho*.2; x <= x0+ancho*.8; x += Math.max(1, ancho/240)){
-    let cruzan = 0, izq = 0, der = 0, izqFin = x0, derIni = x1, vueltasIzq = 0, vueltasDer = 0, letrasIzq = 0, letrasDer = 0;
+    let cruzan = 0, izq = 0, der = 0, izqFin = x0, derIni = x1, vueltasIzq = 0, vueltasDer = 0, letrasIzq = 0, letrasDer = 0, gruposIzq = 0, yIzq = null; const anchosIzq = [], anchosDer = [];
     for(const l of lineas){
       if(l.seg.some(s=>s.x < x && s.x1 > x)) { cruzan++; continue; }
       const a = l.seg.filter(s=>s.x1 <= x), b = l.seg.filter(s=>s.x >= x);
-      if(a.length){ izq++; izqFin = Math.max(izqFin, ...a.map(s=>s.x1)); letrasIzq += a.map(s=>s.t).join(" ").length; if(empiezaVuelta(a[0].t)) vueltasIzq++; }
-      if(b.length){ der++; derIni = Math.min(derIni, ...b.map(s=>s.x)); letrasDer += b.map(s=>s.t).join(" ").length; if(empiezaVuelta(b[0].t)) vueltasDer++; }
+      if(a.length){ anchosIzq.push(Math.max(...a.map(s=>s.x1)) - a[0].x); if(yIzq==null || yIzq - l.y > alto*1.9) gruposIzq++; yIzq = l.y; izq++; izqFin = Math.max(izqFin, ...a.map(s=>s.x1)); letrasIzq += a.map(s=>s.t).join(" ").length; if(empiezaVuelta(a[0].t)) vueltasIzq++; }
+      if(b.length){ anchosDer.push(Math.max(...b.map(s=>s.x1)) - b[0].x); der++; derIni = Math.min(derIni, ...b.map(s=>s.x)); letrasDer += b.map(s=>s.t).join(" ").length; if(empiezaVuelta(b[0].t)) vueltasDer++; }
     }
     if(!izq || !der) continue;
     // Las columnas de verdad son anchas; en una tabla la columna del número o del total es estrecha.
@@ -3372,6 +3373,13 @@ function partirColumnas(lineas){
     if(anchoIzq < ancho*min || anchoDer < ancho*min) continue;
     // Pocas líneas (columnas cortas): solo si las dos columnas empiezan con vueltas
     if((lineas.length < 3 || izq < 2 || der < 2) && !(huecoLargo && vueltasAmbos)) continue;
+    // Una tabla de «nombre | explicación» no son dos columnas: a la izquierda hay pocos nombres sueltos (de una o dos
+    // líneas, muy separados) y a la derecha el texto seguido. Leída por columnas, cada nombre se quedaba sin su texto.
+    if(!vueltasAmbos && izq <= der*0.6 && izq/gruposIzq <= 2.5 && gruposIzq >= 2) continue;
+    // Ni una tabla de varias columnas (la de los colores de la lana): en una columna de texto casi todas las líneas
+    // llenan su ancho; en una tabla, las celdas son cortas
+    const llenas = (as, an) => as.filter(w => w >= an*0.6).length;
+    if(!vueltasAmbos && vueltasDer < Math.max(2, der*.5) && (llenas(anchosIzq, anchoIzq) < izq*0.4 || llenas(anchosDer, anchoDer) < der*0.4)) continue;
     if(cruzan > Math.max(1, lineas.length*.08)) continue;
     if(!mejor || cruzan < mejor.cruzan || (cruzan===mejor.cruzan && Math.abs(x-(x0+ancho/2)) < Math.abs(mejor.x-(x0+ancho/2)))) mejor = {x, cruzan};
   }
@@ -3391,27 +3399,76 @@ function ordenarLineas(lineas, prof=0){
 // Tablas: una fila con varias celdas, y una celda que sigue en la línea de debajo («Hilera» / «3:», o el texto de
 // la vuelta que no cabe). Esos trozos van dentro de su celda, y la fila se lee entera: «Hilera 3: … (100)».
 // «info» (opcional) recibe la altura de letra y la posición de cada línea (para «Traducir un patrón»)
-function textoDeLineas(lineas, info=null){
-  const out = []; let fila = null, antes = null;
-  const poner = (t, l) => { out.push(t); if(info) info.push(l ? {h:l.h, y:l.y, x0:l.x0, x1:l.x1} : {}); };
-  const cerrar = () => { if(fila){ poner(fila.celdas.map(c=>c.t.trim()).join(" "), fila.l); fila = null; } };
+// Celdas de una misma fila a distinta altura: la de la izquierda («Row 5») y la del total («36») centradas y el texto
+// de la vuelta en dos líneas. Las líneas que se pisan (menos de una línea de distancia) y no se tocan de lado son una fila.
+function juntarFilasCentradas(lineas){
+  const out = [];
+  const pisa = (a, b) => a.seg.some(s => b.seg.some(t => s.x < t.x1-2 && t.x < s.x1-2));
   for(const l of lineas){
+    const g = out[out.length-1];
+    const cerca = g && g.y - l.y > 0 && (g.ultY - l.y) < Math.min(g.ultH, l.h)*0.9 && !g.partes.some(p => pisa(p, l));
+    if(cerca){ g.partes.push(l); g.ultY = l.y; g.ultH = l.h; continue; }
+    out.push({y:l.y, ultY:l.y, ultH:l.h, partes:[l]});
+  }
+  return out.map(g => {
+    if(g.partes.length===1) return g.partes[0];
+    // Cada trozo va a su columna (por dónde empieza), de arriba abajo
+    const cols = [];
+    for(const p of g.partes) for(const c of p.seg){
+      const k = cols.find(o => Math.abs(o.x-c.x) <= p.h*0.6 || (c.x >= o.x && c.x < o.x1));
+      if(k){ k.t += " "+c.t; k.x1 = Math.max(k.x1, c.x1); } else cols.push({x:c.x, x1:c.x1, t:c.t});
+    }
+    cols.sort((a, b) => a.x-b.x);
+    const its = g.partes.flatMap(p => p.its), h = Math.max(...g.partes.map(p => p.h));
+    return {y:g.y, h, its, seg:cols, celdas:cols, x0:Math.min(...cols.map(c=>c.x)), x1:Math.max(...cols.map(c=>c.x1)), yFin:g.ultY};
+  });
+}
+function textoDeLineas(lineas, info=null){
+  const out = [], sueltas = []; let fila = null, antes = null;
+  const poner = (t, l) => { out.push(t); if(info) info.push(l ? {h:l.h, y:l.y, x0:l.x0, x1:l.x1} : {}); };
+  // El total de puntos en su columna, al final de la fila: entre paréntesis («… 2 ch, turn (26)»)
+  // Y el nombre de la izquierda con su explicación: «Crochet in Rows: When you crochet in rows…» (sin los dos puntos el
+  // traductor lo tomaba por una sola frase)
+  const unir = cs => cs.map((c, i) => i && i===cs.length-1 && /^\d{1,3}$/.test(c.t.trim()) ? "("+c.t.trim()+")" : c.t.trim())
+    .map((t, i, ts) => i===0 && ts.length===2 && /\p{L}{3}/u.test(t) && !/\d/.test(t) && t.length <= 40 && !/[.:;,!?]$/.test(t) && /^\p{Lu}/u.test(ts[1]) && ts[1].length >= 30 ? t+":" : t).join(" ");
+  const cerrar = () => {
+    if(!fila) return;
+    // Dos listas una al lado de la otra («Other materials» | «Tools»): cada cosa en su línea, primero una lista y luego la otra
+    if(fila.celdas.some(c => (c.t.match(/(?:^|\s)[•●▪◦](?=\s)/g)||[]).length >= 2)){
+      for(const c of fila.celdas) for(const x of c.t.split(/(?:^|\s)(?=[•●▪◦]\s)/)) if(x.trim()) poner(x.trim(), fila.l);
+    } else poner(unir(fila.celdas), fila.l);
+    fila = null;
+  };
+  for(const l of juntarFilasCentradas(lineas)){
     const hueco = antes ? antes.y - l.y : 0, tol = l.h*0.4;
     if(fila && hueco > 0 && hueco <= l.h*1.6){
       // Sigue la fila si cada trozo empieza justo donde empezaba un trozo de la fila (el borde de una celda)
       const casa = c => fila.xs.some(x=>Math.abs(x-c.x) <= tol);
+      // (el total de la fila puede estar más abajo, centrado, en su columna a la derecha: «36»)
+      const total = c => /^\d{1,3}$/.test(c.t.trim()) && c.x > Math.max(...fila.xs) && !fila.celdas.some(f => /^\d{1,3}$/.test(f.t.trim()));
+      if(l.celdas.some(c => !casa(c) && total(c)) && l.celdas.every(c => casa(c) || total(c))){ for(const c of l.celdas) if(!casa(c)){ fila.celdas.push({x:c.x, t:c.t}); fila.xs.push(c.x); } }
       const sigue = l.celdas.every(casa) && (l.celdas.length >= 2 || Math.abs(l.celdas[0].x-fila.xs[0]) > tol || (hueco <= l.h*1.35 && fila.celdas[0].t.length <= 20));
       if(sigue){
         for(const c of l.celdas){ let k = fila.celdas[0]; for(const f of fila.celdas) if(f.x <= c.x + tol) k = f; k.t += " "+c.t; }
-        antes = l; continue;
+        antes = l.yFin!=null ? {...l, y:l.yFin} : l; continue;
       }
     }
     cerrar();
     // Entre párrafos separados, una línea en blanco
-    if(antes && (hueco > l.h*1.9 || hueco < 0)) poner("", null);
-    if(l.celdas.length >= 2) fila = {celdas: l.celdas.map(c=>({x:c.x, t:c.t})), xs: l.its.filter(it=>it.t.trim()).map(it=>it.x), l};
-    else poner(l.celdas[0].t, l);
-    antes = l;
+    if(antes && (hueco > l.h*1.9 || hueco < 0)){ poner("", null); sueltas.length = 0; }
+    if(l.celdas.length >= 2){
+      fila = {celdas: l.celdas.map(c=>({x:c.x, t:c.t})), xs: [...l.its.filter(it=>it.t.trim()).map(it=>it.x), ...l.celdas.map(c=>c.x)], l};
+      // Las líneas de justo encima que empiezan donde una celda que no es la primera son el principio de esa celda
+      // (la celda de la izquierda está centrada y empieza más abajo: «When you crochet…» / «Crochet in Spiral | and you…»)
+      while(sueltas.length){
+        const s = sueltas[sueltas.length-1], c = fila.celdas.slice(1).find(c => Math.abs(c.x - s.l.x0) <= l.h*0.4);
+        if(!c || out.length-1 !== s.k) break;
+        c.t = s.t+" "+c.t; out.pop(); if(info) info.pop(); sueltas.pop();
+      }
+      sueltas.length = 0;
+    }
+    else { poner(l.celdas[0].t, l); sueltas.push({k: out.length-1, t: l.celdas[0].t, l}); }
+    antes = l.yFin!=null ? {...l, y:l.yFin} : l;
   }
   cerrar();
   return out.map(t=>t.replace(/\s+/g, " ").trim());
@@ -3430,7 +3487,14 @@ function quitarRepetidas(paginas){
   // (también si al final el lector ha añadido letras de un adorno: «Noelle doll - daisytinythings LAT AR»)
   const frecuentes = Object.keys(veces).filter(k => veces[k] >= min && k.length >= 12);
   const repetida = l => veces[clave(l)] >= min || frecuentes.some(k => clave(l).startsWith(k));
-  return paginas.map(p => { const b = new Set(bordes(p)); return p.filter(l => !(b.has(l) && l && repetida(l) && !/^\s*(vueltas?|rnds?|rounds?|rows?|filas?|ряд)\s*\d/i.test(l))); });
+  // Cabeceras que cambian con la parte del patrón y llevan el número de la hoja («Instructions - Wig 11»,
+  // «Instructions - Shoes 16»): una línea corta del borde que acaba (o empieza) con el número de su hoja
+  const numHoja = l => { const m = l.trim().length <= 60 && l.match(/^\s*(\d{1,3})\s*[|·•\-–]?\s*\p{L}[^\d]*$|^[^\d]*\p{L}[^\d]*?\(?(\d{1,3})\)?\s*$/u); return m ? +(m[1]||m[2]) : null; };
+  const desfases = {};
+  paginas.forEach((p, i) => { for(const d of new Set(bordes(p).map(numHoja).filter(x => x!=null).map(x => x-i))) desfases[d] = (desfases[d]||0)+1; });
+  const desfase = Object.keys(desfases).filter(d => desfases[d] >= Math.max(3, paginas.length*.2)).sort((a, b) => desfases[b]-desfases[a])[0];
+  const cabecera = (l, i) => desfase!=null && numHoja(l)===i+(+desfase);
+  return paginas.map((p, i) => { const b = new Set(bordes(p)); return p.filter(l => !(b.has(l) && l && (repetida(l) || cabecera(l, i)) && !/^\s*(vueltas?|rnds?|rounds?|rows?|filas?|ряд)\s*\d/i.test(l))); });
 }
 async function paginasDePDF(doc, avisar){
   const paginas = [];
@@ -4824,7 +4888,14 @@ const GLOSARIO_EN = uk => [
   ["abbreviations\\s*\\(\\s*(?:us|american|usa)\\s+terms?\\s*\\)", "Abreviaturas (términos de EE. UU.)", "m"], ["abbreviations\\s*\\(\\s*(?:uk|british)\\s+terms?\\s*\\)", "Abreviaturas (términos del Reino Unido)", "m"],
   ["\\(\\s*(?:us|american|usa)\\s+terms?\\s*\\)|(?:us|american)\\s+terms", "(términos de EE. UU.)", "m"], ["\\(\\s*(?:uk|british)\\s+terms?\\s*\\)|(?:uk|british)\\s+terms", "(términos del Reino Unido)", "m"],
   ["abbreviations|stitches\\s+used|stitch\\s+guide", "Abreviaturas", "m"], ["assembly|assembling|construction", "Montaje", "m"], ["finishing", "Acabado", "m"],
+  ["what\\s+you(?:'ll|\\s+will)\\s+need", "Lo que necesitas", "m"], ["other\\s+materials", "Otros materiales", "m"], ["finished\\s+size", "Tamaño final", "m"],
   ["materials|supplies|you\\s+will\\s+need", "Materiales", "m"],
+  // (muñecas: la peluca, su casquete y la enagua; «WIG» salía «PEW», «cap» «límite», «underskirt» «desalidad»)
+  ["dolls", "muñecas", "m"], ["doll", "muñeca", "m"], ["yarns?(?=\\s*:?\\s*$)", "hilo", "m"], ["legs?\\s*(?:&|and)\\s*body", "piernas y cuerpo", "m"], ["head\\s*(?:&|and)\\s*body", "cabeza y cuerpo", "m"],
+  ["wigs", "pelucas", "m"], ["wig", "peluca", "m"], ["underskirts?", "enagua", "m"], ["embroider(?:ing)?\\s+(?:a|the)\\s+nose(?=\\s*$)", "bordar la nariz", "m"],
+  ["work\\s+loosely", "teje flojo", "m"], ["crochet\\s+tension", "tensión al tejer", "m"], ["switched", "changed", "en"], ["flap", "place", "en"],
+  ["(?:work\\s+)?(?:in\\s+)?(?:the\\s+)?(?:back\\s+bumps?|bb)(?:\\s+(?:of|in)\\s+the\\s+(?:chains?|ch))?", m => (/^work/i.test(m) ? "teje " : "")+"por la parte de atrás"+(/\b(?:chains?|ch)$/i.test(m) ? " de las cadenetas" : ""), "m"],
+  ["work\\s+(?:all\\s+)?(?:sts\\s+|stitches\\s+)?(?:in\\s+)?(?:the\\s+)?(blo|flo|back\\s+loops?(?:\\s+only)?|front\\s+loops?(?:\\s+only)?)", (m, h) => "teje "+(/\ball\b/i.test(m) ? "todos los puntos " : "")+(/^(?:blo|back)/i.test(h) ? "por la hebra de atrás" : "por la hebra de delante"), "m"],
   // Nombres de piezas y frases que el traductor no conoce («crochet pattern» salía «patrón de ganchado», «stuff» «cosas»)
   ["(?:crochet|amigurumi)\\s+pattern", "patrón de ganchillo", "m"], ["\\(\\s*rnds?\\s*\\)", "(en redondo)", "m"],
   ["(?:start(?:ing)?|begin(?:ning)?)\\s+to\\s+stuff(?:ing)?", "empieza a rellenar", "m"], ["(?:insert|put)\\s+(?:the\\s+)?wires?\\s+and\\s+stuff", "mete el alambre y rellena", "m"],
@@ -4832,14 +4903,14 @@ const GLOSARIO_EN = uk => [
   ["\\(\\s*"+TN+"\\s*sts?\\s+left\\s*\\)", "(quedan $1 puntos)", "m"], [TN+"\\s*sts?\\s+left", "quedan $1 puntos", "m"], ["(?:sk|skip)\\s+"+TN+"\\s*sts", "salta $1 puntos", "m"],
   ["front\\s+post\\s+double\\s+crochet|fpdc", "pa en relieve por delante", "m"], ["back\\s+post\\s+double\\s+crochet|bpdc", "pa en relieve por detrás", "m"],
   ["overall\\s+dress|overalls?", "pichi", "m"], ["front\\s+panel", "panel delantero", "m"], ["back\\s+panel", "panel trasero", "m"],
-  ["mini\\s+mushroom", "miniseta", "m"], ["mushroom\\s+cap", "sombrero de la seta", "m"], ["mushroom", "seta", "m"],
+  ["mini\\s+mushroom", "miniseta", "m"], ["mushroom\\s+cap", "sombrero de la seta", "m"], ["mushroom", "seta", "m"], ["caps", "casquetes", "m"], ["cap", "casquete", "m"],
   ["(?:join\\s+)?("+COLORES_EN_RX+")(?:\\s+(?:yarn|colou?r)(?=\\s*(?:\\(|»|>|$))|(?=\\s*\\(\\d))", (m, c) => (/^join/i.test(m) ? "une el " : "")+"hilo "+colorEnEspanol(c), "m"],
   ["overall\\s+buckles", "hebillas del pichi", "m"], ["[«<]\\s*continue\\.*\\s*[»>]", "(continuación)", "m"],
   ["left\\s+leg", "pierna izquierda", "m"], ["right\\s+leg", "pierna derecha", "m"], ["left\\s+arm", "brazo izquierdo", "m"], ["right\\s+arm", "brazo derecho", "m"],
   ["left\\s+body", "lado izquierdo del cuerpo", "m"], ["right\\s+body", "lado derecho del cuerpo", "m"], ["front\\s+body", "parte delantera del cuerpo", "m"],
   ["arm\\s*holes?", "sisa", "m"], ["hat(?=\\s*\\()", "Gorro", "m"],
   ["arms?\\s*x\\s*"+TN, "Brazos (x $1)", "m"], ["legs?\\s*x\\s*"+TN, "Piernas (x $1)", "m"], ["ears?\\s*x\\s*"+TN, "Orejas (x $1)", "m"], ["shoes?\\s*x\\s*"+TN, "Zapatos (x $1)", "m"],
-  ["(?:ch\\s*"+TN+"|"+TN+"\\s*ch)\\s+and\\s+turn", (m, a, b) => (a||b)+" cad y gira", "m"], ["and\\s+turn(?=\\s*(?:[(,.;]|$))", "y gira", "m"],
+  ["(?:ch\\s*"+TN+"|"+TN+"\\s*ch)\\s+and\\s+turn", (m, a, b) => (a||b)+" cad y gira", "m"], ["and\\s+turn(?=\\s*(?:[(,.;]|$))", "y gira", "m"], ["turn(?=\\s*(?:[(,.;]|$))", "gira", "m"],
   ["will\\s+curl", "will roll up", "en"], ["curls?|curling", "rolls up", "en"],
   ["start(?:ing)?\\s+(?:in|into)\\s+(?:the\\s+)?"+TN+"(?:st|nd|rd|th)\\s+(?:ch|chain)\\s+from\\s+(?:the\\s+)?hook", "empezando en la $1ª cad desde el ganchillo", "m"], ["make\\s+"+TN+"(?=\\s*$)", "hacer $1", "m"],
   ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+safety\\s+eyes", "ojos de seguridad de $1", "m"], ["(\\d+(?:[.,]\\d+)?\\s*mm)\\s+(?:crochet\\s+)?hook", "ganchillo de $1", "m"],
@@ -4856,7 +4927,7 @@ const GLOSARIO_EN = uk => [
   ["do\\s+not\\s+fasten\\s+off|don't\\s+fasten\\s+off", "no remates", "m"],
   ["(?:through|in|into)\\s+(?:the\\s+)?back\\s+loops?(?:\\s+only)?", "por la hebra de atrás", "m"], ["(?:through|in|into)\\s+(?:the\\s+)?front\\s+loops?(?:\\s+only)?", "por la hebra de delante", "m"],
   ["(?:through|in|into)\\s+both\\s+loops", "por las dos hebras", "m"],
-  ["tension|gauge", "Muestra", "m"], ["teal", "verde azulado", "m"], ["granny\\s+squares?", "granny square", "m"],
+  ["gauge|tension(?=\\s*(?::|$))", "Muestra", "m"], ["teal", "verde azulado", "m"], ["granny\\s+squares?", "granny square", "m"],
   ["(?:in\\s+(?:the\\s+)?)?back\\s+loops?\\s+only|in\\s+(?:the\\s+)?blo|blo|in\\s+(?:the\\s+)?back\\s+loops?", "por la hebra de atrás", "m"],
   ["(?:in\\s+(?:the\\s+)?)?front\\s+loops?\\s+only|in\\s+(?:the\\s+)?flo|flo|in\\s+(?:the\\s+)?front\\s+loops?", "por la hebra de delante", "m"],
   ["front\\s+loops", "hebras de delante", "m"], ["back\\s+loops", "hebras de atrás", "m"],
@@ -4893,7 +4964,9 @@ const GLOSARIO_EN = uk => [
   ["ch\\s?"+TN, "$1 cad", "m"], ["ch", "cad", "m"], ["inc", "aum", "m"], ["dec", "dism", "m"], ["sk|skip", "salta", "m"], ["yo|yarn\\s+over", "lazada", "m"],
   ["sts", "stitches", "en"], ["st", "stitch", "en"], ["rnds", "rounds", "en"], ["rnd|rd", "round", "en"], ["rep", "repeat", "en"], ["tog", "together", "en"],
   ["beg", "beginning", "en"], ["approx\\.?", "approximately", "en"], ["rem", "remaining", "en"], ["foll", "following", "en"], ["cont", "continue", "en"],
-  ["lps", "loops", "en"], ["lp", "loop", "en"], ["sp", "space", "en"], ["ea", "each", "en"], ["prev", "previous", "en"], ["pm", "place marker", "en"], ["blo", "back loop", "en"]
+  ["lps", "loops", "en"], ["lp", "loop", "en"], ["sp", "space", "en"], ["ea", "each", "en"], ["prev", "previous", "en"], ["pm", "place marker", "en"], ["blo", "back loop", "en"],
+  // Marcas como «CAROcreated» (salía «CAROCrado») van tal cual
+  ["[A-Z]{2,}[a-z]+[A-Za-z]*|[A-Z][a-z]+[A-Z][A-Za-z]*", "$0", "m", "gu"]
 ];
 
 // Portugués de Brasil y de Portugal. Los nombres cortos casi coinciden con los de aquí: pb, pa, mpa, aum; «pbx» es el
@@ -5228,7 +5301,7 @@ const ARREGLOS_ES = [
   [/\b(?:su|tu) (cabeza|cola|nariz|boca|labor|pieza|oreja)\b/g, "la $1"], [/\b(?:su|tu) (cuerpo|muñeco|hocico|brazo|ojo)\b/g, "el $1"],
   [/\b(?:sus|tus) (orejas|piernas|patas|piezas|mejillas|alas)\b/g, "las $1"], [/\b(?:sus|tus) (brazos|ojos|cuernos)\b/g, "los $1"],
   [/\bparénteses\b/g, "paréntesis"], [/\b(?:de )?(?:mulino|mulina|muline)\b/g, "mouliné"], [/\b([2-9]|\d{2,}) (espacio|arco) de\b/g, "$1 $2s de"], [/\btira (bien|fuerte|con fuerza) de (cerrar|cierre)\b/g, "tira $1 para cerrar"], [/\bplazas\b/g, "cuadrados"], [/\b(la|una|esta|cada) plaza\b/gi, (m, a) => ({la:"el", una:"un", esta:"este", cada:"cada"})[a.toLowerCase()]+" cuadrado"], [/\bplaza\b/g, "cuadrado"], [/\bPlaza\b/g, "Cuadrado"], [/\bcubierta de cojín\b/gi, "funda de cojín"],
-  [/\btrabajar\b/g, "tejer"], [/(^|,\s*)trabajo como\b/g, "$1teje como"], [/\btrabajando\b/g, "tejiendo"], [/\btrabajado\b/g, "tejido"], [/\btrabaja\b/g, "teje"], [/\bÚnete a\b/g, "Une"], [/\b(?:atamos|empatamos)\b/g, "unimos"], [/\bespesor\b/g, "grosor"],
+  [/\btrabajar\b/g, "tejer"], [/(^|,\s*)trabajo como\b/g, "$1teje como"], [/\btrabajando\b/g, "tejiendo"], [/\btrabajado\b/g, "tejido"], [/\btrabaja\b/g, "teje"], [/\bÚnete a\b/g, "Une"], [/(^|,\s*|\(\s*)(?:unirse|únase|únete)(?= (?:a|en|al)\b)/g, "$1une"], [/(^|[.!?]\s+)(?:Unirse|Únase|Únete)(?= (?:a|en|al)\b)/g, "$1Une"], [/\bpuntos? indicad[ao]s?\b/g, m => /s$/.test(m.split(" ")[0]) ? "puntos indicados" : "punto indicado"], [/\b(?:atamos|empatamos)\b/g, "unimos"], [/\bespesor\b/g, "grosor"],
   [/(\d)\.(\d)\s*(mm|cm|m|g|kg)\b/g, "$1,$2 $3"],
   [/\s+([,.;:!?)])/g, "$1"], [/([(¿¡])\s+/g, "$1"], [/\s{2,}/g, " "]
 ];
@@ -5243,6 +5316,8 @@ function arreglarEspanol(t, idioma){
   t = t.replace(/(^|[.!?:;]\s+|^\s*[-–•]\s*|\(\s*)([A-ZÁÉÍÓÚ][a-záéíóúñ]+)(?![\p{L}])/gu, (m, a, v) => a+(IMPERATIVOS[v] || v));
   t = t.replace(/([.!?])\s+/g, "$1\u0001").split("\u0001").map(f => /^[A-ZÁÉÍÓÚ][a-záéíóúñ]*[ae]\b/.test(f) && Object.values(IMPERATIVOS).includes(f.split(/\s/)[0])
     ? f.replace(/\b(y|luego|después|e)\s+([a-záéíóú]+)\b/g, (m, y, inf) => INFINITIVO_A_TU[inf] ? y+" "+INFINITIVO_A_TU[inf] : m) : f).join(" ");
+  // «Gracias por comprar mi patrón!» → «¡Gracias por comprar mi patrón!»
+  t = t.replace(/(^|[.!?:]\s+)([^.!?¡\s][^.!?¡]*!)/g, "$1¡$2");
   return t;
 }
 const mayuscula = t => t.replace(/^(\s*[-–•*]?\s*[¿¡(«"]?)(\p{Ll})/u, (m, a, c) => a+c.toUpperCase());
@@ -5296,7 +5371,9 @@ function bloquesDeTexto(lineas, idioma){
     const grande = altoNormal && l.h >= altoNormal*1.25;
     const sigVuelta = sig && cabeceraVuelta(sig.t.trim(), idioma);
     const letras = t.replace(/[^\p{L}]/gu, "");
-    if(corta && (grande || (letras.length >= 3 && letras===letras.toUpperCase() && letras!==letras.toLowerCase()) || /:\s*$/.test(t) || sigVuelta)) return "parte";
+    // (con letra grande pero la frase sigue en minúscula en la línea de abajo, no es un título: «FAYE has a photo» / «shoot today.»)
+    const sigueAbajo = sig && /^\p{Ll}/u.test(sig.t.trim()) && !/:\s*$/.test(t);
+    if(corta && ((grande && !sigueAbajo) || (letras.length >= 3 && letras===letras.toUpperCase() && letras!==letras.toLowerCase()) || /:\s*$/.test(t) || sigVuelta)) return "parte";
     // «Сборка» / «Assembly» sola en su línea, al empezar un párrafo, y debajo el texto
     if(corta && SECCIONES.test(t.replace(/\s*\([^)]*\)\s*:?$/, ""))) return "parte";
     const sinPar = t.replace(/\([^)]*\)/g, "").trim();
@@ -5304,7 +5381,7 @@ function bloquesDeTexto(lineas, idioma){
     return null;
   };
   for(let i=0; i<ls.length; i++){
-    const l = ls[i], t = (l.t||"").trim();
+    const l = ls[i], t = (l.t||"").trim().replace(/^[\d\s().,-]{1,12}$/, "");
     // Una foto o un dibujo del patrón: va tal cual, en su sitio
     if(l.img){ bloques.push({tipo:"imagen", t:"", img:l.img, pagina:l.pagina}); parrafo = []; maxLargo = 0; continue; }
     if(!t){ parrafo = []; maxLargo = 0; continue; }
@@ -5353,7 +5430,12 @@ function leyendaConocida(texto, glosario){
 }
 // Concordancia de las palabras que vuelven de las marcas («el ojos de seguridad» → «los ojos de seguridad»)
 const PLURALES = {orejas:"f", piernas:"f", patas:"f", brazos:"m", ojos:"m", puntos:"m", aumentos:"m", "puntos bajos":"m", cuadrados:"m", cadenetas:"f", disminuciones:"f", hebras:"f", piezas:"f"};
+const SINGULARES_F = ["seta", "peluca", "enagua", "sisa", "cadeneta", "aguja lanera", "hebra", "lazada", "miniseta", "muñeca"], SINGULARES_M = ["casquete"];
 function concordar(t){
+  // («un seta», «la casquete»: la palabra vuelve de la marca sin que el traductor sepa si es femenina o masculina)
+  const art = (a, f, n) => (a[0]===a[0].toUpperCase() ? f.charAt(0).toUpperCase()+f.slice(1) : f)+" "+n;
+  t = t.replace(new RegExp("\\b(el|un|este|del|al)\\s+("+SINGULARES_F.join("|")+")\\b", "gi"), (m, a, n) => art(a, {el:"la", un:"una", este:"esta", del:"de la", al:"a la"}[a.toLowerCase()], n));
+  t = t.replace(new RegExp("\\b(la|una|esta|de la|a la)\\s+("+SINGULARES_M.join("|")+")\\b", "gi"), (m, a, n) => art(a, {la:"el", una:"un", esta:"este", "de la":"del", "a la":"al"}[a.toLowerCase()], n));
   for(const [n, g] of Object.entries(PLURALES)){
     t = t.replace(new RegExp("\\b(el|la|las|los|un|una|unos|unas|este|esta|estos|estas)\\s+"+n+"\\b", "gi"), (m, a) => {
       const k = a.toLowerCase().replace(/^(est)[ae]s?$/, "$1e").replace(/^l[ao]s?$|^el$/, "el").replace(/^un[ao]?s?$/, "un");
@@ -5375,13 +5457,21 @@ async function traducirBloques(bloques, {idioma, uk=false, traductor=null, avisa
     if(cv){ cab = cv.cab; resto = cv.resto; }
     const pz = idioma!=="en" && (b.tipo==="parte" || b.tipo==="titulo") && piezaDe(b.t, idioma);
     if(pz){ cab = pz.es; resto = pz.resto; if(!resto) return {b, cab, listo:"", p:{t:"", marcas:[]}}; }
+    // El nombre del color en el catálogo de la lana, al empezar la línea («157 Root Beer» salía «Certeza de raíz»):
+    // va tal cual, que es como se compra
+    const color = idioma==="en" && !cv && !pz && resto.match(/^\s*\d{3}\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}(?=\s|$)/);
+    if(color){ cab = color[0].trim(); resto = resto.slice(color[0].length).trim(); if(!resto) return {b, cab, listo:"", p:{t:"", marcas:[]}}; }
     let p = proteger(paraReglas(arreglarSignos(idioma==="ru" ? imperativosRu(resto) : resto), idioma), glosario), cola = "";
     // Lo de entre paréntesis al final que no hay que traducir («(18)», «(hacer 8)») se aparta para que el traductor no lo mueva
     const mc = p.t.match(/\s*\((?:[\d\s,.x+]|QX[A-Z]{2})+\)\s*\.?$/);
     const mt = !mc && p.t.match(/\s*(QX[A-Z]{2})\s*\.?$/), valor = mt && p.marcas[LETRAS_MARCA.indexOf(mt[1][2])*LETRAS_MARCA.length+LETRAS_MARCA.indexOf(mt[1][3])];
     if(mc && quedaTexto(p.t.slice(0, mc.index))){ cola = devolverMarcas(mc[0], p.marcas).t; p = {t: p.t.slice(0, mc.index), marcas: p.marcas}; }
     else if(valor && /^\(.*\)$/.test(valor) && quedaTexto(p.t.slice(0, mt.index))){ cola = valor; p = {t: p.t.slice(0, mt.index), marcas: p.marcas}; }
-    const r = {b, cab, p, ley, cola};
+    // Lo que va todo en mayúsculas («DOLL FAYE», «WIG») el traductor no lo entiende («MUÉRDAL FAYE», «PEW»):
+    // se le pasa en minúsculas y los títulos vuelven luego a mayúsculas
+    const letras = resto.replace(/[^\p{L}]/gu, ""), mayus = idioma==="en" && letras.length >= 3 && letras===letras.toUpperCase() && letras!==letras.toLowerCase() && (b.tipo==="parte" || b.tipo==="titulo" || letras.length >= 8);
+    if(mayus) p = {...p, t: mayuscula(p.t.replace(/\p{L}+/gu, w => /^QX[A-Z]{2}$/.test(w) ? w : w.toLowerCase()))};
+    const r = {b, cab, p, ley, cola, mayus};
     if(!quedaTexto(p.t)) r.listo = devolverMarcas(idioma!=="en" ? palabraAPalabra(p.t, idioma) : p.t, p.marcas).t;
     if(r.listo!=null && idioma!=="en" && idioma!=="ru") r.listo = enAEspanol(r.listo);
     return r;
@@ -5412,6 +5502,7 @@ async function traducirBloques(bloques, {idioma, uk=false, traductor=null, avisa
     // Las abreviaturas van en minúscula («6 pb…»); el resto empieza con mayúscula
     if(!/^(pb|pa|mpa|pad|pd|cad|aum|dism)\b/.test(t)) t = mayuscula(t);
     t = t.replace(/\s{2,}/g, " ").trim();
+    if(r.mayus && (r.b.tipo==="parte" || r.b.tipo==="titulo")) t = t.toUpperCase();
     // El traductor a veces se come el punto final cuando la frase acaba en una palabra de ganchillo
     if(r.b.tipo==="texto" && /[.!?]\s*$/.test(r.b.t) && !/[.!?:)…]\s*$/.test(t)) t += ".";
     // Si queda algo sin traducir (letras rusas, chinas o turcas), se marca para revisar
@@ -5423,7 +5514,11 @@ async function traducirBloques(bloques, {idioma, uk=false, traductor=null, avisa
   const usadas = Object.keys(ABREV_ES).filter(k => out.some(b => new RegExp("(^|[^\\p{L}])"+k+"(?![\\p{L}])", "u").test(b.t)));
   if(usadas.length){
     const lineas = usadas.map(k => ({tipo:"leyenda", t: k+" – "+(leyenda[k] ? ABREV_ES[k].replace(/:.*$/, "")+" ("+leyenda[k].replace(/^\(|\)$/g, "")+")" : ABREV_ES[k]), original:"", revisar:false}));
-    if(dondeLeyenda < 0){
+    // El patrón tiene su apartado de abreviaturas (en una tabla que no se ha reconocido como leyenda): va ahí debajo,
+    // y no en medio de la primera pieza
+    const apartado = dondeLeyenda < 0 ? out.findIndex(b => b.tipo==="parte" && /^abreviaturas\b/i.test(b.t)) : -1;
+    if(apartado >= 0) dondeLeyenda = apartado+1;
+    else if(dondeLeyenda < 0){
       const v = out.findIndex(b => b.tipo==="vuelta");
       // (la leyenda nueva va antes de la primera vuelta, y antes del título de su pieza o de su foto)
       dondeLeyenda = v < 0 ? out.length : v;
@@ -5698,7 +5793,8 @@ function quitarRepetidasConInfo(paginas){
   });
   return paginas;
 }
-const MAX_HOJAS_TR = 40;
+// (antes eran 40 y un patrón de 58 hojas se quedaba sin el final: el vestido a medias, la seta y los gráficos)
+const MAX_HOJAS_TR = 120;
 async function leerParaTraducir(archivo, avisar){
   const esPDF = /pdf/i.test(archivo.type||"") || /\.pdf$/i.test(archivo.name||"");
   if(!esPDF){
@@ -5734,13 +5830,15 @@ async function leerParaTraducir(archivo, avisar){
         if(sw < 20 || sh < 20) return null;
         return {...cj, anchoPt: cj.x1-cj.x0, altoPt: cj.y1-cj.y0, ...lienzoAJpeg(c, 1400, .85, sx, sy, sw, sh)};
       }).filter(Boolean);
-      originales.push(lienzoAJpeg(c, 1500, .78));
+      // (con muchas hojas, las del original algo más pequeñas para que el móvil no se quede sin memoria)
+      originales.push(n > 40 ? lienzoAJpeg(c, 1150, .72) : lienzoAJpeg(c, 1500, .78));
       soltarLienzo(c); pag.cleanup();
       paginas.push({n:i, lineas, info, imagenes, giro: its.giro||0, anchoPt: vista[2]});
     }
-    // Un logo o un adorno que sale en varias hojas no es una foto del patrón
+    // Un logo o un adorno que sale en varias hojas no es una foto del patrón. Pero una foto con el logo de la autora
+    // encima (la misma imagen pequeña en todas) sí lo es: solo se quita lo que está hecho entero de imágenes repetidas
     const repetidas = id => id && vecesId[id] >= 2 && n >= 2;
-    for(const p of paginas) p.imagenes = p.imagenes.filter(im => im.fondo || !im.ids.some(repetidas));
+    for(const p of paginas) p.imagenes = p.imagenes.filter(im => { const ids = im.ids.filter(Boolean); return im.fondo || !ids.length || !ids.every(repetidas); });
     quitarRepetidasConInfo(paginas);
     // Hojas que hay que leer como una foto: sin letras (escaneadas o solo fotos), con las letras separadas o ilegibles
     const crudo = p => p.lineas.join("\n");
@@ -5884,6 +5982,7 @@ async function hacerPDFTraducido(tr, conOriginal){
   y += 1.5;
   escribir("Traducido del "+NOMBRE_IDIOMA[tr.idioma]+" al español con Tejiendo Ilusiones"+(tr.idioma==="en" ? (tr.uk ? " (términos del Reino Unido)" : " (términos de EE. UU.)") : "")+".", {tam:10.5, color:GRIS});
   if(tr.archivo) escribir("Patrón original: "+tr.archivo, {tam:10.5, color:GRIS});
+  if(tr.recortado) escribir("El PDF original es muy largo: aquí van traducidas sus primeras "+MAX_HOJAS_TR+" hojas.", {tam:10.5, color:NARANJA});
   if(bloques.some(b => b.revisar)){ y += 1; escribir("Las frases con una raya naranja a la izquierda conviene revisarlas: debajo va el texto original.", {tam:10.5, color:GRIS, barra:NARANJA}); }
   y += 2; doc.setDrawColor(...MARCA); doc.setLineWidth(.5); doc.line(M, y, M+30, y); y += 6;
   // Ancho de la columna de «Vuelta 12:»

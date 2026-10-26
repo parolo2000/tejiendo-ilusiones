@@ -1847,7 +1847,7 @@ Fasten off and weave in ends.`;
     const tr = await page.evaluate(() => ({ idioma: traduccion.idioma, bloques: traduccion.bloques.map(b => ({ tipo: b.tipo, t: b.t, foto: !!(b.img && !b.img.hoja) })) }));
     const todo = JSON.stringify(tr.bloques.map(b => b.t));
     assert.equal(tr.idioma, "en");
-    assert.equal(tr.bloques[0].t, "Patrón de ganchillo", "«crochet pattern» no es «patrón de ganchado»");
+    assert.equal(tr.bloques[0].t, "PATRÓN DE GANCHILLO", "«crochet pattern» no es «patrón de ganchado» (y en mayúsculas, como el original)");
     const vueltas = tr.bloques.filter(b => b.tipo === "vuelta").map(b => b.t);
     assert.deepEqual(vueltas.map(v => +v.match(/^Vuelta (\d+)/)[1]), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], todo);
     assert.match(vueltas[5], /^Vuelta 6: 12 pb, 1 cad, salta 1 punto, 6 pb, 1 cad, salta 1 punto, 10 pb \(30\)/, "la vuelta larga sigue en su sitio");
@@ -1864,6 +1864,54 @@ Fasten off and weave in ends.`;
     assert.equal(r[0], "R9: inc, 11sc (13)\nCrochet (1sc, 4hdc, 1sc) in MR\nR11 - 14 (4 rounds): 54sc\nR17: 18sc, ch1, sk 1st, ch1\nS1: 22ch, 1sc on ch\nS6: 17ch\nR72: (sc dec)*5 (5)");
     assert.equal(r[1], "R3: 9sc\nR4: 24sc\nR5: 4sc, sc dec (16)\nR7: 12sc\nRS: Right side");
     assert.deepEqual(page.errores.filter(e => !/Estimating resolution|diacritics|Empty page|Parameter not found/.test(e)), []);
+    await page.context().close();
+  });
+  // Un patrón inglés con texto (como «Doll Faye»): título en mayúsculas, la marca de la autora, cabeceras con el nombre
+  // de la parte y el número de hoja, tablas de vueltas con la vuelta y el total centrados, una tabla «nombre | explicación»
+  // y fotos con el logo de la autora encima (la misma imagen pequeña en todas las hojas)
+  await prueba("traducir un PDF inglés con tablas y fotos con logo: título, cabeceras, filas con su total y las fotos", async () => {
+    const fx = await browser.newPage({ viewport: { width: 400, height: 300 } });
+    const imagen = async (html) => { await fx.setContent(`<body style="margin:0">${html}</body>`); return (await fx.screenshot({ clip: { x: 0, y: 0, width: 400, height: 300 } })).toString("base64"); };
+    const logo = await imagen(`<div style="width:400px;height:300px;background:#fff"><div style="width:280px;height:280px;border-radius:50%;background:#888;margin:10px auto"></div></div>`);
+    const fotos = [];
+    for (const [a, b] of [["#b5651d", "#f3c"], ["#2a7", "#fd3"], ["#36c", "#e93"], ["#c33", "#9cf"]]) fotos.push(await imagen(`<div style="width:400px;height:300px;background:linear-gradient(135deg,${a},${b})"></div>`));
+    const foto = (i, n) => `<span class="foto"><img class="f" src="data:image/png;base64,${fotos[i]}"><img class="logo" src="data:image/png;base64,${logo}"><b>${n}</b></span>`;
+    const hoja = (cab, n, cuerpo) => `<div class="hoja">${cab ? `<div class="cab">${cab}<b>${n}</b></div>` : ""}${cuerpo}<div class="pie">DOLL FAYE | Copyright 2026. All rights reserved. CAROcreated</div></div>`;
+    const fila = (r, t, n) => `<tr><td class="r">${r}</td><td>${t}</td><td class="n">${n}</td></tr>`;
+    const html = `<style>body{margin:0;font:14px Arial} .hoja{height:1122px;position:relative;padding:60px 60px;box-sizing:border-box;page-break-after:always;overflow:hidden}
+      .cab{position:absolute;top:22px;right:60px;color:#999} .cab b{background:#c8a27a;color:#fff;padding:2px 8px;margin-left:10px}
+      .pie{position:absolute;bottom:22px;left:60px;color:#aaa;font-size:12px} h1{color:#a33;font-size:46px;margin:0 0 6px} h2{color:#b5651d;font-size:16px;margin:24px 0 8px}
+      table{border-collapse:separate;border-spacing:0 10px;width:100%} td{background:#f2ece6;padding:8px 10px;vertical-align:middle;line-height:1.45} td.n{text-align:right;width:40px} td.r{width:80px} td.l{width:150px}
+      .foto{position:relative;display:inline-block;margin:8px} .foto img.f{width:200px;height:150px;display:block} .foto img.logo{position:absolute;left:8px;bottom:8px;width:50px;height:50px} .foto b{position:absolute;right:8px;top:6px;font-size:20px}</style>
+      ${hoja("", 0, `<h1>DOLL FAYE</h1><p style="color:#a98;font-size:22px;font-weight:bold">CAROcreated</p><h2>INTRODUCTION</h2><p>Thank you for purchasing my doll FAYE crochet pattern!</p>`)}
+      ${hoja("What You Will Need", 1, `<h2>YARN</h2><table>${fila("157 Root Beer", "B 2.12 oz./60 g", "wig")}${fila("263 Petal Peach", "A 2.08 oz./59 g", "head")}</table><h2>ABBREVIATIONS</h2><table><tr><td>ch</td><td>chain</td><td>sc</td><td>single crochet</td></tr><tr><td>dc</td><td>double crochet</td><td>dc-inc</td><td>work 2 double crochet in one stitch</td></tr></table>`)}
+      ${hoja("Special Crochet Techniques", 2, `<h2>SPECIAL CROCHET TECHNIQUES</h2><table><tr><td class="l">Crochet in Spiral Rounds</td><td>When you crochet in spiral rounds, you do not have to turn your work and you do not join the round. Use a stitch marker to mark the beginning of each round, and move the marker up each time you start a new round.</td></tr>
+        <tr><td class="l">Crochet in Rows</td><td>When you crochet in rows, you need to turn your work, make your turning chain, and start back across the row.</td></tr></table>`)}
+      ${hoja("Instructions - Wig", 3, `<h2>WIG</h2><p>The cap is worked in rows.</p><table>${fila("Row 4", "7 dc, *1 dc, 1 dc-inc* crochet 6 times, 7 dc, 2 ch, turn", "32")}${fila("Row 5", "(work all sts BLO) 5 dc, *1 dc-inc, 6 dc* crochet 3 times, 1 dc-inc, 5 dc, 1 dc-inc, 5 dc, 1 dc-inc, 2 ch, turn", "36")}${fila("Row 6", "sk 1st st, 33 dc, 1 dc2tog, 2 ch, turn", "34")}</table>${foto(0, 3)}${foto(1, 4)}`)}
+      ${hoja("Instructions - Wig", 4, `<p>Now work sideways in the stitches of the front edge of the cap.</p>${foto(2, 5)}`)}
+      ${hoja("Instructions - Shoes", 5, `<h2>SHOES</h2><p>The shoe consists of the double sole, the upper part and the strap.</p>${foto(3, 6)}`)}`;
+    await fx.setContent(html);
+    const pdf = await fx.pdf({ format: "A4", margin: { top: 0, bottom: 0, left: 0, right: 0 } });
+    await fx.close();
+    const page = await paginaWeb();
+    await page.evaluate(() => go({ name: "traducir" }));
+    await subir(page, "#tr-pdf", "CaroCreated Doll Faye.pdf", "application/pdf", pdf);
+    await esperarTraduccion(page);
+    const bs = await page.evaluate(() => traduccion.bloques.map(b => ({ tipo: b.tipo, t: b.t, o: b.original || "", foto: !!(b.img && !b.img.hoja) })));
+    const todo = JSON.stringify(bs.map(b => b.t));
+    assert.equal(bs[0].t, "MUÑECA FAYE", "«DOLL FAYE» salía «MUÉRDAL FAYE»: " + todo);
+    assert.ok(bs.some(b => b.t === "CAROcreated"), "la marca de la autora no se traduce: " + todo);
+    assert.ok(bs.some(b => /^157 Root Beer\b/.test(b.t)), "el nombre del color del catálogo va tal cual: " + todo);
+    assert.ok(bs.some(b => b.t === "PELUCA") && bs.some(b => b.t === "HILO"), "«WIG» y «YARN» en mayúsculas: " + todo);
+    assert.ok(!/Instructions|Instrucciones -|Special Crochet Techniques \d|What You Will Need/i.test(JSON.stringify(bs.map(b => b.o))), "las cabeceras con el número de hoja no se traducen: " + todo);
+    const f5 = bs.find(b => /^Fila 5:/.test(b.t));
+    assert.ok(f5 && /hebra de atrás/.test(f5.t) && /gira \(36\)$/.test(f5.t), "la fila larga lleva su texto entero y su total: " + todo);
+    assert.ok(bs.some(b => /^Fila 4:.*\(32\)$/.test(b.t)), todo);
+    assert.ok(bs.some(b => /^Crochet in Spiral Rounds:? When you crochet in spiral rounds, .*start a new round\.$/.test(b.o)), "el nombre de la técnica va con su explicación: " + JSON.stringify(bs.map(b => b.o)));
+    const abrev = bs.findIndex(b => b.tipo === "parte" && /^ABREVIATURAS$/.test(b.t)), ley = bs.findIndex(b => b.tipo === "leyenda");
+    assert.ok(abrev >= 0 && ley > abrev && ley < bs.findIndex(b => b.t === "PELUCA"), "la leyenda va en el apartado de abreviaturas, no en medio de la peluca: " + todo);
+    assert.ok(bs.filter(b => b.foto).length >= 4, "las fotos con el logo de la autora encima no se pierden: " + bs.filter(b => b.foto).length);
+    assert.deepEqual(page.errores, []);
     await page.context().close();
   });
   await prueba("se llega a «Traducir un patrón» desde Inicio, Más y Añadir un patrón", async () => {
