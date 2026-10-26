@@ -607,3 +607,29 @@ Capturas en `tests/capturas/`.
   «x 2», ch1, and turn, colores de la lana («<White yarn (106)>» → «hilo blanco (106)»), pierna/brazo izquierdo…
   Lo que va entre «<» y «>» pasa a «« »» para que el traductor lo entienda.
 - Tests: 1 nuevo (93 en total).
+
+## 2026-10-26 · PDF con texto, tablas y fotos (caso «Doll Faye»): título, tablas, fotos y el patrón entero
+
+- Copia: `versiones/tejiendo-ilusiones-2026-10-26-antes-faye.html`.
+- Caso real: «CaroCreated Doll Faye» (inglés, PDF con texto de unas 58 hojas). Salía «MUÉRDAL FAYE», «CAROCrado»,
+  «PEW» (wig), los colores de la lana inventados («Certeza de raíz»), filas de la tabla partidas («Fila 5: 36» y el
+  texto suelto), las cabeceras «Instructions - Wig 11» traducidas, casi ninguna foto y faltaba el final del patrón.
+- Fotos: se quitaban las que llevaban encima el logo de la autora (la misma imagen en todas las hojas cuenta como
+  adorno). Ahora solo se quita lo que está hecho entero de imágenes repetidas.
+- `MAX_HOJAS_TR` de 40 a 120 (con más de 40 hojas, las copias del original algo más pequeñas). Si aun así se corta,
+  el PDF traducido lo dice arriba en naranja.
+- Tablas (`textoDeLineas`): `juntarFilasCentradas` junta las celdas de una fila que están a distinta altura (la vuelta
+  y el total centrados, el texto en dos líneas); las líneas de justo encima que empiezan donde la segunda celda son
+  su principio; el total a la derecha va entre paréntesis («… 2 ch, turn (36)»); «nombre: explicación»; dos listas
+  con viñetas una al lado de otra salen una detrás de otra. `trozosDeLinea`: un espacio muy ancho separa celdas.
+- `partirColumnas`: una tabla «nombre | explicación» o una tabla de varias columnas cortas no son dos columnas.
+- `quitarRepetidas`: cabeceras que cambian con la parte pero llevan el número de la hoja.
+- Traducción: lo que va todo en mayúsculas se traduce en minúsculas y el título vuelve a mayúsculas («MUÑECA FAYE»);
+  marcas tipo «CAROcreated» y el nombre del color del catálogo al empezar la línea («157 Root Beer») van tal cual;
+  glosario: doll, wig, cap (casquete), underskirt, yarn, legs & body, what you will need, other materials, finished
+  size, work loosely, BB, work all sts BLO, turn, crochet tension (antes «Muestra»); concordancia «la seta»,
+  «el casquete»; «¡» al empezar las exclamaciones; «unirse a» → «une a».
+- `bloquesDeTexto`: una línea grande cuya frase sigue abajo en minúscula no es un título (texto de la portada); las
+  líneas que son solo números (los de las fotos) no se traducen. La leyenda va en el apartado «Abreviaturas» del
+  patrón si lo tiene.
+- Test nuevo: «traducir un PDF inglés con tablas y fotos con logo…».
